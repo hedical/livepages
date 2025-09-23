@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Base de Connaissances - Chatbot BTP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style pour la scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: block;
+        }
+        /* Animation simple pour les transitions */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen antialiased">
+
+    <!-- Conteneur principal -->
+    <div id="app" class="container mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- Page d'accueil -->
+        <div id="home" class="page active fade-in">
+            <header class="text-center mb-12">
+                <h1 class="text-4xl font-bold text-white mb-2">Gestion des Connaissances</h1>
+                <p class="text-lg text-gray-400">Sélectionnez un module à administrer</p>
+            </header>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <!-- Carte 1: Base de connaissances -->
+                <a href="#" onclick="showPage('knowledgeBase')" class="block p-8 bg-gray-800 rounded-lg border border-gray-700 hover:bg-gray-700 hover:border-white transition-all duration-300 transform hover:-translate-y-1">
+                    <h2 class="text-2xl font-bold text-white mb-2">Base de connaissances</h2>
+                    <p class="text-gray-400">Ajouter / supprimer des documents ou références réglementaires.</p>
+                </a>
+                <!-- Carte 2: FAQ BTP -->
+                <a href="#" onclick="showPage('faq')" class="block p-8 bg-gray-800 rounded-lg border border-gray-700 hover:bg-gray-700 hover:border-white transition-all duration-300 transform hover:-translate-y-1">
+                    <h2 class="text-2xl font-bold text-white mb-2">FAQ BTP</h2>
+                    <p class="text-gray-400">Ajouter / Modifier / supprimer les questions-réponses validées.</p>
+                </a>
+            </div>
+        </div>
+
+        <!-- Page: Base de connaissances -->
+        <div id="knowledgeBase" class="page fade-in">
+            <button onclick="showPage('home')" class="mb-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                &larr; Retour
+            </button>
+            <h1 class="text-3xl font-bold text-white mb-8">Gestion de la Base de Connaissances</h1>
+            <!-- Statistiques -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700"><p class="text-gray-400">Documents</p><p class="text-2xl font-bold">1,250</p></div>
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700"><p class="text-gray-400">DTUs</p><p class="text-2xl font-bold">350</p></div>
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700"><p class="text-gray-400">Normes</p><p class="text-2xl font-bold">800</p></div>
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700"><p class="text-gray-400">Arrêtés</p><p class="text-2xl font-bold">100</p></div>
+            </div>
+
+            <!-- Contrôles et recherche -->
+            <div class="flex flex-col sm:flex-row gap-4 mb-6 items-center">
+                <input type="search" placeholder="Rechercher un document..." class="w-full sm:w-1/2 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <select class="w-full sm:w-auto bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <option>Filtrer par type</option>
+                    <option>DTU</option>
+                    <option>Norme</option>
+                    <option>Arrêté</option>
+                    <option>Recommandation</option>
+                </select>
+                <button id="deleteDocsBtn" class="hidden w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Supprimer (0)</button>
+            </div>
+
+            <!-- Contenu principal -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Liste des documents -->
+                <div class="lg:col-span-2 bg-gray-800 border border-gray-700 rounded-lg p-4">
+                    <h2 class="font-bold mb-4">Documents</h2>
+                    <ul id="docList" class="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                        <!-- Documents factices générés par JS -->
+                    </ul>
+                </div>
+                <!-- Panneau de détails -->
+                <div id="docDetails" class="bg-gray-800 border border-gray-700 rounded-lg p-6 hidden lg:block">
+                    <h2 class="font-bold text-xl mb-4">Détails du document</h2>
+                    <div id="docDetailsContent" class="text-gray-300">
+                        <p class="text-gray-500">Sélectionnez un document pour voir ses détails.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: FAQ -->
+        <div id="faq" class="page fade-in">
+             <button onclick="showPage('home')" class="mb-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                &larr; Retour
+            </button>
+            <h1 class="text-3xl font-bold text-white mb-8">Gestion de la FAQ</h1>
+            <!-- Statistiques -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700"><p class="text-gray-400">Q/R Actives</p><p class="text-2xl font-bold">482</p></div>
+            </div>
+            <!-- Contrôles -->
+            <div class="flex flex-col sm:flex-row gap-4 mb-6 items-center">
+                 <button onclick="toggleFaqModal(true)" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Ajouter une Q/R</button>
+                 <input type="search" placeholder="Rechercher une question..." class="w-full sm:w-1/2 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                 <select class="w-full sm:w-auto bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                     <option>Filtrer par thème</option>
+                     <option>Isolation</option>
+                     <option>Fondations</option>
+                     <option>Toiture</option>
+                 </select>
+                 <button id="deleteFaqBtn" class="hidden w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Supprimer (0)</button>
+             </div>
+
+            <!-- Tableau FAQ -->
+            <div class="overflow-x-auto bg-gray-800 border border-gray-700 rounded-lg">
+                <table class="w-full text-sm text-left text-gray-300">
+                    <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+                        <tr>
+                            <th scope="col" class="p-4"><input type="checkbox" onchange="toggleAllFaqCheckboxes(this.checked)" class="bg-gray-700 border-gray-500 rounded focus:ring-blue-600"></th>
+                            <th scope="col" class="px-6 py-3">Question</th>
+                            <th scope="col" class="px-6 py-3">Réponse</th>
+                            <th scope="col" class="px-6 py-3">Thème</th>
+                            <th scope="col" class="px-6 py-3">Date d'ajout</th>
+                            <th scope="col" class="px-6 py-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="faqTableBody">
+                        <!-- Lignes du tableau générées par JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modal pour ajouter/modifier une FAQ -->
+    <div id="faqModal" class="fixed inset-0 bg-black bg-opacity-70 z-50 hidden items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl border border-gray-600">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-white">Ajouter une Question/Réponse</h3>
+                    <button onclick="toggleFaqModal(false)" class="text-gray-400 hover:text-white">&times;</button>
+                </div>
+                <form>
+                    <div class="mb-4">
+                        <label for="question" class="block mb-2 text-sm font-medium text-gray-300">Question</label>
+                        <input type="text" id="question" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Quelle est la norme pour...">
+                    </div>
+                     <div class="mb-4">
+                        <label for="reponse" class="block mb-2 text-sm font-medium text-gray-300">Réponse</label>
+                        <textarea id="reponse" rows="4" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="La norme applicable est..."></textarea>
+                    </div>
+                    <div class="mb-6">
+                        <label for="theme" class="block mb-2 text-sm font-medium text-gray-300">Thème</label>
+                        <input type="text" id="theme" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Ex: Isolation, Toiture...">
+                    </div>
+                    <div class="flex justify-end gap-4">
+                         <button type="button" onclick="toggleFaqModal(false)" class="py-2 px-4 text-sm font-medium text-gray-400 bg-gray-700 rounded-lg hover:bg-gray-600 focus:outline-none">Annuler</button>
+                         <button type="submit" class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center">Sauvegarder</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const pages = document.querySelectorAll('.page');
+        const docList = document.getElementById('docList');
+        const docDetails = document.getElementById('docDetails');
+        const docDetailsContent = document.getElementById('docDetailsContent');
+        const deleteDocsBtn = document.getElementById('deleteDocsBtn');
+        const faqTableBody = document.getElementById('faqTableBody');
+        const deleteFaqBtn = document.getElementById('deleteFaqBtn');
+        const faqModal = document.getElementById('faqModal');
+
+        // --- Données factices ---
+        const dummyDocs = [
+            { id: 1, title: 'DTU 20.1 - Maçonnerie de petits éléments', type: 'DTU', date: '2020-05-12', content: 'Ce document traite des ouvrages de parois et murs en maçonnerie de petits éléments, hourdés au mortier ou à la colle.' },
+            { id: 2, title: 'Norme NF EN 1991-1-4 - Eurocode 1', type: 'Norme', date: '2019-11-01', content: 'Actions du vent sur les structures. Définit les méthodes de calcul pour évaluer les charges de vent.' },
+            { id: 3, title: 'Arrêté du 22 octobre 2010 - RT 2012', type: 'Arrêté', date: '2010-10-22', content: 'Relatif aux caractéristiques thermiques et aux exigences de performance énergétique des bâtiments neufs.' },
+            { id: 4, title: 'DTU 40.29 - Couvertures en tuiles planes', type: 'DTU', date: '2021-02-15', content: 'Spécifications pour la mise en œuvre des couvertures en tuiles de terre cuite à emboîtement ou à glissement à relief.' },
+            { id: 5, title: 'Recommandation R408 - Montage, utilisation et démontage des échafaudages', type: 'Recommandation', date: '2018-06-30', content: 'Guide des bonnes pratiques pour la sécurité sur les chantiers utilisant des échafaudages.' },
+            { id: 6, title: 'Norme NF P01-012 - Dimensions des garde-corps', type: 'Norme', date: '1988-07-01', content: 'Définit les règles de sécurité relatives aux dimensions des garde-corps et rampes d\'escalier.' },
+        ];
+
+        const dummyFaqs = [
+            { id: 1, question: "Quelle est l'épaisseur minimale d'isolant pour les combles perdus ?", reponse: "L'épaisseur minimale recommandée pour bénéficier des aides est de 30 cm, correspondant à une résistance thermique R ≥ 7 m².K/W.", theme: 'Isolation', date: '2023-01-15' },
+            { id: 2, question: "Comment réaliser une arase étanche sous une maçonnerie ?", reponse: "Il faut utiliser une bande de coupure de capillarité ou un mortier hydrofuge spécifique conformément au DTU 20.1.", theme: 'Fondations', date: '2023-02-01' },
+            { id: 3, question: "Quelle est la pente minimale pour un toit en tuiles canal ?", reponse: "La pente minimale varie de 24% à 40% selon la zone géographique et la longueur du rampant. Se référer au DTU 40.22.", theme: 'Toiture', date: '2023-03-20' },
+        ];
+
+        // --- Logique de navigation ---
+        function showPage(pageId) {
+            pages.forEach(page => {
+                if (page.id === pageId) {
+                    page.classList.add('active');
+                } else {
+                    page.classList.remove('active');
+                }
+            });
+        }
+
+        // --- Logique pour la page Base de Connaissances ---
+        function renderDocList() {
+            docList.innerHTML = '';
+            dummyDocs.forEach(doc => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center p-3 bg-gray-900 hover:bg-gray-700 rounded-md cursor-pointer transition-colors';
+                li.onclick = () => showDocDetails(doc.id);
+                li.innerHTML = `
+                    <input type="checkbox" onchange="updateSelectedDocs()" class="mr-4 bg-gray-700 border-gray-500 rounded focus:ring-blue-600 h-5 w-5 doc-checkbox" data-id="${doc.id}">
+                    <div>
+                        <p class="font-semibold text-white">${doc.title}</p>
+                        <p class="text-sm text-gray-400">${doc.type} - ${doc.date}</p>
+                    </div>
+                `;
+                docList.appendChild(li);
+            });
+        }
+
+        function showDocDetails(docId) {
+            const doc = dummyDocs.find(d => d.id === docId);
+            if(doc) {
+                docDetailsContent.innerHTML = `
+                    <h3 class="font-bold text-lg text-white mb-2">${doc.title}</h3>
+                    <p class="text-sm text-blue-400 mb-4">${doc.type}</p>
+                    <p class="mb-2"><strong class="text-gray-400">Date de publication:</strong> ${doc.date}</p>
+                    <p class="text-gray-300 leading-relaxed">${doc.content}</p>
+                `;
+                docDetails.classList.remove('hidden');
+            }
+        }
+        
+        function updateSelectedDocs() {
+            const selected = document.querySelectorAll('.doc-checkbox:checked');
+            if(selected.length > 0) {
+                deleteDocsBtn.classList.remove('hidden');
+                deleteDocsBtn.textContent = `Supprimer (${selected.length})`;
+            } else {
+                deleteDocsBtn.classList.add('hidden');
+            }
+        }
+        
+        // --- Logique pour la page FAQ ---
+        function renderFaqTable() {
+            faqTableBody.innerHTML = '';
+            dummyFaqs.forEach(faq => {
+                const tr = document.createElement('tr');
+                tr.className = 'bg-gray-800 border-b border-gray-700 hover:bg-gray-600';
+                tr.innerHTML = `
+                    <td class="w-4 p-4"><input type="checkbox" onchange="updateSelectedFaqs()" class="bg-gray-700 border-gray-500 rounded focus:ring-blue-600 faq-checkbox" data-id="${faq.id}"></td>
+                    <td class="px-6 py-4 font-medium text-white">${faq.question}</td>
+                    <td class="px-6 py-4">${faq.reponse}</td>
+                    <td class="px-6 py-4"><span class="bg-blue-900 text-blue-300 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">${faq.theme}</span></td>
+                    <td class="px-6 py-4">${faq.date}</td>
+                    <td class="px-6 py-4"><a href="#" class="font-medium text-blue-500 hover:underline">Modifier</a></td>
+                `;
+                faqTableBody.appendChild(tr);
+            });
+        }
+
+        function toggleFaqModal(show) {
+            if(show) {
+                faqModal.style.display = 'flex';
+            } else {
+                faqModal.style.display = 'none';
+            }
+        }
+        
+        function updateSelectedFaqs() {
+            const selected = document.querySelectorAll('.faq-checkbox:checked');
+            if(selected.length > 0) {
+                deleteFaqBtn.classList.remove('hidden');
+                deleteFaqBtn.textContent = `Supprimer (${selected.length})`;
+            } else {
+                deleteFaqBtn.classList.add('hidden');
+            }
+        }
+        
+        function toggleAllFaqCheckboxes(checked) {
+            document.querySelectorAll('.faq-checkbox').forEach(cb => cb.checked = checked);
+            updateSelectedFaqs();
+        }
+
+        // --- Initialisation ---
+        document.addEventListener('DOMContentLoaded', () => {
+            showPage('home');
+            renderDocList();
+            renderFaqTable();
+        });
+
+    </script>
+</body>
+</html>
