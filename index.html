@@ -80,11 +80,20 @@
                 }
                 const data = await response.json();
 
-                // Filtrer pour ne garder que les fichiers .html (insensible à la casse) et les dossiers
-                const items = data.filter(item => 
-                    item.type === 'dir' || 
-                    (item.type === 'file' && item.name.toLowerCase().endsWith('.html'))
-                );
+                // Filtrer pour ne garder que les fichiers pertinents
+                const items = data.filter(item => {
+                    if (item.type === 'dir') return true;
+                    if (item.type === 'file') {
+                        const nameLower = item.name.toLowerCase();
+                        // Exclure les fichiers cachés (commençant par un point)
+                        if (nameLower.startsWith('.')) return false;
+                        // Inclure les fichiers .html
+                        if (nameLower.endsWith('.html')) return true;
+                        // Inclure les fichiers sans extension (comme 'chatmanager')
+                        if (!nameLower.includes('.')) return true;
+                    }
+                    return false;
+                });
 
                 // À la racine, on ne veut pas afficher le lien vers index.html lui-même
                 const finalItems = (path === '')
@@ -103,7 +112,10 @@
                 // Créer une carte pour chaque élément trouvé
                 finalItems.forEach(item => {
                     const isDir = item.type === 'dir';
-                    const title = item.name.replace('.html', '').replace(/-/g, ' ').replace(/_/g, ' ');
+                    // Correction du titre pour ne pas laisser un ".html" orphelin si pas d'extension
+                    const title = item.name.toLowerCase().endsWith('.html') 
+                        ? item.name.slice(0, -5).replace(/-/g, ' ').replace(/_/g, ' ')
+                        : item.name.replace(/-/g, ' ').replace(/_/g, ' ');
                     
                     // Si c'est un dossier, le lien recharge la page avec le nouveau chemin.
                     // Si c'est un fichier, le lien pointe directement vers le fichier.
