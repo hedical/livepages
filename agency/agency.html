@@ -64,11 +64,11 @@
                 <p id="stat-agency-count" class="text-3xl font-bold text-gray-800 mt-2">0</p>
                 <p class="text-sm text-gray-400 mt-1">Entités analysées</p>
             </div>
-            <!-- Total Utilisateurs -->
+            <!-- Total Livrables IA -->
             <div class="stat-card">
-                <h3 class="text-gray-500 font-medium">Total Utilisations</h3>
-                <p id="stat-user-count" class="text-3xl font-bold text-gray-800 mt-2">0</p>
-                <p class="text-sm text-gray-400 mt-1">Sur l'ensemble des agences</p>
+                <h3 class="text-gray-500 font-medium">Total Livrables IA</h3>
+                <p id="stat-aideliverable-count" class="text-3xl font-bold text-gray-800 mt-2">0</p>
+                <p class="text-sm text-gray-400 mt-1">Depuis le début</p>
             </div>
         </div>
         
@@ -231,14 +231,12 @@
             const totalAllTimeRict = processedData.reduce((sum, item) => sum + item.rict_diffused_since_2025_06_20, 0);
             const allTimeRate = totalAllTimeRict > 0 ? (totalAllTimeAideliverable / totalAllTimeRict) * 100 : 0;
 
-            const totalUsersInAgency = processedData.reduce((sum, item) => sum + item.users_total_in_agency, 0);
-
             document.getElementById('stat-current-rate').textContent = `${currentRate.toFixed(2)}%`;
             document.getElementById('stat-current-details').textContent = `${totalCurrentAideliverable} AIdeliverables / ${totalCurrentRict} RICT`;
             document.getElementById('stat-all-time-rate').textContent = `${allTimeRate.toFixed(2)}%`;
             document.getElementById('stat-all-time-details').textContent = `${totalAllTimeAideliverable} AIdeliverables / ${totalAllTimeRict} RICT`;
             document.getElementById('stat-agency-count').textContent = processedData.length;
-            document.getElementById('stat-user-count').textContent = totalUsersInAgency.toLocaleString('fr-FR');
+            document.getElementById('stat-aideliverable-count').textContent = totalAllTimeAideliverable.toLocaleString('fr-FR');
         }
 
         // --- Filtres ---
@@ -327,5 +325,4 @@
     </script>
 </body>
 </html>
-
 
