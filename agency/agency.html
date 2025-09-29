@@ -204,8 +204,8 @@
         
         // --- Traitement et Parsing des Données ---
         const parseNumber = (str) => {
-            if (typeof str !== 'string') return Number(str) || 0;
-            return Number(str.replace(/\s/g, '').replace(',', '.')) || 0;
+            // Utilise parseFloat qui est plus robuste pour les chaînes comme "20%" ou "25,77%"
+            return parseFloat(String(str).replace(/\s/g, '').replace(',', '.')) || 0;
         };
 
         function processData(data) {
