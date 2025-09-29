@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portail de Suivi de Projets</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- D3.js for data visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            font-size: 12px;
+            background: #1f2937;
+            color: white;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .axis-label {
+            font-size: 14px;
+            font-weight: 500;
+            fill: #4b5563;
+        }
+        .domain, .tick line {
+            stroke: #d1d5db;
+        }
+        .tick text {
+            fill: #6b7280;
+        }
+        .quadrant-label {
+            font-size: 16px;
+            font-weight: 600;
+            fill: #9ca3af;
+            opacity: 0.5;
+        }
+        .bubble-text {
+            fill: white;
+            font-size: 12px;
+            font-weight: 600;
+            pointer-events: none; /* Make text non-interactive */
+        }
+        /* Custom scrollbar for filters */
+        .filter-group {
+            max-height: 150px;
+            overflow-y: auto;
+            padding-right: 8px; /* space for scrollbar */
+        }
+        .filter-group::-webkit-scrollbar {
+            width: 5px;
+        }
+        .filter-group::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+        .filter-group::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        .filter-group::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .dashboard-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .legend-table tr {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Home Page -->
+    <div id="home-page">
+        <header class="bg-white shadow-sm p-4">
+            <h1 class="text-3xl font-bold text-gray-900 text-center">Portail de Suivi des Projets</h1>
+        </header>
+        <main class="container mx-auto p-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <a href="https://docs.google.com/spreadsheets/d/1W52JBC2tbBXRNoNiZv7WoV8V7-NYyHpCHQNFvFv8wO8/edit?gid=1825857753#gid=1825857753" target="_blank" class="dashboard-card bg-white p-6 rounded-xl shadow-lg flex flex-col items-start">
+                    <div class="bg-blue-100 text-blue-600 p-3 rounded-full mb-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></div>
+                    <h3 class="text-xl font-semibold text-gray-900">Données Questionnaire</h3><p class="text-gray-600 mt-2">Consulter les réponses brutes du formulaire.</p>
+                </a>
+                <a href="https://docs.google.com/spreadsheets/d/1Q_-bnLVW-DfnlMNoiZjuN23j5KKnr42Z/edit?gid=1908870885#gid=1908870885" target="_blank" class="dashboard-card bg-white p-6 rounded-xl shadow-lg flex flex-col items-start">
+                    <div class="bg-green-100 text-green-600 p-3 rounded-full mb-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>
+                    <h3 class="text-xl font-semibold text-gray-900">Planning</h3><p class="text-gray-600 mt-2">Accéder au planning général des projets.</p>
+                </a>
+                <a href="https://docs.google.com/spreadsheets/d/1R88NBCfbsJTAylugPX1YE3QLsk1JeJdOUPIvX9Lvu4A/edit?gid=184261792#gid=184261792" target="_blank" class="dashboard-card bg-white p-6 rounded-xl shadow-lg flex flex-col items-start">
+                     <div class="bg-yellow-100 text-yellow-600 p-3 rounded-full mb-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg></div>
+                    <h3 class="text-xl font-semibold text-gray-900">Suivi des Gains</h3><p class="text-gray-600 mt-2">Consulter le tableau de suivi des gains réalisés.</p>
+                </a>
+                <a href="#" id="go-to-opportunities-matrix" class="dashboard-card bg-white p-6 rounded-xl shadow-lg flex flex-col items-start">
+                    <div class="bg-violet-100 text-violet-600 p-3 rounded-full mb-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg></div>
+                    <h3 class="text-xl font-semibold text-gray-900">Matrice des Opportunités</h3><p class="text-gray-600 mt-2">Visualiser les opportunités sur la matrice Gains vs. Efforts.</p>
+                </a>
+                <a href="#" id="go-to-gains-matrix" class="dashboard-card bg-white p-6 rounded-xl shadow-lg flex flex-col items-start">
+                    <div class="bg-teal-100 text-teal-600 p-3 rounded-full mb-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg></div>
+                    <h3 class="text-xl font-semibold text-gray-900">Matrice des Gains</h3><p class="text-gray-600 mt-2">Comparer les gains et efforts estimés vs. réels.</p>
+                </a>
+            </div>
+        </main>
+    </div>
+
+    <!-- Opportunities Matrix Page -->
+    <div id="opportunities-matrix-page" class="hidden">
+        <div class="min-h-screen flex flex-col">
+            <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+                <button id="opportunities-go-home" class="text-sm font-medium text-violet-600 hover:text-violet-800 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    Retour à l'accueil
+                </button>
+                <h1 class="text-2xl font-bold text-gray-900">Matrice des Opportunités</h1>
+                <div class="w-28"></div> <!-- Spacer -->
+            </header>
+            <div class="flex-grow container mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8">
+                <aside class="w-full lg:w-1/4 bg-white p-6 rounded-xl shadow-lg h-fit">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Contrôles</h2>
+                    <div><label for="csvFile" class="block mb-2 font-medium text-gray-700">1. Chargez votre fichier CSV</label><input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer"></div>
+                    <div id="filters-container" class="mt-6 hidden">
+                        <h3 class="text-lg font-medium text-gray-700 mb-3">2. Filtres</h3>
+                        <div id="filters" class="space-y-4"></div>
+                        <button id="opportunities-show-all" class="hidden mt-4 w-full text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 py-2 px-4 rounded-lg">Afficher tout</button>
+                    </div>
+                </aside>
+                <main class="w-full lg:w-3/4 bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col items-center">
+                    <div id="opportunities-kpis" class="w-full grid grid-cols-1 gap-4 mb-6"></div>
+                    <div id="chart-container" class="w-full h-full min-h-[500px] relative"><div id="placeholder" class="flex flex-col items-center justify-center h-full text-center text-gray-500"><svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg><h3 class="text-xl font-medium">En attente de votre fichier...</h3><p class="mt-1">Veuillez sélectionner un fichier CSV pour commencer.</p></div></div>
+                    <div id="legend-table-container" class="w-full mt-8"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gains Matrix Page -->
+    <div id="gains-matrix-page" class="hidden">
+        <div class="min-h-screen flex flex-col">
+            <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+                <button id="gains-go-home" class="text-sm font-medium text-teal-600 hover:text-teal-800 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    Retour à l'accueil
+                </button>
+                <h1 class="text-2xl font-bold text-gray-900">Matrice des Gains : Estimé vs. Réel</h1>
+                <div class="w-28"></div> <!-- Spacer -->
+            </header>
+            <div class="flex-grow container mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8">
+                <aside class="w-full lg:w-1/4 bg-white p-6 rounded-xl shadow-lg h-fit">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Contrôles</h2>
+                    <div>
+                        <label for="gains-csvFile" class="block mb-2 font-medium text-gray-700">1. Chargez le CSV des gains</label>
+                        <input type="file" id="gains-csvFile" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
+                    </div>
+                    <div id="gains-filters-container" class="mt-6 hidden">
+                        <h3 class="text-lg font-medium text-gray-700 mb-3">2. Filtres</h3>
+                        <div id="gains-filters" class="space-y-4"></div>
+                        <button id="gains-show-all" class="hidden mt-4 w-full text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 py-2 px-4 rounded-lg">Afficher tout</button>
+                    </div>
+                </aside>
+                <main class="w-full lg:w-3/4 bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col items-center">
+                    <div id="gains-kpis" class="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
+                    <div id="gains-chart-container" class="w-full h-full min-h-[500px] relative">
+                         <div id="gains-placeholder" class="flex flex-col items-center justify-center h-full text-center text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                            <h3 class="text-xl font-medium">En attente de votre fichier...</h3>
+                            <p class="mt-1">Veuillez sélectionner un fichier CSV pour commencer.</p>
+                        </div>
+                    </div>
+                    <div id="gains-legend-table-container" class="w-full mt-8"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for project details (reused) -->
+    <div id="projectModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl transform transition-all" id="modal-content">
+            <div class="p-6">
+                <div class="flex justify-between items-start">
+                    <h3 class="text-2xl font-bold text-gray-900" id="modal-title">Titre du Projet</h3>
+                    <button id="closeModal" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                    <div class="bg-gray-50 p-3 rounded-lg"><p class="font-semibold text-gray-600">Demandeur</p><p class="text-gray-800" id="modal-requester"></p></div>
+                    <div class="bg-gray-50 p-3 rounded-lg"><p class="font-semibold text-gray-600">Type de Gain Stratégique</p><p class="text-gray-800 font-bold" id="modal-gain-type"></p></div>
+                    <div class="bg-violet-50 p-3 rounded-lg"><p class="font-semibold text-violet-800">Gain Estimé</p><p class="text-violet-900 font-bold text-base" id="modal-gain"></p></div>
+                    <div class="bg-amber-50 p-3 rounded-lg"><p class="font-semibold text-amber-800">Effort (Coût)</p><p class="text-amber-900 font-bold text-base" id="modal-effort"></p></div>
+                    <div class="md:col-span-2 bg-gray-50 p-3 rounded-lg"><p class="font-semibold text-gray-600">Effort Estimé (Taille)</p><p class="text-gray-800 font-bold" id="modal-effort-size"></p></div>
+                    <div class="md:col-span-2 bg-gray-50 p-3 rounded-lg"><p class="font-semibold text-gray-600">Description</p><p class="text-gray-800" id="modal-description"></p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Helper function to parse numbers, handling French format (",") and percentages
+        const parseFrNumber = (str) => {
+            if (typeof str !== 'string') return 0;
+            // Remove spaces, then replace comma with dot for float parsing
+            return parseFloat(str.replace(/\s/g, '').replace(',', '.').replace('€', '').replace('H','')) || 0;
+        };
+
+        // Helper function to create filter checkboxes, now in a global scope
+        function createFilterCheckbox(id, label, checked, group) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex items-center';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `filter-checkbox-${id}`;
+            checkbox.value = label;
+            checkbox.checked = checked;
+            checkbox.dataset.group = group;
+            checkbox.className = 'h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500';
+            const labelEl = document.createElement('label');
+            labelEl.htmlFor = `filter-checkbox-${id}`;
+            labelEl.textContent = label;
+            labelEl.className = 'ml-2 block text-sm text-gray-900';
+            wrapper.appendChild(checkbox);
+            wrapper.appendChild(labelEl);
+            return wrapper;
+        }
+
+        // --- Page Navigation ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const homePage = document.getElementById('home-page');
+            const opportunitiesMatrixPage = document.getElementById('opportunities-matrix-page');
+            const gainsMatrixPage = document.getElementById('gains-matrix-page');
+            
+            const goToOpportunitiesMatrixBtn = document.getElementById('go-to-opportunities-matrix');
+            const goToGainsMatrixBtn = document.getElementById('go-to-gains-matrix');
+            
+            const opportunitiesGoHomeBtn = document.getElementById('opportunities-go-home');
+            const gainsGoHomeBtn = document.getElementById('gains-go-home');
+
+            const showPage = (pageToShow) => {
+                [homePage, opportunitiesMatrixPage, gainsMatrixPage].forEach(page => page.classList.add('hidden'));
+                pageToShow.classList.remove('hidden');
+            };
+
+            goToOpportunitiesMatrixBtn.addEventListener('click', (e) => { e.preventDefault(); showPage(opportunitiesMatrixPage); });
+            goToGainsMatrixBtn.addEventListener('click', (e) => { e.preventDefault(); showPage(gainsMatrixPage); });
+            opportunitiesGoHomeBtn.addEventListener('click', () => showPage(homePage));
+            gainsGoHomeBtn.addEventListener('click', () => showPage(homePage));
+            
+            setupOpportunitiesMatrix();
+            setupGainsMatrix();
+        });
+
+
+        // --- GAINS MATRIX LOGIC ---
+        function setupGainsMatrix() {
+            const csvFileInput = document.getElementById('gains-csvFile');
+            const chartContainer = document.getElementById('gains-chart-container');
+            const filtersContainer = document.getElementById('gains-filters-container');
+            const filtersDiv = document.getElementById('gains-filters');
+            const placeholder = document.getElementById('gains-placeholder');
+            const legendTableContainer = document.getElementById('gains-legend-table-container');
+            const showAllBtn = document.getElementById('gains-show-all');
+            const kpiContainer = document.getElementById('gains-kpis');
+
+            let allGainsProjects = [];
+
+            csvFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        placeholder.style.display = 'none';
+                        filtersContainer.classList.remove('hidden');
+                        allGainsProjects = processGainsData(results);
+                        populateGainsFilters(allGainsProjects);
+                        filterAndRedrawGains();
+                    }
+                });
+            });
+            
+            showAllBtn.addEventListener('click', () => filterAndRedrawGains(true));
+
+            function processGainsData(results) {
+                const data = results.data;
+                const headers = results.meta.fields;
+                const findHeader = (start) => headers.find(h => h.trim().startsWith(start));
+
+                const projectKey = findHeader("Nom du projet / lot");
+                const toolKey = findHeader("Outil concerné");
+                const requesterKey = findHeader("Sponsor du projet");
+                const subsidiaryKey = findHeader("Sociétés concernées par le projet");
+                const gainEstimatedEuroKey = findHeader("Gain estimé ?");
+                const gainEstimatedHoursKey = findHeader("Gains estimés (en H)");
+                const effortEstimatedKey = findHeader("Macro chiffrage (en €)");
+                const roiEstimatedKey = findHeader("ROI estimé");
+                const gainActualEuroKey = findHeader("Gains réels (€)");
+                const gainActualHoursKey = findHeader("Gains réels (en H)");
+                const effortActualKey = findHeader("Effort réel (€)");
+                const roiActualKey = findHeader("ROI réel");
+
+                return data.map((d, i) => ({
+                    id: i,
+                    theme: d[toolKey]?.trim() || 'N/A',
+                    project: d[projectKey]?.trim(),
+                    requester: d[requesterKey]?.trim() || 'N/A',
+                    subsidiary: d[subsidiaryKey]?.trim() || 'N/A',
+                    gainEstimated: parseFrNumber(d[gainEstimatedEuroKey]),
+                    gainEstimatedHours: parseFrNumber(d[gainEstimatedHoursKey]),
+                    effortEstimated: parseFrNumber(d[effortEstimatedKey]),
+                    roiEstimated: parseFrNumber(d[roiEstimatedKey]),
+                    gainActual: parseFrNumber(d[gainActualEuroKey]),
+                    gainActualHours: parseFrNumber(d[gainActualHoursKey]),
+                    effortActual: parseFrNumber(d[effortActualKey]),
+                    roiActual: parseFrNumber(d[roiActualKey]),
+                })).filter(d => d.project && (d.effortEstimated > 0 || d.effortActual > 0));
+            }
+
+            function populateGainsFilters(data) {
+                filtersDiv.innerHTML = '';
+                 // Gain Type Selector
+                const gainTypeDiv = document.createElement('div');
+                gainTypeDiv.innerHTML = `<label class="font-medium text-gray-600">Type de Gain</label>`;
+                const radioContainer = document.createElement('div');
+                radioContainer.className = 'flex items-center space-x-4 mt-1';
+                radioContainer.innerHTML = `
+                    <div class="flex items-center">
+                        <input id="gain-euros" name="gain-type" type="radio" value="euros" checked class="h-4 w-4 border-gray-300 text-teal-600 focus:ring-teal-500">
+                        <label for="gain-euros" class="ml-2 block text-sm text-gray-900">Gain en Euros (€)</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="gain-heures" name="gain-type" type="radio" value="heures" class="h-4 w-4 border-gray-300 text-teal-600 focus:ring-teal-500">
+                        <label for="gain-heures" class="ml-2 block text-sm text-gray-900">Gain en Heures (H)</label>
+                    </div>
+                `;
+                gainTypeDiv.appendChild(radioContainer);
+                filtersDiv.appendChild(gainTypeDiv);
+
+                const getUniqueValues = (key) => [...new Set(data.map(d => d[key]).filter(Boolean))];
+                const getUniqueMultiValues = (key) => {
+                    const allValues = new Set();
+                    data.forEach(d => { if (d[key]) { d[key].split(',').forEach(val => { const trimmedVal = val.trim(); if (trimmedVal) allValues.add(trimmedVal); }); } });
+                    return [...allValues];
+                };
+
+                const filterGroups = {
+                    'Outil / Thème': getUniqueValues('theme'),
+                    'Demandeur': getUniqueValues('requester'),
+                    'Filiale': getUniqueMultiValues('subsidiary')
+                };
+
+                for (const [groupName, items] of Object.entries(filterGroups)) {
+                    const groupId = groupName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                    const groupDiv = document.createElement('div');
+                    groupDiv.innerHTML = `<label class="font-medium text-gray-600">${groupName}</label>`;
+                    const filterGroupContainer = document.createElement('div');
+                    filterGroupContainer.className = 'filter-group space-y-1 mt-1';
+                    
+                    const allCheckbox = createFilterCheckbox(`gains-all-${groupId}`, 'Tous', true, groupName);
+                    filterGroupContainer.appendChild(allCheckbox);
+                    items.sort().forEach(item => {
+                        const checkbox = createFilterCheckbox(`gains-${groupId}-${item.replace(/[^a-zA-Z0-9]/g, '-')}`, item, false, groupName);
+                        filterGroupContainer.appendChild(checkbox);
+                    });
+                    
+                    groupDiv.appendChild(filterGroupContainer);
+                    filtersDiv.appendChild(groupDiv);
+                }
+                
+                filtersDiv.addEventListener('change', () => filterAndRedrawGains(false));
+            }
+
+            function filterAndRedrawGains(showAll = false) {
+                let filteredData;
+
+                if (showAll) {
+                    filtersDiv.querySelectorAll(`input[type="checkbox"]`).forEach(cb => {
+                        const isAllCheckbox = cb.value === 'Tous';
+                        cb.checked = isAllCheckbox;
+                    });
+                    showAllBtn.classList.add('hidden');
+                    filteredData = allGainsProjects;
+                } else {
+                    const getSelected = (group) => Array.from(filtersDiv.querySelectorAll(`input[data-group="${group}"]:checked`), cb => cb.value);
+
+                    const selectedThemes = getSelected('Outil / Thème');
+                    const selectedRequesters = getSelected('Demandeur');
+                    const selectedSubsidiaries = getSelected('Filiale');
+
+                    filteredData = allGainsProjects.filter(d => {
+                        const themeMatch = selectedThemes.includes('Tous') || selectedThemes.length === 0 || selectedThemes.includes(d.theme);
+                        const requesterMatch = selectedRequesters.includes('Tous') || selectedRequesters.length === 0 || selectedRequesters.includes(d.requester);
+                        
+                        const projectSubsidiaries = d.subsidiary.split(',').map(s => s.trim());
+                        const subsidiaryMatch = selectedSubsidiaries.includes('Tous') || selectedSubsidiaries.length === 0 || projectSubsidiaries.some(ps => selectedSubsidiaries.includes(ps));
+
+                        return themeMatch && requesterMatch && subsidiaryMatch;
+                    });
+                }
+
+                drawGainsChart(filteredData);
+                drawGainsLegendTable(filteredData);
+                updateGainsKPIs(filteredData);
+            }
+
+            function updateGainsKPIs(data) {
+                const totalRoiEst = d3.sum(data, d => d.roiEstimated);
+                const totalRoiReal = d3.sum(data, d => d.roiActual);
+                const totalDiff = totalRoiReal - totalRoiEst;
+
+                const diffClass = totalDiff >= 0 ? 'text-green-600' : 'text-red-600';
+                const diffSign = totalDiff >= 0 ? '+' : '';
+
+                kpiContainer.innerHTML = `
+                    <div class="bg-gray-100 p-4 rounded-lg text-center">
+                        <p class="text-sm text-gray-600">ROI Estimé Total</p>
+                        <p class="text-2xl font-bold text-gray-900">${totalRoiEst.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-gray-100 p-4 rounded-lg text-center">
+                        <p class="text-sm text-gray-600">ROI Réel Total</p>
+                        <p class="text-2xl font-bold text-gray-900">${totalRoiReal.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-gray-100 p-4 rounded-lg text-center">
+                        <p class="text-sm text-gray-600">Écart Total</p>
+                        <p class="text-2xl font-bold ${diffClass}">${diffSign}${totalDiff.toFixed(2)}</p>
+                    </div>
+                `;
+            }
+
+            function drawGainsChart(data) {
+                chartContainer.innerHTML = '';
+                if (data.length === 0) {
+                    chartContainer.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Aucune donnée à afficher.</div>`;
+                    return;
+                }
+                
+                const selectedGainType = document.querySelector('input[name="gain-type"]:checked').value;
+                const isEuro = selectedGainType === 'euros';
+                const yAxisLabel = isEuro ? "Gains (€)" : "Gains (H)";
+                const yTickFormat = isEuro ? d => `€${d3.format(",.0f")(d)}` : d => `${d3.format(",.0f")(d)} H`;
+                const gainEstimatedAccessor = d => isEuro ? d.gainEstimated : d.gainEstimatedHours;
+                const gainActualAccessor = d => isEuro ? d.gainActual : d.gainActualHours;
+
+
+                const margin = { top: 40, right: 40, bottom: 60, left: 80 };
+                const width = chartContainer.clientWidth - margin.left - margin.right;
+                const height = 500 - margin.top - margin.bottom;
+                const svg = d3.select(chartContainer).append("svg").attr("width", width + margin.left + margin.right).attr("height", height + margin.top + margin.bottom).append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+                
+                svg.append('defs').append('marker')
+                    .attr('id', 'arrowhead').attr('viewBox', '-0 -5 10 10').attr('refX', 5).attr('refY', 0)
+                    .attr('orient', 'auto').attr('markerWidth', 5).attr('markerHeight', 5)
+                    .attr('xoverflow', 'visible').append('svg:path').attr('d', 'M 0,-5 L 10 ,0 L 0,5')
+                    .attr('fill', '#555').style('stroke', 'none');
+
+                const maxEffort = d3.max(data, d => Math.max(d.effortEstimated, d.effortActual));
+                const maxGain = d3.max(data, d => Math.max(gainEstimatedAccessor(d), gainActualAccessor(d)));
+                const maxRoi = d3.max(data, d => Math.max(d.roiEstimated, d.roiActual));
+
+                const xScale = d3.scaleLinear().domain([0, maxEffort > 0 ? maxEffort * 1.1 : 1]).range([0, width]);
+                const yScale = d3.scaleLinear().domain([0, maxGain > 0 ? maxGain * 1.1 : 1]).range([height, 0]);
+                const radiusScale = d3.scaleSqrt().domain([0, maxRoi > 0 ? maxRoi : 1]).range([5, 40]);
+                const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
+
+                const xAxis = d3.axisBottom(xScale).ticks(5).tickFormat(d => `€${d3.format(",.0f")(d)}`);
+                const yAxis = d3.axisLeft(yScale).ticks(5).tickFormat(yTickFormat);
+                svg.append("g").attr("transform", `translate(0, ${height})`).call(xAxis);
+                svg.append("g").call(yAxis);
+                svg.append("text").attr("class", "axis-label").attr("text-anchor", "middle").attr("x", width / 2).attr("y", height + margin.bottom -5).text("Effort (€)");
+                svg.append("text").attr("class", "axis-label").attr("text-anchor", "middle").attr("transform", "rotate(-90)").attr("y", -margin.left + 20).attr("x", -height / 2).text(yAxisLabel);
+                
+                const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+                const projectGroups = svg.selectAll('.project-group').data(data).enter().append('g').attr('class', 'project-group');
+
+                projectGroups.append('line')
+                    .filter(d => gainActualAccessor(d) > 0 && d.effortActual > 0)
+                    .attr('x1', d => xScale(d.effortEstimated)).attr('y1', d => yScale(gainEstimatedAccessor(d)))
+                    .attr('x2', d => xScale(d.effortActual)).attr('y2', d => yScale(gainActualAccessor(d)))
+                    .attr('stroke', '#555').attr('stroke-width', 1.5).attr('marker-end', 'url(#arrowhead)');
+
+                projectGroups.append('circle').attr('class', 'estimated-bubble')
+                    .attr('cx', d => xScale(d.effortEstimated)).attr('cy', d => yScale(gainEstimatedAccessor(d)))
+                    .attr('r', d => radiusScale(d.roiEstimated)).attr('fill', d => colorScale(d.theme))
+                    .attr('fill-opacity', 0.4).attr('stroke', d => colorScale(d.theme)).attr('stroke-dasharray', '4 2')
+                    .on("mouseover", (event, d) => { tooltip.transition().style("opacity", .9); tooltip.html(`<strong>${d.project} (Estimé)</strong><br/>Effort: €${d3.format(",.0f")(d.effortEstimated)}<br/>Gain: ${d3.format(",.0f")(gainEstimatedAccessor(d))} ${isEuro ? '€' : 'H'}<br/>ROI: ${d.roiEstimated.toFixed(2)}`).style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px"); }).on("mouseout", () => tooltip.transition().style("opacity", 0));
+
+                projectGroups.append('circle').attr('class', 'actual-bubble')
+                    .filter(d => gainActualAccessor(d) > 0 && d.effortActual > 0)
+                    .attr('cx', d => xScale(d.effortActual)).attr('cy', d => yScale(gainActualAccessor(d)))
+                    .attr('r', d => radiusScale(d.roiActual)).attr('fill', d => colorScale(d.theme))
+                    .attr('fill-opacity', 0.8).attr('stroke', d => d3.color(colorScale(d.theme)).darker(1))
+                    .on("mouseover", (event, d) => { tooltip.transition().style("opacity", .9); tooltip.html(`<strong>${d.project} (Réel)</strong><br/>Effort: €${d3.format(",.0f")(d.effortActual)}<br/>Gain: ${d3.format(",.0f")(gainActualAccessor(d))} ${isEuro ? '€' : 'H'}<br/>ROI: ${d.roiActual.toFixed(2)}`).style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px"); }).on("mouseout", () => tooltip.transition().style("opacity", 0));
+            }
+
+            function drawGainsLegendTable(data) {
+                legendTableContainer.innerHTML = ''; if (data.length === 0) return;
+                const table = document.createElement('table'); table.className = 'w-full text-sm text-left text-gray-500 legend-table';
+                const thead = table.createTHead(); thead.className = 'text-xs text-gray-700 uppercase bg-gray-50';
+                let headerRow = thead.insertRow();
+                const headers = ['Projet', 'Thème', 'ROI Estimé', 'ROI Réel', 'Écart'];
+                headers.forEach(text => { let th = document.createElement('th'); th.scope = 'col'; th.className = 'px-4 py-3'; th.textContent = text; headerRow.appendChild(th); });
+                const tbody = table.createTBody();
+                data.forEach(d => {
+                    let row = tbody.insertRow(); row.className = 'bg-white border-b hover:bg-gray-50';
+                    row.dataset.id = d.id;
+                    const roiDiff = d.roiActual - d.roiEstimated;
+                    const diffClass = roiDiff > 0 ? 'text-green-600' : 'text-red-600';
+                    const diffSign = roiDiff > 0 ? '+' : '';
+                    const cells = [d.project, d.theme, d.roiEstimated.toFixed(2), d.roiActual.toFixed(2), `<span class="${diffClass}">${diffSign}${roiDiff.toFixed(2)}</span>`];
+                    cells.forEach((text, i) => { let cell = row.insertCell(); cell.className = 'px-4 py-2'; cell.innerHTML = text; });
+                });
+                
+                tbody.addEventListener('click', (e) => {
+                    const row = e.target.closest('tr');
+                    if (row) {
+                        const projectId = parseInt(row.dataset.id, 10);
+                        const projectData = allGainsProjects.filter(d => d.id === projectId);
+                        drawGainsChart(projectData);
+                        showAllBtn.classList.remove('hidden');
+                    }
+                });
+                legendTableContainer.appendChild(table);
+            }
+        }
+
+        // --- OPPORTUNITIES MATRIX LOGIC ---
+        function setupOpportunitiesMatrix() {
+            const csvFileInput = document.getElementById('csvFile');
+            const chartContainer = document.getElementById('chart-container');
+            const filtersContainer = document.getElementById('filters-container');
+            const filtersDiv = document.getElementById('filters');
+            const placeholder = document.getElementById('placeholder');
+            const modal = document.getElementById('projectModal');
+            const closeModalBtn = document.getElementById('closeModal');
+            const legendTableContainer = document.getElementById('legend-table-container');
+            const kpiContainer = document.getElementById('opportunities-kpis');
+            const showAllBtn = document.getElementById('opportunities-show-all');
+
+            let allProjects = [];
+
+            showAllBtn.addEventListener('click', () => filterAndRedraw(true));
+            csvFileInput.addEventListener('change', handleFileSelect, false);
+
+            function handleFileSelect(event) {
+                const file = event.target.files[0]; if (!file) return;
+                Papa.parse(file, {
+                    header: true, skipEmptyLines: true,
+                    complete: (results) => {
+                        placeholder.style.display = 'none'; filtersContainer.classList.remove('hidden');
+                        allProjects = processData(results); populateFilters(allProjects); filterAndRedraw();
+                    },
+                    error: (err) => { console.error("Error parsing CSV:", err); chartContainer.innerHTML = `<div class="text-red-500 text-center">Erreur lors de la lecture du fichier CSV.</div>`; }
+                });
+            }
+            function processData(results) {
+                const data = results.data; 
+                const headers = results.meta.fields;
+                const findHeader = (start) => headers.find(h => h.trim().startsWith(start));
+                
+                const gainKey = headers.find(h => h.trim().startsWith("Gain estimé ?") && h.includes("Trois valeurs possibles"));
+                const gainHoursKey = headers.find(h => h.trim().startsWith("Gain estimé ?") && h.includes("En H"));
+                const effortCostKey = findHeader("Macro chiffrage (en €)");
+                const effortSizeKey = findHeader("Effort estimé");
+                const titleKey = findHeader("Objectif principal du projet");
+                const requesterKey = findHeader("Demandeur du projet");
+                const societyKey = findHeader("Sociétés concernées par le projet");
+                const deliveryDateKey = findHeader("Date de livraison max souhaitée ?");
+                const toolKey = findHeader("Outil concerné");
+                const descriptionKey = findHeader("Description de votre besoin");
+                const roiKey = findHeader("ROI estimé");
+                
+                const tShirtToDays = { 'XS': 2, 'S': 5, 'M': 10, 'L': 23, 'XL': 50, 'XXL': 50, 'N/A': 0 };
+
+                return data.map((d, i) => {
+                    let gainValue;
+                    let gainType;
+                    const rawGain = d[gainKey]; 
+                    const cleanedGain = String(rawGain || '').toLowerCase();
+                    
+                    if (cleanedGain.includes('réglementaire')) {
+                        gainValue = 0;
+                        gainType = 'Réglementaire';
+                    } else if (cleanedGain.includes('qualité')) {
+                        gainValue = 0;
+                        gainType = 'Qualité';
+                    } else {
+                        gainValue = parseFrNumber(rawGain);
+                        gainType = 'Productivité';
+                    }
+
+                    const gainHoursValue = parseFrNumber(d[gainHoursKey]);
+                    const effortValue = parseFrNumber(d[effortCostKey]); 
+                    const effortSize = d[effortSizeKey]?.trim().toUpperCase() || 'N/A';
+                    const effortInDays = tShirtToDays[effortSize] || 0;
+                    let deliveryDate = null; 
+                    const dateParts = d[deliveryDateKey]?.split('/'); 
+                    if (dateParts && dateParts.length === 3) deliveryDate = new Date(+dateParts[2], dateParts[1] - 1, +dateParts[0]);
+                    
+                    return { id: i, title: d[titleKey], requester: d[requesterKey]?.trim() || 'N/A', description: d[descriptionKey], society: d[societyKey]?.trim() || 'N/A', tool: d[toolKey]?.trim() || 'N/A', deliveryDate: deliveryDate, gain: gainValue, gainHours: gainHoursValue, effort: effortValue, effortSize: effortSize, effortInDays: effortInDays, rawGain: rawGain, rawGainHours: d[gainHoursKey], gainType: gainType, roi: parseFrNumber(d[roiKey]) };
+                }).filter(d => d.effort > 0 && (d.gain >= 0 || d.gainHours >= 0) && d.title);
+            }
+            function populateFilters(data) {
+                filtersDiv.innerHTML = ''; 
+                
+                const gainTypeDiv = document.createElement('div');
+                gainTypeDiv.innerHTML = `<label class="font-medium text-gray-600">Type de Gain</label>`;
+                const radioContainer = document.createElement('div');
+                radioContainer.className = 'flex items-center space-x-4 mt-1';
+                radioContainer.innerHTML = `
+                    <div class="flex items-center">
+                        <input id="project-gain-euros" name="project-gain-type" type="radio" value="euros" checked class="h-4 w-4 border-gray-300 text-violet-600 focus:ring-violet-500">
+                        <label for="project-gain-euros" class="ml-2 block text-sm text-gray-900">Gain en Euros (€)</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="project-gain-heures" name="project-gain-type" type="radio" value="heures" class="h-4 w-4 border-gray-300 text-violet-600 focus:ring-violet-500">
+                        <label for="project-gain-heures" class="ml-2 block text-sm text-gray-900">Gain en Heures (H)</label>
+                    </div>
+                `;
+                gainTypeDiv.appendChild(radioContainer);
+                filtersDiv.appendChild(gainTypeDiv);
+
+
+                const getUniqueValues = (key) => [...new Set(data.map(d => d[key]).filter(val => val && val !== 'N/A'))];
+                const getUniqueMultiValues = (key) => { const allValues = new Set(); data.forEach(d => { if (d[key] && d[key] !== 'N/A') { d[key].split(',').forEach(val => { const trimmedVal = val.trim(); if (trimmedVal) allValues.add(trimmedVal); }); } }); return [...allValues]; };
+                const filterGroups = { 'Type de Gain Stratégique': getUniqueValues('gainType'), 'Demandeur': getUniqueValues('requester'), 'Société': getUniqueMultiValues('society'), 'Outil': getUniqueMultiValues('tool') };
+                for (const [groupName, items] of Object.entries(filterGroups)) {
+                    const groupId = groupName.toLowerCase().replace(/[^a-z0-9]/g, '-'); const groupDiv = document.createElement('div'); groupDiv.innerHTML = `<label class="font-medium text-gray-600">${groupName}</label>`; const filterGroupContainer = document.createElement('div'); filterGroupContainer.className = 'filter-group space-y-1 mt-1'; const allCheckbox = createFilterCheckbox(`all-${groupId}`, 'Tous', true, groupName); filterGroupContainer.appendChild(allCheckbox); items.sort().forEach(item => { const checkbox = createFilterCheckbox(`${groupId}-${item.replace(/[^a-zA-Z0-9]/g, '-')}`, item, false, groupName); filterGroupContainer.appendChild(checkbox); }); groupDiv.appendChild(filterGroupContainer); filtersDiv.appendChild(groupDiv);
+                }
+                const dateGroup = document.createElement('div'); dateGroup.innerHTML = `<label class="font-medium text-gray-600">Date de livraison</label><div class="flex items-center space-x-2 mt-1 text-sm"><input type="date" id="minDate" class="w-full border-gray-300 rounded-md shadow-sm text-sm p-1"><span>-</span><input type="date" id="maxDate" class="w-full border-gray-300 rounded-md shadow-sm text-sm p-1"></div>`; dateGroup.className = 'mt-2'; filtersDiv.appendChild(dateGroup);
+                filtersDiv.addEventListener('change', (event) => filterAndRedraw(false, event));
+            }
+            
+            function filterAndRedraw(showAll = false, event = null) {
+                 let filteredData;
+
+                if (showAll) {
+                    filtersDiv.querySelectorAll(`input[type="checkbox"]`).forEach(cb => {
+                        const isAllCheckbox = cb.value === 'Tous';
+                        cb.checked = isAllCheckbox;
+                    });
+                    showAllBtn.classList.add('hidden');
+                    filteredData = allProjects;
+                } else {
+                    if (event && event.target && event.target.type === 'checkbox') {
+                        const changedElement = event.target; const group = changedElement.dataset.group; const allCheckbox = filtersDiv.querySelector(`input[data-group="${group}"][value='Tous']`);
+                        if (allCheckbox) { if (changedElement.value === 'Tous') { if(changedElement.checked) filtersDiv.querySelectorAll(`input[data-group="${group}"]:not([value='Tous'])`).forEach(cb => cb.checked = false); } else if(changedElement.checked) allCheckbox.checked = false; if (!filtersDiv.querySelectorAll(`input[data-group="${group}"]:checked`).length > 0) allCheckbox.checked = true; }
+                    }
+                    const getSelected = (group) => Array.from(filtersDiv.querySelectorAll(`input[data-group="${group}"]:checked`), cb => cb.value);
+                    const selectedGainTypes = getSelected('Type de Gain Stratégique'); const selectedRequesters = getSelected('Demandeur'); const selectedSocieties = getSelected('Société'); const selectedTools = getSelected('Outil');
+                    
+                    const minDateEl = document.getElementById('minDate');
+                    const maxDateEl = document.getElementById('maxDate');
+                    const minDate = minDateEl ? minDateEl.valueAsDate : null;
+                    const maxDate = maxDateEl ? maxDateEl.valueAsDate : null;
+
+                    filteredData = allProjects.filter(d => {
+                        const gainTypeMatch = selectedGainTypes.includes('Tous') || selectedGainTypes.includes(d.gainType); const requesterMatch = selectedRequesters.includes('Tous') || selectedRequesters.includes(d.requester); 
+                        const projectSocieties = d.society.split(',').map(s => s.trim());
+                        const societyMatch = selectedSocieties.includes('Tous') || projectSocieties.some(ps => selectedSocieties.includes(ps));
+                        const projectTools = d.tool.split(',').map(t => t.trim()); 
+                        const toolMatch = selectedTools.includes('Tous') || projectTools.some(pt => selectedTools.includes(pt)); 
+                        const dateMatch = (!minDate || (d.deliveryDate && d.deliveryDate >= minDate)) && (!maxDate || (d.deliveryDate && d.deliveryDate <= maxDate));
+                        return gainTypeMatch && requesterMatch && societyMatch && toolMatch && dateMatch;
+                    });
+                }
+                
+                filteredData.sort((a, b) => b.roi - a.roi);
+                filteredData.forEach((d, i) => d.displayId = i + 1);
+
+                drawChart(filteredData); 
+                drawLegendTable(filteredData);
+                updateOpportunitiesKPIs(filteredData);
+            }
+
+            function updateOpportunitiesKPIs(data) {
+                const totalDays = d3.sum(data, d => d.effortInDays);
+                kpiContainer.innerHTML = `
+                    <div class="bg-gray-100 p-4 rounded-lg text-center">
+                        <div class="flex items-center justify-center text-sm text-gray-600 relative group">
+                            <span>Jours / Homme Estimés (Total)</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1 text-gray-400 cursor-pointer" viewBox="0 0 20 20" fill="currentColor">
+                              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                            <div class="absolute bottom-full mb-2 w-max bg-gray-800 text-white text-xs text-left rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 -translate-x-1/2 left-1/2">
+                                <h4 class="font-bold mb-1">Valeurs utilisées pour le calcul :</h4>
+                                <ul class="list-disc list-inside">
+                                    <li>XS : 2 JH</li>
+                                    <li>S : 5 JH</li>
+                                    <li>M : 10 JH</li>
+                                    <li>L : 23 JH</li>
+                                    <li>XL : 50 JH</li>
+                                    <li>XXL : 50 JH</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <p class="text-2xl font-bold text-violet-900">${totalDays} JH</p>
+                    </div>
+                `;
+            }
+
+            function drawChart(data) {
+                chartContainer.innerHTML = '';
+
+                const gainRadio = document.querySelector('input[name="project-gain-type"]:checked');
+                if (!gainRadio) return; // Exit if radio buttons are not ready
+
+                const selectedGainType = gainRadio.value;
+                const isEuro = selectedGainType === 'euros';
+                const yAxisLabel = isEuro ? "Gain Estimé (€)" : "Gain Estimé (H)";
+                const yTickFormat = isEuro ? d => `€${d3.format(",.0f")(d)}` : d => `${d3.format(",.0f")(d)} H`;
+                const gainAccessor = d => isEuro ? d.gain : d.gainHours;
+
+                const chartData = data;
+                
+                if (chartData.length === 0) { chartContainer.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Aucun projet ne correspond aux filtres sélectionnés.</div>`; return; }
+                
+                const margin = { top: 40, right: 40, bottom: 60, left: 80 }; const width = chartContainer.clientWidth - margin.left - margin.right; const height = 500 - margin.top - margin.bottom;
+                const svg = d3.select(chartContainer).append("svg").attr("width", width + margin.left + margin.right).attr("height", height + margin.top + margin.bottom).append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+                
+                const xDomain = d3.extent(chartData, d => d.effort); 
+                const yDomain = d3.extent(chartData, gainAccessor);
+                
+                const xScale = d3.scaleLinear().domain([0, xDomain[1] > 0 ? xDomain[1] * 1.1 : 1]).range([0, width]); 
+                const yScale = d3.scaleLinear().domain([0, yDomain[1] > 0 ? yDomain[1] * 1.1 : 1]).range([height, 0]); 
+                const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
+                
+                const xMid = xScale.domain()[1] / 2; const yMid = yScale.domain()[1] / 2;
+                if (xMid > 0) svg.append("line").attr("x1", xScale(xMid)).attr("x2", xScale(xMid)).attr("y1", 0).attr("y2", height).attr("stroke", "#e5e7eb").attr("stroke-dasharray", "4"); 
+                if (yMid > 0) svg.append("line").attr("x1", 0).attr("x2", width).attr("y1", yScale(yMid)).attr("y2", yScale(yMid)).attr("stroke", "#e5e7eb").attr("stroke-dasharray", "4");
+                
+                if (xMid > 0 && yMid > 0) {
+                  svg.append("text").attr("class", "quadrant-label").attr("x", xScale(xMid) / 2).attr("y", 20).text("Gains Rapides").attr("text-anchor", "middle"); 
+                  svg.append("text").attr("class", "quadrant-label").attr("x", xScale(xMid) + (width - xScale(xMid)) / 2).attr("y", 20).text("Projets Majeurs").attr("text-anchor", "middle"); 
+                  svg.append("text").attr("class", "quadrant-label").attr("x", xScale(xMid) / 2).attr("y", height - 5).text("Tâches de Fond").attr("text-anchor", "middle"); 
+                  svg.append("text").attr("class", "quadrant-label").attr("x", xScale(xMid) + (width - xScale(xMid)) / 2).attr("y", height - 5).text("À Reconsidérer").attr("text-anchor", "middle");
+                }
+                
+                const xAxis = d3.axisBottom(xScale).ticks(5).tickFormat(d => `€${d3.format(",.0f")(d)}`); 
+                const yAxis = d3.axisLeft(yScale).ticks(5).tickFormat(yTickFormat);
+                svg.append("g").attr("transform", `translate(0, ${height})`).call(xAxis); svg.append("g").call(yAxis);
+                svg.append("text").attr("class", "axis-label").attr("text-anchor", "middle").attr("x", width / 2).attr("y", height + margin.bottom).text("Effort / Macro Chiffrage (€)"); 
+                svg.append("text").attr("class", "axis-label").attr("text-anchor", "middle").attr("transform", "rotate(-90)").attr("y", -margin.left + 20).attr("x", -height / 2).text(yAxisLabel);
+                
+                const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+                const bubbles = svg.append("g").selectAll("g.bubble-group").data(chartData).enter().append("g").attr("class", "bubble-group").attr("transform", d => `translate(${xScale(d.effort)}, ${yScale(gainAccessor(d))})`).style("cursor", "pointer")
+                    .on("mouseover", (event, d) => { tooltip.transition().style("opacity", .9); tooltip.html(`<strong>#${d.displayId}: ${d.title}</strong><br/>Gain: ${d3.format(",.0f")(gainAccessor(d))} ${isEuro ? '€' : 'H'}<br/>Effort: ${d.effortSize} (€${d3.format(",")(d.effort)})`).style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px"); }).on("mouseout", () => tooltip.transition().style("opacity", 0)).on("click", (event, d) => showModal(d));
+                bubbles.append("circle").attr("r", 12).attr("fill", d => colorScale(d.society)).attr("fill-opacity", 0.8).attr("stroke", d => d3.color(colorScale(d.society)).darker(1));
+                bubbles.append("text").attr("class", "bubble-text").attr("text-anchor", "middle").attr("dy", "0.3em").text(d => d.displayId);
+            }
+            function drawLegendTable(data) {
+                legendTableContainer.innerHTML = ''; if (data.length === 0) return;
+
+                const gainRadio = document.querySelector('input[name="project-gain-type"]:checked');
+                if (!gainRadio) return;
+
+                const selectedGainType = gainRadio.value;
+                const isEuro = selectedGainType === 'euros';
+                const gainAccessor = d => isEuro ? d.gain : d.gainHours;
+
+                const table = document.createElement('table'); table.className = 'w-full text-sm text-left text-gray-500 legend-table'; const thead = table.createTHead(); thead.className = 'text-xs text-gray-700 uppercase bg-gray-50'; let headerRow = thead.insertRow(); 
+                const headers = ['#', 'Projet', 'Société', 'Gain Estimé', 'Effort (Taille)', 'ROI Estimé'];
+                headers.forEach(text => { let th = document.createElement('th'); th.scope = 'col'; th.className = 'px-4 py-3'; th.textContent = text; headerRow.appendChild(th); });
+                const tbody = table.createTBody();
+                data.forEach(d => { 
+                    let row = tbody.insertRow(); 
+                    row.className = 'bg-white border-b hover:bg-gray-50'; 
+                    row.dataset.id = d.id;
+                    
+                    let gainText;
+                    if (d.gainType === 'Qualité' || d.gainType === 'Réglementaire') {
+                        gainText = d.rawGain; // Always show the original text
+                    } else {
+                        gainText = `${d3.format(',.0f')(gainAccessor(d))} ${isEuro ? '€' : 'H'}`;
+                    }
+
+                    const cells = [d.displayId, d.title, d.society, gainText, d.effortSize, d.roi.toFixed(2)]; 
+                    cells.forEach((text, i) => { let cell = row.insertCell(); cell.className = `px-4 py-2 ${i === 0 ? 'font-bold' : ''}`; cell.textContent = text; }); 
+                });
+                
+                 tbody.addEventListener('click', (e) => {
+                    const row = e.target.closest('tr');
+                    if (row) {
+                        const projectId = parseInt(row.dataset.id, 10);
+                        const projectData = allProjects.filter(d => d.id === projectId);
+                        drawChart(projectData);
+                        showAllBtn.classList.remove('hidden');
+                    }
+                });
+                legendTableContainer.appendChild(table);
+            }
+            function showModal(d) {
+                const gainRadio = document.querySelector('input[name="project-gain-type"]:checked');
+                 if (!gainRadio) return;
+                const selectedGainType = gainRadio.value;
+                const isEuro = selectedGainType === 'euros';
+                const gainText = isEuro ? d.rawGain : d.rawGainHours;
+
+                document.getElementById('modal-title').textContent = `#${d.displayId}: ${d.title}` || 'N/A'; document.getElementById('modal-requester').textContent = d.requester || 'N/A'; document.getElementById('modal-gain-type').textContent = d.gainType || 'N/A'; document.getElementById('modal-gain').textContent = gainText || 'N/A'; document.getElementById('modal-effort').textContent = `€${d3.format(",.0f")(d.effort)}`; document.getElementById('modal-effort-size').textContent = d.effortSize || 'N/A'; document.getElementById('modal-description').textContent = d.description || 'N/A';
+                modal.classList.remove('hidden'); modal.classList.add('flex');
+            }
+            closeModalBtn.addEventListener('click', () => { modal.classList.add('hidden'); modal.classList.remove('flex'); });
+            modal.addEventListener('click', (e) => { if(e.target === modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); } });
+            window.addEventListener('resize', () => {
+                if (allProjects && allProjects.length > 0) {
+                    filterAndRedraw();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+
