@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="fr" class="bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard d'Analyse de Similarité</title>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- D3.js via CDN for charting -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        /* Custom styles primarily for D3 charts and specific UI elements not easily handled by Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Chart-specific styles */
+        .chart-container {
+            width: 100%;
+            height: 350px; /* Increased height for better visibility */
+            background-color: #fff;
+            border-radius: 0.5em;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5em 1em; /* Adjusted padding */
+            margin-top: 1.5em;
+        }
+        .chart-container svg {
+            width: 100%;
+            height: 100%;
+        }
+        .bar {
+            fill: #3b82f6; /* Tailwind blue-500 */
+            transition: fill 0.3s ease;
+        }
+        .bar:hover {
+            fill: #2563eb; /* Tailwind blue-600 */
+        }
+        .axis text {
+            font-size: 0.8em;
+            fill: #4b5563; /* Tailwind gray-600 */
+        }
+        .axis line, .axis path {
+            stroke: #d1d5db; /* Tailwind gray-300 */
+            shape-rendering: crispEdges;
+        }
+        .chart-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #1f2937; /* Tailwind gray-800 */
+            margin-bottom: 1em;
+        }
+        .line-daily {
+            fill: none;
+            stroke: #3b82f6; /* Tailwind blue-500 */
+            stroke-width: 2px;
+        }
+        .line-trend {
+            fill: none;
+            stroke: #f97316; /* Tailwind orange-500 */
+            stroke-width: 2px;
+            stroke-dasharray: 5,5;
+        }
+        .dot {
+            fill: #3b82f6; /* Tailwind blue-500 */
+            stroke: #fff;
+            stroke-width: 1.5px;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 0.5em;
+            background: rgba(17, 24, 39, 0.8); /* Tailwind gray-900 with opacity */
+            color: #fff;
+            border-radius: 0.375rem; /* Tailwind rounded-md */
+            pointer-events: none;
+            font-size: 0.8em;
+            transition: opacity 0.2s;
+        }
+        .average-line {
+            stroke: #16a34a; /* Tailwind green-600 */
+            stroke-width: 2px;
+            stroke-dasharray: 2,2;
+        }
+        .average-label {
+            fill: #16a34a;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        /* Text highlighting styles */
+        .highlight {
+            background-color: #fef08a; /* Tailwind yellow-200 */
+            padding: 0.1em 0.3em;
+            border-radius: 0.2em;
+        }
+        .highlight-found {
+            background-color: #bbf7d0; /* Tailwind green-200 */
+        }
+        .highlight-not-found {
+            background-color: #fecaca; /* Tailwind red-200 */
+        }
+
+        /* Custom spinner for loading overlay */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #ffffff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex-col items-center justify-center hidden">
+        <div class="spinner"></div>
+        <p class="text-white mt-4 font-semibold">Traitement en cours...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <h1 class="text-2xl font-bold text-gray-900">Dashboard d'Analyse de Similarité</h1>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        <!-- Controls Section -->
+        <section class="bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-3">Configuration</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <!-- File Inputs -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="jsonfile" class="block text-sm font-medium text-gray-700 mb-1">Fichier JSON d'analyse :</label>
+                        <input type="file" id="jsonfile" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                    </div>
+                    <div>
+                        <label for="userJsonfile" class="block text-sm font-medium text-gray-700 mb-1">Fichier JSON des utilisateurs :</label>
+                        <input type="file" id="userJsonfile" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+                    </div>
+                </div>
+                <!-- Action Buttons -->
+                <div class="space-y-4">
+                     <div id="date-filter-container" class="flex flex-col sm:flex-row gap-4 items-center hidden">
+                        <div>
+                            <label for="start-date" class="block text-sm font-medium text-gray-700">Date de début</label>
+                            <input type="date" id="start-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="end-date" class="block text-sm font-medium text-gray-700">Date de fin</label>
+                            <input type="date" id="end-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-4 pt-2">
+                        <button id="go" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Lancer le traitement</button>
+                        <button id="filter-by-date" class="w-full sm:w-auto px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition duration-300 ease-in-out shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 hidden">Filtrer par Date</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column: Summary -->
+            <div id="summary" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg hidden space-y-3">
+                <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-3">Résumé Global</h2>
+                <p id="total-records" class="text-sm text-gray-600"></p>
+                <p id="unique-users" class="text-sm text-gray-600 font-medium"></p>
+                <hr class="my-3">
+                <p id="no-yield-nodup" class="text-sm text-gray-600"></p>
+                <p id="no-yield" class="text-sm text-gray-600"></p>
+                <p id="nodup" class="text-sm text-gray-600"></p>
+                <p id="dup" class="text-sm text-gray-600"></p>
+                <hr class="my-3">
+                <div class="bg-green-50 p-3 rounded-lg">
+                    <p id="estimated-time-savings" class="text-sm font-bold text-green-800"></p>
+                    <p id="estimated-etp-savings" class="text-sm font-bold text-green-800"></p>
+                </div>
+            </div>
+
+            <!-- Right Column: Stats -->
+            <div id="stats-section" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg hidden">
+                <h2 class="text-xl font-semibold text-gray-800 border-b pb-3">Statistiques d'Analyse</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="chart-container">
+                        <div class="chart-title">Répartition des Utilisateurs</div>
+                        <svg id="users-category-chart"></svg>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">Répartition des Scores</div>
+                        <svg id="score-distribution-chart"></svg>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Taux de Similarité Quotidien</div>
+                    <svg id="daily-similarity-chart"></svg>
+                    <div class="text-xs mt-3 flex justify-center gap-4 text-gray-600">
+                        <span class="flex items-center"><span class="w-3 h-1.5 rounded-full bg-blue-500 mr-2"></span>Moy. Quotidienne</span>
+                        <span class="flex items-center"><span class="w-3 h-0.5 border-t-2 border-dashed border-orange-500 mr-2"></span>Tendance (7j)</span>
+                        <span class="flex items-center"><span class="w-3 h-0.5 border-t-2 border-dotted border-green-600 mr-2"></span>Moy. Globale</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- User Tables -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <section id="best-users-section" class="bg-white p-6 rounded-xl shadow-lg hidden">
+                 <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-3">🏆 Meilleurs Utilisateurs (>70%)</h2>
+                 <div id="best-users-table" class="overflow-x-auto"></div>
+            </section>
+            <section id="low-score-users-section" class="bg-white p-6 rounded-xl shadow-lg hidden">
+                <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-3">📉 Utilisateurs à Améliorer (<30%)</h2>
+                <div id="low-score-users-table" class="overflow-x-auto"></div>
+            </section>
+        </div>
+
+        <!-- Record Details Section -->
+        <section id="record" class="bg-white p-6 rounded-xl shadow-lg hidden">
+            <div class="flex flex-wrap gap-4 justify-between items-center border-b pb-4 mb-4">
+                 <h2 class="text-xl font-semibold text-gray-800">Explorateur d'Enregistrements</h2>
+                 <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <input type="text" id="search-contract" placeholder="Rechercher contrat..." class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                    <button id="search-button" class="px-4 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition">Rechercher</button>
+                    <input type="text" id="search-email" placeholder="Rechercher email..." class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                    <button id="search-email-button" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">Rechercher</button>
+                 </div>
+            </div>
+
+            <div class="flex justify-center gap-4 my-4">
+                <button id="prev" class="px-5 py-2 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed">← Précédent</button>
+                <button id="next" class="px-5 py-2 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Suivant →</button>
+            </div>
+            
+            <div class="bg-gray-50 p-4 rounded-lg grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-sm mb-6">
+                <div><strong class="block text-gray-500">ID:</strong> <span id="rec-id" class="font-mono"></span></div>
+                <div><strong class="block text-gray-500">Contrat:</strong> <span id="rec-contract" class="font-mono"></span></div>
+                <div><strong class="block text-gray-500">Email:</strong> <span id="rec-email" class="font-mono"></span></div>
+                <div><strong class="block text-gray-500">Matches/Tests:</strong> <span id="rec-mt" class="font-mono"></span></div>
+                <div><strong class="block text-gray-500">Score:</strong> <span id="rec-score" class="font-mono text-lg font-bold"></span></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="text-lg font-semibold mb-2 text-gray-700">Description originale</h4>
+                    <div id="desc-block" class="h-64 overflow-y-auto p-4 border rounded-md bg-gray-50 text-sm leading-relaxed"></div>
+                </div>
+                 <div>
+                    <h4 class="text-lg font-semibold mb-2 text-gray-700">Texte IA</h4>
+                    <div id="ai-block" class="h-64 overflow-y-auto p-4 border rounded-md bg-gray-50 text-sm leading-relaxed"></div>
+                </div>
+            </div>
+            
+            <div class="mt-6">
+                 <h4 class="text-lg font-semibold mb-2 text-gray-700">Segments testés</h4>
+                 <ul id="segments-list" class="max-h-64 overflow-y-auto space-y-2 text-sm"></ul>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- CONSTANTS & CONFIGURATION ---
+        const HTML_TAG_RE = /<[^>]+>/g;
+        // JSON field keys for analysis file
+        const KEY_ID = 'id';
+        const KEY_CONTRACT_ANALYSIS = 'SubAffairDetail - SubAffairDetailId__contractNumber';
+        const KEY_CREATED_AT_ANALYSIS = 'AIDeliverable__createdAt';
+        const KEY_DESCRIPTION = 'SubAffairDetail - SubAffairDetailId__descriptionOfC_83730214';
+        const KEY_AI_RESULT = 'AIDeliverable__longResult';
+        // JSON field keys for user file
+        const KEY_CONTRACT_USER = 'contractNumber';
+        const KEY_USER_COUNT = 'deliverable_count';
+        // FTE Calculation constants
+        const HOURS_SAVED_PER_HIGH_SIMILARITY_RECORD = 2;
+        const HOURS_PER_FTE_PER_YEAR = 1600;
+
+        // --- GLOBAL STATE ---
+        let records = [];
+        let summary = {};
+        let idx = 0;
+        let loadedAnalysisData = null;
+        let loadedUserData = null;
+        let userContractMap = new Map();
+        let userEmailToUsageMap = new Map();
+
+        // --- DOM ELEMENT REFERENCES ---
+        const goButton = document.getElementById('go');
+        const filterButton = document.getElementById('filter-by-date');
+        const dateFilterContainer = document.getElementById('date-filter-container');
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+        const searchContractInput = document.getElementById('search-contract');
+        const searchButton = document.getElementById('search-button');
+        const searchEmailInput = document.getElementById('search-email');
+        const searchEmailButton = document.getElementById('search-email-button');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        // --- CORE LOGIC & HELPERS ---
+
+        /**
+         * Extracts plain text from an HTML string, cleans it, and normalizes whitespace.
+         * @param {string} html The input HTML string.
+         * @returns {string} The cleaned plain text.
+         */
+        function extractText(html) {
+            if (!html || typeof html !== 'string') return '';
+            const withBreaks = html.replace(/<\/p>/gi, '\n\n');
+            let text = withBreaks.replace(HTML_TAG_RE, '');
+            text = text
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&')
+                .replace(/[*_`]/g, '');
+            return text.replace(/\s+/g, ' ').trim();
+        }
+
+        /**
+         * Extracts a random substring from a text.
+         * @param {string} text The source text.
+         * @param {number} length The length of the substring.
+         * @returns {string|null} The random substring or null if impossible.
+         */
+        function randomSubstring(text, length = 30) {
+            if (text.length < length || text.length === 0) return null;
+            const start = Math.floor(Math.random() * (text.length - length));
+            return text.substring(start, start + length);
+        }
+
+        /**
+         * Performs similarity tests by searching for random substrings.
+         * @param {string} desc The original description (plain text).
+         * @param {string} result The AI text (plain text).
+         * @param {number} nTests Number of tests to perform.
+         * @param {number} substrLen Length of substrings to test.
+         * @returns {{matches: number, tests: number, logs: Array<{substring: string, found: boolean}>}} Test results.
+         */
+        function similarityTests(desc, result, nTests = 50, substrLen = 30) {
+            const logs = [];
+            let matches = 0, tests = 0;
+            if (desc.length < substrLen) {
+                return { matches: 0, tests: 0, logs: [] };
+            }
+            for (let i = 0; i < nTests; i++) {
+                const sub = randomSubstring(desc, substrLen);
+                if (!sub) break;
+                const found = result.includes(sub);
+                logs.push({ substring: sub, found });
+                tests++;
+                if (found) matches++;
+            }
+            return { matches, tests, logs };
+        }
+        
+        /**
+         * Parses a French date string into a Date object.
+         * @param {string} dateString The date string (e.g., "18 juin, 2025, 14:17").
+         * @returns {Date|null} The parsed Date object or null if invalid.
+         */
+        function parseFrenchDate(dateString) {
+            if (!dateString) return null;
+            const months = { 'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5, 'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11 };
+            const parts = dateString.match(/(\d+) (\w+), (\d+), (\d+):(\d+)/);
+            if (!parts) return null;
+            const [, day, monthStr, year, hour, minute] = parts;
+            const month = months[monthStr.toLowerCase()];
+            if (month === undefined) return null;
+            return new Date(year, month, day, hour, minute);
+        }
+        
+        /**
+         * Formats a Date object to YYYY-MM-DD for input[type="date"].
+         * @param {Date} date The date object.
+         * @returns {string} The formatted date string.
+         */
+        function formatDateForInput(date) {
+            if (!date) return '';
+            return date.toISOString().split('T')[0];
+        }
+
+        // --- DATA PROCESSING ---
+        
+        /**
+         * Processes data from both JSON files, applying filters and calculating all stats.
+         */
+        function processAllData() {
+            if (!loadedAnalysisData) return;
+            loadingOverlay.style.display = 'flex';
+
+            setTimeout(() => { // Use timeout to allow UI to update before heavy processing
+                records = [];
+                const stats = { totalAll: 0, testsAll: 0, totalUniq: 0, testsUniq: 0, totalNoYield: 0, testsNoYield: 0, totalNoYieldUniq: 0, testsNoYieldUniq: 0 };
+                const seen = new Set();
+                const seenNoYield = new Set();
+                const uniqueUsers = new Set();
+                const chartRelevantRecords = [];
+                const seenForChartFiltering = new Set();
+
+                const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+                const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+                if(startDate) startDate.setHours(0,0,0,0);
+                if(endDate) endDate.setHours(23,59,59,999);
+
+                loadedAnalysisData.forEach(rec => {
+                    const id = rec[KEY_ID] || '—';
+                    const contract = rec[KEY_CONTRACT_ANALYSIS] || id;
+                    const email = userContractMap.get(contract) || 'inconnu';
+                    const createdAtString = rec[KEY_CREATED_AT_ANALYSIS] || '';
+                    const recordDate = parseFrenchDate(createdAtString);
+
+                    if (recordDate && ((startDate && recordDate < startDate) || (endDate && recordDate > endDate))) return;
+
+                    const processedDesc = extractText(rec[KEY_DESCRIPTION]);
+                    const processedAI = extractText(rec[KEY_AI_RESULT]);
+                    if (processedDesc.length === 0 || processedAI.length === 0) return;
+
+                    const { matches, tests, logs } = similarityTests(processedDesc, processedAI);
+                    const currentScore = tests ? (matches / tests) : 0;
+                    
+                    records.push({ id, contract, email, matches, tests, score: currentScore, processedDesc, processedAI, logs, createdAt: recordDate });
+                    
+                    // Update summary stats
+                    stats.totalAll += matches;
+                    stats.testsAll += tests;
+                    if (!seen.has(id)) {
+                        stats.totalUniq += matches;
+                        stats.testsUniq += tests;
+                        seen.add(id);
+                    }
+                    if (!String(contract).toUpperCase().includes('YIELD')) {
+                        stats.totalNoYield += matches;
+                        stats.testsNoYield += tests;
+                        if (!seenNoYield.has(id)) {
+                            stats.totalNoYieldUniq += matches;
+                            stats.testsNoYieldUniq += tests;
+                            seenNoYield.add(id);
+                        }
+                        // Add to chart-relevant list (no YIELD, no duplicates)
+                        if (!seenForChartFiltering.has(id)) {
+                            chartRelevantRecords.push(records[records.length - 1]);
+                            seenForChartFiltering.add(id);
+                            if (email && email !== 'inconnu') uniqueUsers.add(email);
+                        }
+                    }
+                });
+
+                calculateSummaryAndCharts(stats, chartRelevantRecords, uniqueUsers.size);
+                updateDisplay();
+                renderCharts();
+                displayMessage("Analyse complète terminée.", "success");
+                loadingOverlay.style.display = 'none';
+            }, 10);
+        }
+
+        /**
+         * Helper function to calculate final summary and chart data.
+         * @param {object} stats - The initial statistics object.
+         * @param {Array<object>} chartRelevantRecords - Filtered records for charts.
+         * @param {number} uniqueUsersCount - The count of unique users.
+         */
+        function calculateSummaryAndCharts(stats, chartRelevantRecords, uniqueUsersCount) {
+            const scoreDistribution = { low: 0, medium: 0, high: 0 };
+            const dailySimilarityData = new Map();
+            const aggregatedUserScores = new Map();
+            let overallTotalScore = 0;
+            let highSimilarityRecordsCount = 0;
+
+            chartRelevantRecords.forEach(rec => {
+                overallTotalScore += rec.score;
+                if (rec.score < 0.30) scoreDistribution.low++;
+                else if (rec.score <= 0.70) scoreDistribution.medium++;
+                else scoreDistribution.high++;
+                
+                if (rec.score >= 0.70) highSimilarityRecordsCount++;
+                
+                if (rec.createdAt) {
+                    const dateOnly = formatDateForInput(rec.createdAt);
+                    const dailyAgg = dailySimilarityData.get(dateOnly) || { totalScore: 0, count: 0 };
+                    dailyAgg.totalScore += rec.score;
+                    dailyAgg.count++;
+                    dailySimilarityData.set(dateOnly, dailyAgg);
+                }
+
+                if (rec.email !== 'inconnu') {
+                    const userAgg = aggregatedUserScores.get(rec.email) || { totalMatches: 0, totalTests: 0 };
+                    userAgg.totalMatches += rec.matches;
+                    userAgg.totalTests += rec.tests;
+                    aggregatedUserScores.set(rec.email, userAgg);
+                }
+            });
+
+            const bestUsers = [], lowScoreUsers = [];
+            let inBetweenUsersCount = 0;
+            aggregatedUserScores.forEach((agg, email) => {
+                if (agg.totalTests > 0) {
+                    const averageScore = agg.totalMatches / agg.totalTests;
+                    const usage = userEmailToUsageMap.get(email) || 0;
+                    if (averageScore >= 0.70) bestUsers.push({ email, averageScore, usage });
+                    else if (averageScore < 0.30) lowScoreUsers.push({ email, averageScore, usage });
+                    else inBetweenUsersCount++;
+                }
+            });
+
+            bestUsers.sort((a, b) => b.averageScore - a.averageScore);
+            lowScoreUsers.sort((a, b) => a.averageScore - b.averageScore);
+
+            summary = {
+                dup: stats.testsAll ? (stats.totalAll / stats.testsAll) : 0,
+                nodup: stats.testsUniq ? (stats.totalUniq / stats.testsUniq) : 0,
+                noYield: stats.testsNoYield ? (stats.totalNoYield / stats.testsNoYield) : 0,
+                noYieldNoDup: stats.testsNoYieldUniq ? (stats.totalNoYieldUniq / stats.testsNoYieldUniq) : 0,
+                ...stats,
+                totalRecords: records.length,
+                uniqueUsersCount,
+                bestUsers,
+                lowScoreUsers,
+                userCategoryCounts: { best: bestUsers.length, low: lowScoreUsers.length, inBetween: inBetweenUsersCount },
+                scoreDistribution: [
+                    { label: 'Faible (<30%)', value: scoreDistribution.low, color: '#ef4444' }, // red-500
+                    { label: 'Moyen (30-70%)', value: scoreDistribution.medium, color: '#f59e0b' }, // amber-500
+                    { label: 'Élevé (>70%)', value: scoreDistribution.high, color: '#22c55e' } // green-500
+                ],
+                dailySimilarityData: Array.from(dailySimilarityData.entries()).map(([dateString, agg]) => ({
+                    date: d3.timeParse("%Y-%m-%d")(dateString),
+                    score: agg.count > 0 ? agg.totalScore / agg.count : 0
+                })).sort((a, b) => a.date - b.date),
+                overallAverageScore: chartRelevantRecords.length > 0 ? overallTotalScore / chartRelevantRecords.length : 0,
+                estimatedTimeSavings: highSimilarityRecordsCount * HOURS_SAVED_PER_HIGH_SIMILARITY_RECORD,
+                estimatedEtpSavings: (highSimilarityRecordsCount * HOURS_SAVED_PER_HIGH_SIMILARITY_RECORD) / HOURS_PER_FTE_PER_YEAR
+            };
+        }
+
+
+        // --- UI & DISPLAY ---
+
+        /**
+         * Updates the display of summary section and user tables.
+         */
+        function updateDisplay() {
+            if (records.length === 0) {
+                 displayMessage("Aucun enregistrement à afficher après filtrage.", "warning");
+                 // Hide all sections if no records
+                 ['summary', 'record', 'best-users-section', 'low-score-users-section', 'stats-section'].forEach(id => {
+                    document.getElementById(id).classList.add('hidden');
+                 });
+                 return;
+            }
+
+            // Show relevant sections
+            ['summary', 'record', 'best-users-section', 'low-score-users-section', 'stats-section'].forEach(id => {
+                document.getElementById(id).classList.remove('hidden');
+            });
+
+            document.getElementById('dup').innerHTML = `Avec doublons: <strong class="float-right">${summary.dup.toFixed(2)}</strong>`;
+            document.getElementById('nodup').innerHTML = `Sans doublons: <strong class="float-right">${summary.nodup.toFixed(2)}</strong>`;
+            document.getElementById('no-yield').innerHTML = `Sans "YIELD": <strong class="float-right">${summary.noYield.toFixed(2)}</strong>`;
+            document.getElementById('no-yield-nodup').innerHTML = `Sans "YIELD" & doublons: <strong class="float-right">${summary.noYieldNoDup.toFixed(2)}</strong>`;
+            document.getElementById('total-records').textContent = `Enregistrements traités: ${summary.totalRecords}`;
+            document.getElementById('unique-users').textContent = `Utilisateurs uniques (filtrés): ${summary.uniqueUsersCount}`;
+            document.getElementById('estimated-time-savings').textContent = `Gain de temps estimé: ${summary.estimatedTimeSavings.toFixed(0)} heures`;
+            document.getElementById('estimated-etp-savings').textContent = `Gain ETP estimé: ${summary.estimatedEtpSavings.toFixed(2)} ETP`;
+
+            // Populate user tables
+            populateUserTable('best-users-table', summary.bestUsers, 'Aucun utilisateur avec un score > 70%');
+            populateUserTable('low-score-users-table', summary.lowScoreUsers, 'Aucun utilisateur avec un score < 30%');
+
+            idx = 0;
+            showRecord();
+        }
+        
+        /**
+         * Populates a table with user data.
+         * @param {string} tableId The ID of the container div for the table.
+         * @param {Array<object>} userData The user data to display.
+         * @param {string} emptyMessage The message to show if there is no data.
+         */
+        function populateUserTable(tableId, userData, emptyMessage) {
+            const container = document.getElementById(tableId);
+            container.innerHTML = '';
+            if (userData && userData.length > 0) {
+                const table = document.createElement('table');
+                table.className = "w-full text-sm text-left text-gray-500";
+                table.innerHTML = `
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th scope="col" class="py-3 px-6">Email</th>
+                            <th scope="col" class="py-3 px-6 text-center">Score Moyen</th>
+                            <th scope="col" class="py-3 px-6 text-center">Utilisations</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>`;
+                const tbody = table.querySelector('tbody');
+                userData.forEach(user => {
+                    const tr = document.createElement('tr');
+                    tr.className = "bg-white border-b hover:bg-gray-50";
+                    tr.innerHTML = `
+                        <td class="py-4 px-6 font-medium text-gray-900">${user.email}</td>
+                        <td class="py-4 px-6 text-center">${user.averageScore.toFixed(2)}</td>
+                        <td class="py-4 px-6 text-center">${user.usage}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                container.appendChild(table);
+            } else {
+                container.innerHTML = `<p class="text-sm text-gray-500 p-4 text-center">${emptyMessage}</p>`;
+            }
+        }
+        
+        /**
+         * Displays the details of the current record.
+         */
+        function showRecord() {
+            const r = records[idx];
+            if (!r) {
+                document.getElementById('record').classList.add('hidden');
+                return;
+            };
+
+            document.getElementById('rec-id').textContent = r.id;
+            document.getElementById('rec-contract').textContent = r.contract;
+            document.getElementById('rec-email').textContent = r.email;
+            document.getElementById('rec-mt').textContent = `${r.matches}/${r.tests}`;
+            document.getElementById('rec-score').textContent = r.score.toFixed(2);
+            document.getElementById('desc-block').innerHTML = highlight(r.processedDesc, r.logs, true);
+            document.getElementById('ai-block').innerHTML = highlight(r.processedAI, r.logs, false);
+
+            const ul = document.getElementById('segments-list');
+            ul.innerHTML = '';
+            r.logs.forEach(({ substring, found }) => {
+                const li = document.createElement('li');
+                li.className = `p-2 rounded-md flex justify-between items-center font-mono ${found ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                li.innerHTML = `<span>"${escapeHtml(substring)}"</span><span class="font-sans font-bold text-xs px-2 py-1 rounded-full ${found ? 'bg-green-200' : 'bg-red-200'}">${found ? 'Trouvé' : 'Non trouvé'}</span>`;
+                ul.appendChild(li);
+            });
+
+            document.getElementById('prev').disabled = idx === 0;
+            document.getElementById('next').disabled = idx === records.length - 1;
+        }
+
+        /**
+         * Escapes special HTML characters in a string.
+         * @param {string} str The string to escape.
+         * @returns {string} The escaped string.
+         */
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        /**
+         * Highlights substrings in a text.
+         * @param {string} text The original text.
+         * @param {Array<{substring: string, found: boolean}>} segments The segments to highlight.
+         * @param {boolean} useFoundColors If true, uses green/red colors.
+         * @returns {string} The text with HTML highlights.
+         */
+        function highlight(text, segments, useFoundColors = false) {
+            let safeText = escapeHtml(text);
+            segments.sort((a, b) => b.substring.length - a.substring.length);
+            segments.forEach(({ substring, found }) => {
+                const escSubstring = escapeHtml(substring);
+                const re = new RegExp(escSubstring.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                let colorClass = useFoundColors ? (found ? 'highlight-found' : 'highlight-not-found') : 'highlight';
+                safeText = safeText.replace(re, `<span class="${colorClass}">${escSubstring}</span>`);
+            });
+            return safeText.replace(/\n/g, '<br>');
+        }
+        
+        /**
+         * Displays a temporary message to the user.
+         * @param {string} message The message to display.
+         * @param {string} type The message type ('info', 'warning', 'error', 'success').
+         */
+        function displayMessage(message, type = 'info') {
+            const messageBox = document.createElement('div');
+            const colors = {
+                error: 'bg-red-500', success: 'bg-green-500', warning: 'bg-amber-500', info: 'bg-blue-500'
+            };
+            messageBox.className = `fixed top-5 left-1/2 -translate-x-1/2 p-4 rounded-lg text-white font-bold shadow-lg z-50 ${colors[type] || colors.info}`;
+            messageBox.textContent = message;
+            document.body.appendChild(messageBox);
+            setTimeout(() => messageBox.remove(), 4000);
+        }
+
+        // --- D3 CHARTING ---
+        function renderCharts() {
+            drawBarChart('#users-category-chart', [
+                { label: 'Meilleurs', value: summary.userCategoryCounts.best, color: '#22c55e' },
+                { label: 'Moyens', value: summary.userCategoryCounts.inBetween, color: '#f59e0b' },
+                { label: 'À améliorer', value: summary.userCategoryCounts.low, color: '#ef4444' }
+            ], 'Nombre d\'Utilisateurs', 'Catégorie');
+            drawBarChart('#score-distribution-chart', summary.scoreDistribution, 'Nombre d\'Enregistrements', 'Niveau de Score');
+            drawLineChart('#daily-similarity-chart', summary.dailySimilarityData, 'Score Moyen', 'Date', summary.overallAverageScore);
+        }
+
+        function drawBarChart(selector, data, yAxisLabel, xAxisLabel) {
+            const svg = d3.select(selector);
+            svg.selectAll('*').remove();
+            
+            if (svg.empty()) {
+                console.error(`D3 container not found for selector: ${selector}`);
+                return;
+            }
+            const containerWidth = svg.node().getBoundingClientRect().width;
+            const containerHeight = svg.node().getBoundingClientRect().height;
+
+            const margin = { top: 30, right: 20, bottom: 40, left: 50 };
+            const width = containerWidth - margin.left - margin.right;
+            const height = containerHeight - margin.top - margin.bottom;
+
+            const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+            
+            if (!data || data.length === 0 || data.every(d => d.value === 0)) {
+                g.append("text").attr("x", width / 2).attr("y", height / 2).attr("text-anchor", "middle").text("Données insuffisantes.");
+                return;
+            }
+
+            const x = d3.scaleBand().domain(data.map(d => d.label)).range([0, width]).padding(0.2);
+            const y = d3.scaleLinear().domain([0, d3.max(data, d => d.value) * 1.1]).nice().range([height, 0]);
+
+            g.append('g').attr('class', 'axis x-axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x));
+            g.append('g').attr('class', 'axis y-axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("d")));
+            
+            g.selectAll('.bar').data(data).enter().append('rect')
+                .attr('class', 'bar').attr('x', d => x(d.label)).attr('y', d => y(d.value))
+                .attr('width', x.bandwidth()).attr('height', d => height - y(d.value))
+                .attr('fill', d => d.color || '#3b82f6');
+            
+            g.selectAll(".bar-label").data(data).enter().append("text")
+                .attr("class", "bar-label").attr("x", d => x(d.label) + x.bandwidth() / 2)
+                .attr("y", d => y(d.value) - 5).attr("text-anchor", "middle")
+                .attr("fill", "#374151").text(d => d.value).style("font-size", "0.8em");
+        }
+
+        function drawLineChart(selector, data, yAxisLabel, xAxisLabel, overallAverageScore = null) {
+            const svg = d3.select(selector);
+            svg.selectAll('*').remove();
+
+            if (svg.empty()) {
+                console.error(`D3 container not found for selector: ${selector}`);
+                return;
+            }
+            const containerWidth = svg.node().getBoundingClientRect().width;
+            const containerHeight = svg.node().getBoundingClientRect().height;
+
+            const margin = { top: 20, right: 30, bottom: 40, left: 50 };
+            const width = containerWidth - margin.left - margin.right;
+            const height = containerHeight - margin.top - margin.bottom;
+
+            const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+            
+            if (!data || data.length < 2) {
+                g.append("text").attr("x", width / 2).attr("y", height / 2).attr("text-anchor", "middle").text("Données insuffisantes pour un graphique linéaire.");
+                return;
+            }
+
+            const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, width]);
+            const y = d3.scaleLinear().domain([0, d3.max(data, d => d.score) * 1.1]).nice().range([height, 0]);
+
+            g.append('g').attr('class', 'axis x-axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(5).tickFormat(d3.timeFormat("%d/%m")));
+            g.append('g').attr('class', 'axis y-axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".0%")));
+
+            const lineDaily = d3.line().x(d => x(d.date)).y(d => y(d.score));
+            const movingAverageData = data.map((d, i, arr) => {
+                const window = arr.slice(Math.max(0, i - 6), i + 1);
+                const score = window.reduce((acc, curr) => acc + curr.score, 0) / window.length;
+                return { date: d.date, score };
+            });
+            const lineTrend = d3.line().x(d => x(d.date)).y(d => y(d.score));
+
+            g.append('path').datum(data).attr('class', 'line-daily').attr('d', lineDaily);
+            g.append('path').datum(movingAverageData).attr('class', 'line-trend').attr('d', lineTrend);
+            
+            if (overallAverageScore !== null) {
+                g.append("line").attr("class", "average-line").attr("x1", 0).attr("y1", y(overallAverageScore)).attr("x2", width).attr("y2", y(overallAverageScore));
+            }
+
+            const tooltip = d3.select("body").append("div").attr("class", "tooltip").style("opacity", 0);
+            g.selectAll(".dot").data(data).enter().append("circle").attr("class", "dot")
+                .attr("cx", d => x(d.date)).attr("cy", d => y(d.score)).attr("r", 4)
+                .on("mouseover", (event, d) => {
+                    tooltip.transition().duration(200).style("opacity", .9);
+                    tooltip.html(`Date: ${d3.timeFormat("%d/%m/%Y")(d.date)}<br/>Score: ${(d.score * 100).toFixed(1)}%`)
+                        .style("left", (event.pageX + 10) + "px").style("top", (event.pageY - 28) + "px");
+                }).on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0));
+        }
+
+
+        // --- EVENT LISTENERS ---
+        goButton.addEventListener('click', () => {
+            const analysisInput = document.getElementById('jsonfile');
+            const userInput = document.getElementById('userJsonfile');
+            
+            if (!analysisInput.files.length) {
+                displayMessage('Veuillez charger le fichier JSON d\'analyse.', "error");
+                return;
+            }
+
+            // Reset global data on new processing
+            loadedAnalysisData = null;
+            loadedUserData = null;
+            userContractMap.clear();
+            userEmailToUsageMap.clear();
+
+            const analysisReader = new FileReader();
+            analysisReader.onload = () => {
+                try {
+                    loadedAnalysisData = JSON.parse(analysisReader.result);
+                    dateFilterContainer.classList.remove('hidden');
+                    filterButton.classList.remove('hidden');
+                    if(loadedUserData) processAllData();
+                } catch (e) { displayMessage('Erreur de parsing du fichier d\'analyse: ' + e.message, "error"); }
+            };
+            analysisReader.readAsText(analysisInput.files[0], 'utf-8');
+
+            if (userInput.files.length > 0) {
+                const userReader = new FileReader();
+                userReader.onload = () => {
+                    try {
+                        loadedUserData = JSON.parse(userReader.result);
+                        loadedUserData.forEach(userRec => {
+                            const email = userRec.email;
+                            const contractNum = userRec[KEY_CONTRACT_USER];
+                            if (email && contractNum) userContractMap.set(contractNum, email);
+                            if (email) userEmailToUsageMap.set(email, (userEmailToUsageMap.get(email) || 0) + (parseInt(userRec[KEY_USER_COUNT]) || 0));
+                        });
+                        if(loadedAnalysisData) processAllData();
+                    } catch (e) { displayMessage('Erreur de parsing du fichier utilisateur: ' + e.message, "error"); }
+                };
+                userReader.readAsText(userInput.files[0], 'utf-8');
+            } else {
+                 analysisReader.onloadend = () => {
+                     if(loadedAnalysisData) processAllData();
+                 }
+            }
+        });
+
+        filterButton.addEventListener('click', processAllData);
+        
+        const search = (key, value) => {
+            if (!value) return;
+            const foundIndex = records.findIndex(rec => String(rec[key]).toLowerCase().includes(value.toLowerCase()));
+            if (foundIndex !== -1) {
+                idx = foundIndex;
+                showRecord();
+                displayMessage(`${key === 'contract' ? 'Contrat' : 'Email'} trouvé !`, 'success');
+            } else {
+                displayMessage(`Aucun résultat pour "${value}".`, 'error');
+            }
+        };
+
+        searchButton.addEventListener('click', () => search('contract', searchContractInput.value.trim()));
+        searchEmailButton.addEventListener('click', () => search('email', searchEmailInput.value.trim()));
+        searchContractInput.addEventListener('keydown', (e) => e.key === 'Enter' && search('contract', e.target.value.trim()));
+        searchEmailInput.addEventListener('keydown', (e) => e.key === 'Enter' && search('email', e.target.value.trim()));
+
+
+        document.getElementById('prev').addEventListener('click', () => {
+            if (idx > 0) { idx--; showRecord(); }
+        });
+        document.getElementById('next').addEventListener('click', () => {
+            if (idx < records.length - 1) { idx++; showRecord(); }
+        });
+    </script>
+</body>
+</html>
+
