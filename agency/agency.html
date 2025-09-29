@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyse Utilisation vs RICT</title>
+    <title>Analyse AIdeliverable vs RICT</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -40,7 +40,7 @@
 
     <div class="max-w-7xl mx-auto">
         <header class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Tableau de Bord Utilisation vs RICT</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Tableau de Bord AIdeliverable vs RICT</h1>
             <p class="text-gray-500 mt-1">Analyse de l'utilisation par agence.</p>
         </header>
 
@@ -50,13 +50,13 @@
             <div class="stat-card">
                 <h3 class="text-gray-500 font-medium">Taux Global (Mois en cours)</h3>
                 <p id="stat-current-rate" class="text-3xl font-bold text-indigo-600 mt-2">0.00%</p>
-                <p id="stat-current-details" class="text-sm text-gray-400 mt-1">0 Utilisateurs / 0 RICT</p>
+                <p id="stat-current-details" class="text-sm text-gray-400 mt-1">0 AIdeliverables / 0 RICT</p>
             </div>
             <!-- Taux Global (Total) -->
             <div class="stat-card">
                 <h3 class="text-gray-500 font-medium">Taux Global (Total)</h3>
                 <p id="stat-all-time-rate" class="text-3xl font-bold text-teal-600 mt-2">0.00%</p>
-                <p id="stat-all-time-details" class="text-sm text-gray-400 mt-1">0 Utilisateurs / 0 RICT</p>
+                <p id="stat-all-time-details" class="text-sm text-gray-400 mt-1">0 AIdeliverables / 0 RICT</p>
             </div>
             <!-- Total Agences -->
             <div class="stat-card">
@@ -66,7 +66,7 @@
             </div>
             <!-- Total Utilisateurs -->
             <div class="stat-card">
-                <h3 class="text-gray-500 font-medium">Total Utilisateurs Agence</h3>
+                <h3 class="text-gray-500 font-medium">Total Utilisateurs</h3>
                 <p id="stat-user-count" class="text-3xl font-bold text-gray-800 mt-2">0</p>
                 <p class="text-sm text-gray-400 mt-1">Sur l'ensemble des agences</p>
             </div>
@@ -92,13 +92,13 @@
                 <thead class="text-xs text-gray-700 uppercase bg-gray-100">
                     <tr>
                         <th scope="col" class="px-6 py-3" data-sort="agency">Agence</th>
-                        <th scope="col" class="px-6 py-3 text-center" data-sort="current_month_users">Utilisateurs (Mois)</th>
+                        <th scope="col" class="px-6 py-3 text-center" data-sort="current_month_count-aideliverable">AIdeliverables (Mois)</th>
                         <th scope="col" class="px-6 py-3 text-center" data-sort="rict_diffused_current_month">RICT (Mois)</th>
-                        <th scope="col" class="px-6 py-3 text-center" data-sort="ratio_pct_users_over_rict_current_month">Taux (Mois)</th>
-                        <th scope="col" class="px-6 py-3 text-center" data-sort="all_time_users">Utilisateurs (Total)</th>
+                        <th scope="col" class="px-6 py-3 text-center" data-sort="ratio_pct_aideliverable_over_rict_current_month">Taux (Mois)</th>
+                        <th scope="col" class="px-6 py-3 text-center" data-sort="all_time_count">AIdeliverables (Total)</th>
                         <th scope="col" class="px-6 py-3 text-center" data-sort="rict_diffused_since_2025_06_20">RICT (Total)</th>
-                        <th scope="col" class="px-6 py-3 text-center" data-sort="ratio_pct_users_over_rict_since_2025_06_20">Taux (Total)</th>
-                        <th scope="col" class="px-6 py-3 text-center" data-sort="users_total_in_agency">Utilisateurs (Agence)</th>
+                        <th scope="col" class="px-6 py-3 text-center" data-sort="ratio_pct_aideliverable_over_rict_since_2025_06_20">Taux (Total)</th>
+                        <th scope="col" class="px-6 py-3 text-center" data-sort="users_total_in_agency">Utilisateurs</th>
                     </tr>
                 </thead>
                 <tbody id="data-table-body">
@@ -211,32 +211,32 @@
         function processData(data) {
              return data.map(item => ({
                 agency: item.agency,
-                current_month_users: parseNumber(item['current_month_users']),
+                'current_month_count-aideliverable': parseNumber(item['current_month_count-aideliverable']),
                 rict_diffused_current_month: parseNumber(item['rict_diffused_current_month']),
-                ratio_pct_users_over_rict_current_month: parseNumber(item['ratio_pct_users_over_rict_current_month']),
-                all_time_users: parseNumber(item['all_time_users']),
+                'ratio_pct_aideliverable_over_rict_current_month': parseNumber(item['ratio_pct_aideliverable_over_rict_current_month']),
+                'all_time_count': parseNumber(item['all_time_count']),
                 rict_diffused_since_2025_06_20: parseNumber(item['rict_diffused_since_2025_06_20']),
-                ratio_pct_users_over_rict_since_2025_06_20: parseNumber(item['ratio_pct_users_over_rict_since_2025_06_20']),
+                'ratio_pct_aideliverable_over_rict_since_2025_06_20': parseNumber(item['ratio_pct_aideliverable_over_rict_since_2025_06_20']),
                 users_total_in_agency: parseNumber(item['users_total_in_agency']),
             }));
         }
 
         // --- Calcul des Statistiques ---
         function calculateAndDisplayStats() {
-            const totalCurrentUsers = processedData.reduce((sum, item) => sum + item.current_month_users, 0);
+            const totalCurrentAideliverable = processedData.reduce((sum, item) => sum + item['current_month_count-aideliverable'], 0);
             const totalCurrentRict = processedData.reduce((sum, item) => sum + item.rict_diffused_current_month, 0);
-            const currentRate = totalCurrentRict > 0 ? (totalCurrentUsers / totalCurrentRict) * 100 : 0;
+            const currentRate = totalCurrentRict > 0 ? (totalCurrentAideliverable / totalCurrentRict) * 100 : 0;
             
-            const totalAllTimeUsers = processedData.reduce((sum, item) => sum + item.all_time_users, 0);
+            const totalAllTimeAideliverable = processedData.reduce((sum, item) => sum + item['all_time_count'], 0);
             const totalAllTimeRict = processedData.reduce((sum, item) => sum + item.rict_diffused_since_2025_06_20, 0);
-            const allTimeRate = totalAllTimeRict > 0 ? (totalAllTimeUsers / totalAllTimeRict) * 100 : 0;
+            const allTimeRate = totalAllTimeRict > 0 ? (totalAllTimeAideliverable / totalAllTimeRict) * 100 : 0;
 
             const totalUsersInAgency = processedData.reduce((sum, item) => sum + item.users_total_in_agency, 0);
 
             document.getElementById('stat-current-rate').textContent = `${currentRate.toFixed(2)}%`;
-            document.getElementById('stat-current-details').textContent = `${totalCurrentUsers} Utilisateurs / ${totalCurrentRict} RICT`;
+            document.getElementById('stat-current-details').textContent = `${totalCurrentAideliverable} AIdeliverables / ${totalCurrentRict} RICT`;
             document.getElementById('stat-all-time-rate').textContent = `${allTimeRate.toFixed(2)}%`;
-            document.getElementById('stat-all-time-details').textContent = `${totalAllTimeUsers} Utilisateurs / ${totalAllTimeRict} RICT`;
+            document.getElementById('stat-all-time-details').textContent = `${totalAllTimeAideliverable} AIdeliverables / ${totalAllTimeRict} RICT`;
             document.getElementById('stat-agency-count').textContent = processedData.length;
             document.getElementById('stat-user-count').textContent = totalUsersInAgency.toLocaleString('fr-FR');
         }
@@ -313,12 +313,12 @@
                 row.className = 'bg-white border-b hover:bg-gray-50';
                 row.innerHTML = `
                     <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${item.agency}</td>
-                    <td class="px-6 py-4 text-center">${item.current_month_users}</td>
+                    <td class="px-6 py-4 text-center">${item['current_month_count-aideliverable']}</td>
                     <td class="px-6 py-4 text-center">${item.rict_diffused_current_month}</td>
-                    <td class="px-6 py-4 text-center font-semibold ${item.ratio_pct_users_over_rict_current_month > 50 ? 'text-green-600' : 'text-orange-600'}">${item.ratio_pct_users_over_rict_current_month.toFixed(2)}%</td>
-                    <td class="px-6 py-4 text-center">${item.all_time_users}</td>
+                    <td class="px-6 py-4 text-center font-semibold ${item['ratio_pct_aideliverable_over_rict_current_month'] > 50 ? 'text-green-600' : 'text-orange-600'}">${item['ratio_pct_aideliverable_over_rict_current_month'].toFixed(2)}%</td>
+                    <td class="px-6 py-4 text-center">${item['all_time_count']}</td>
                     <td class="px-6 py-4 text-center">${item.rict_diffused_since_2025_06_20}</td>
-                    <td class="px-6 py-4 text-center font-semibold ${item.ratio_pct_users_over_rict_since_2025_06_20 > 50 ? 'text-green-600' : 'text-orange-600'}">${item.ratio_pct_users_over_rict_since_2025_06_20.toFixed(2)}%</td>
+                    <td class="px-6 py-4 text-center font-semibold ${item['ratio_pct_aideliverable_over_rict_since_2025_06_20'] > 50 ? 'text-green-600' : 'text-orange-600'}">${item['ratio_pct_aideliverable_over_rict_since_2025_06_20'].toFixed(2)}%</td>
                     <td class="px-6 py-4 text-center">${item.users_total_in_agency}</td>
                 `;
                 tableBody.appendChild(row);
