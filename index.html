@@ -80,10 +80,10 @@
                 }
                 const data = await response.json();
 
-                // Filtrer pour ne garder que les fichiers .html et les dossiers
+                // Filtrer pour ne garder que les fichiers .html (insensible à la casse) et les dossiers
                 const items = data.filter(item => 
                     item.type === 'dir' || 
-                    (item.type === 'file' && item.name.endsWith('.html'))
+                    (item.type === 'file' && item.name.toLowerCase().endsWith('.html'))
                 );
 
                 // À la racine, on ne veut pas afficher le lien vers index.html lui-même
