@@ -771,6 +771,65 @@ resetFiltersBtn.addEventListener('click', () => {
     updateResetButtonVisibility();
 });
 
+// ==================== REFRESH DATA BUTTON ====================
+
+const refreshBtn = document.getElementById('refresh-data-btn');
+const refreshIcon = document.getElementById('refresh-icon');
+const refreshText = document.getElementById('refresh-text');
+
+async function refreshData() {
+    try {
+        // Disable button
+        refreshBtn.disabled = true;
+        
+        // Update UI to show loading state
+        refreshText.textContent = 'Rafraîchissement en cours...';
+        refreshIcon.classList.add('animate-spin');
+        
+        // Send refresh request
+        const response = await fetch('https://databuildr.app.n8n.cloud/webhook/refresh-kpis', {
+            method: 'GET'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Erreur lors du rafraîchissement: ${response.status}`);
+        }
+        
+        // Wait a moment for the data to be updated on the server
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Reload the data
+        await loadData();
+        
+        // Update UI to show success
+        refreshText.textContent = 'Données rafraîchies !';
+        refreshIcon.classList.remove('animate-spin');
+        
+        // Reset button text after 2 seconds
+        setTimeout(() => {
+            refreshText.textContent = 'Rafraîchir les données';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error refreshing data:', error);
+        
+        // Show error state
+        refreshText.textContent = 'Erreur de rafraîchissement';
+        refreshIcon.classList.remove('animate-spin');
+        
+        // Reset button text after 3 seconds
+        setTimeout(() => {
+            refreshText.textContent = 'Rafraîchir les données';
+        }, 3000);
+    } finally {
+        // Re-enable button
+        refreshBtn.disabled = false;
+    }
+}
+
+// Add event listener to refresh button
+refreshBtn.addEventListener('click', refreshData);
+
 // Start the application
 loadData().then(() => {
     // Initialize feature cards after data is loaded
