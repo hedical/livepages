@@ -20,10 +20,23 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <!-- Header -->
             <div class="mb-10">
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">
-                    AnalyzTech - KPIs IA Groupe BTP Consultants
-                </h1>
-                <p class="text-gray-500 text-sm">Tableau de bord d'utilisation des fonctionnalités IA</p>
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                            AnalyzTech - KPIs IA Groupe BTP Consultants
+                        </h1>
+                        <p class="text-gray-500 text-sm">Tableau de bord d'utilisation des fonctionnalités IA</p>
+                    </div>
+                    <button
+                        id="refresh-data-btn"
+                        class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span id="refresh-text">Rafraîchir les données</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Loading State -->
