@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnalyzTech - KPIs IA Groupe BTP Consultants</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Header -->
+            <div class="mb-10">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                    AnalyzTech - KPIs IA Groupe BTP Consultants
+                </h1>
+                <p class="text-gray-500 text-sm">Tableau de bord d'utilisation des fonctionnalités IA</p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="error" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="text-center">
+                    <p class="text-red-600 text-lg">Erreur lors du chargement des données</p>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div id="main-content" class="hidden">
+                <!-- Filters -->
+                <div class="mb-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                        <!-- Date Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par période
+                            </label>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-2">Date de début</label>
+                                    <input
+                                        type="date"
+                                        id="start-date"
+                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-2">Date de fin</label>
+                                    <input
+                                        type="date"
+                                        id="end-date"
+                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filiale Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par filiale
+                            </label>
+                            <select
+                                id="filiale-filter"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Toutes les filiales</option>
+                                <option value="BTP Consultants">BTP Consultants</option>
+                                <option value="Citae">Citae</option>
+                            </select>
+                        </div>
+
+                        <!-- Agency Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par agence
+                            </label>
+                            <select
+                                id="agency-filter"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Toutes les agences</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button
+                        id="reset-filters"
+                        class="hidden px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                        Réinitialiser les filtres
+                    </button>
+                </div>
+
+                <!-- General KPIs -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs généraux</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Total Utilisations -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Utilisation totales des fonctionnalités IA</p>
+                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="total-utilisations">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Nombre total d'utilisations</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gain Total Heures -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Gain total estimé en heures</p>
+                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="gain-heures">0</p>
+                                    <p class="text-xs text-gray-400 mt-1" id="gain-subtitle">Heures économisées</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Total Users -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Nombre total d'utilisateurs</p>
+                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="total-users">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Utilisateurs uniques</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature-specific KPIs -->
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs par fonctionnalité</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Descriptif Sommaire -->
+                        <a href="descriptif.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Descriptif sommaire des travaux</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-blue-600" id="descriptif-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="descriptif-ops">0</strong> descriptifs effectifs générés</p>
+                                <p>Sur un total de <strong id="descriptif-total-rict">0</strong> RICT</p>
+                                <p>Avec <strong id="descriptif-users">0</strong> utilisateurs uniques</p>
+                            </div>
+                        </a>
+
+                        <!-- Auto Contacts -->
+                        <a href="autocontact.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Auto Contacts</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-blue-600" id="autocontact-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="autocontact-ai-contacts">0</strong> contacts générés par IA</p>
+                                <p>Sur un total de <strong id="autocontact-total-contacts">0</strong> contacts</p>
+                                <p>Avec <strong id="autocontact-users">0</strong> utilisateurs uniques</p>
+                            </div>
+                        </a>
+
+                        <!-- Comparateur Indices -->
+                        <a href="comparateur.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Comparateur d'indices</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-blue-600" id="comparateur-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="comparateur-ops">0</strong> opérations</p>
+                                <p>Sur un total de <strong id="comparateur-pages">0</strong> pages analysées</p>
+                                <p>Avec <strong id="comparateur-users">0</strong> utilisateurs uniques</p>
+                            </div>
+                        </a>
+
+                        <!-- Chat Projet (BTP Consultants) -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-gray-400" id="chat-projet-btp-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="chat-projet-btp-ops">0</strong> opérations</p>
+                                <p>&nbsp;</p>
+                                <p>&nbsp;</p>
+                            </div>
+                        </div>
+
+                        <!-- Expert Technique (BTP Consultants) -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-gray-400" id="expert-tech-btp-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="expert-tech-btp-ops">0</strong> opérations</p>
+                                <p>&nbsp;</p>
+                                <p>&nbsp;</p>
+                            </div>
+                        </div>
+
+                        <!-- Analyse Géotechnique (BTP Consultants) -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Analyse géotechnique</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-gray-400" id="analyse-geo-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="analyse-geo-ops">0</strong> opérations</p>
+                                <p>&nbsp;</p>
+                                <p>&nbsp;</p>
+                            </div>
+                        </div>
+
+                        <!-- Chat Projet (Citae) -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-gray-400" id="chat-projet-citae-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="chat-projet-citae-ops">0</strong> opérations</p>
+                                <p>&nbsp;</p>
+                                <p>&nbsp;</p>
+                            </div>
+                        </div>
+
+                        <!-- Expert Technique (Citae) -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-gray-400" id="expert-tech-citae-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="expert-tech-citae-ops">0</strong> opérations</p>
+                                <p>&nbsp;</p>
+                                <p>&nbsp;</p>
+                            </div>
+                        </div>
+
+                        <!-- NF Habitat (Citae) -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">NF Habitat</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-gray-400" id="nf-habitat-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="nf-habitat-ops">0</strong> opérations</p>
+                                <p>&nbsp;</p>
+                                <p>&nbsp;</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

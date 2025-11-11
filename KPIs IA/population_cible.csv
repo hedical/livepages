@@ -1,0 +1,40 @@
+DR;Agence;Effectif
+DR Aquitaine;BXCT;7
+DR Aquitaine;LRCT;3
+DR Aquitaine;NOACTC;1
+DR Bretagne;LOCT;3
+DR Bretagne;RECT;9
+DR Centre-Est;ALCT;6
+DR Centre-Est;DJCT;3
+DR Centre-Est;GRCT;1
+DR Centre-Est;LYCT;12
+DR Grand Est;DRGEST;1
+DR Grand Est;MECT;6
+DR Grand Est;STCT;2
+DR IDF Nord;CT75;8
+DR IDF Nord;CT92N;7
+DR IDF Nord;CT93;13
+DR IDF Nord;CT95;8
+DR IDF Nord;DRN;2
+DR IDF Nord;TECT;5
+DR IDF Sud;CT75E;8
+DR IDF Sud;CT77;8
+DR IDF Sud;CT78;4
+DR IDF Sud;CT91;7
+DR IDF Sud;CT92S;7
+DR IDF Sud;CT94;9
+DR IDF Sud;DRSCTC;2
+DR Midi-Pyrénées;TLCT;11
+DR Nord;AMCT;2
+DR Nord;BMCT;1
+DR Nord;LICT;6
+DR Nord;VACT;1
+DR Normandie;ROCT;3
+DR Pays de Loire;NACT;4
+DR Sud Est;DRSE;1
+DR Sud Est;MPCT;2
+DR Sud Est;NICT;3
+DR Sud Est;PACT;6
+DR Val de Loire;TRCT;4
+Direction Grands Comptes;AGCT;4
+Direction Opérationnelle;DOCT;1
