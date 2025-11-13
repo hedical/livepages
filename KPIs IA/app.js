@@ -40,7 +40,7 @@ const descriptifTotalRictEl = document.getElementById('descriptif-total-rict');
 const descriptifUsersEl = document.getElementById('descriptif-users');
 
 // Autocontact elements
-const autocontactCountEl = document.getElementById('autocontact-count');
+const autocontactOpsEl = document.getElementById('autocontact-ops');
 const autocontactAiContactsEl = document.getElementById('autocontact-ai-contacts');
 const autocontactTotalContactsEl = document.getElementById('autocontact-total-contacts');
 const autocontactUsersEl = document.getElementById('autocontact-users');
@@ -248,7 +248,8 @@ function parseAutocontactCSV(csvString) {
         if (fromAIIndex === -1 && (header.includes('fromai') || header.includes('from_ai'))) {
             fromAIIndex = i;
         }
-        if (emailIndex === -1 && header.includes('email') && !header.includes('type')) {
+        // Look for BTP user email column (same logic as autocontact.js)
+        if (emailIndex === -1 && header.includes('user') && header.includes('email')) {
             emailIndex = i;
         }
         if (createdAtIndex === -1 && (header.includes('createdat') || header.includes('created_at'))) {
@@ -259,6 +260,29 @@ function parseAutocontactCSV(csvString) {
     if (contractIndex === -1) {
         return [];
     }
+    
+    // If email column not found in headers, search in data rows
+    if (emailIndex === -1) {
+        for (let rowIdx = 1; rowIdx < Math.min(10, lines.length); rowIdx++) {
+            const values = parseCSVLine(lines[rowIdx]);
+            for (let colIdx = 0; colIdx < values.length; colIdx++) {
+                const val = values[colIdx];
+                if (val && val.includes('@btp-consultants.fr')) {
+                    emailIndex = colIdx;
+                    console.log('Found BTP email column at index', colIdx, 'by examining data');
+                    break;
+                }
+            }
+            if (emailIndex !== -1) break;
+        }
+    }
+    
+    console.log('Autocontact CSV parsing - Column indices:', {
+        contract: contractIndex,
+        fromAI: fromAIIndex,
+        email: emailIndex,
+        createdAt: createdAtIndex
+    });
     
     // Parse data rows
     const data = [];
@@ -467,6 +491,12 @@ function processAutocontactData(data) {
         }
     });
     
+    console.log('Autocontact Stats (Index Page):');
+    console.log('- Total contacts (excl YIELD):', totalContacts);
+    console.log('- AI contacts:', aiContacts);
+    console.log('- Unique users with AI:', uniqueUsers.size);
+    console.log('- Unique operations:', uniqueOperations.size);
+    
     return {
         totalContacts,
         aiContacts,
@@ -568,9 +598,15 @@ function updateKPIs() {
     descriptifData.filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
-    autocontactData.filter(item => item.fromAI).forEach(item => {
-        if (item.email && item.email.includes('@btp-consultants.fr')) allUsers.add(item.email);
-    });
+    // For autocontact: filter YIELD affairs first, then filter by FromAI
+    autocontactData
+        .filter(item => !item.contractNumber.toUpperCase().includes('YIELD'))
+        .filter(item => item.fromAI)
+        .forEach(item => {
+            if (item.email && item.email.trim() !== '' && item.email.includes('@btp-consultants.fr')) {
+                allUsers.add(item.email);
+            }
+        });
     comparateurData.forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
@@ -585,7 +621,7 @@ function updateKPIs() {
     descriptifUsersEl.textContent = descriptifStats.uniqueUsers;
     
     // Autocontact stats
-    autocontactCountEl.textContent = formatNumber(autocontactStats.aiContacts);
+    autocontactOpsEl.textContent = formatNumber(autocontactStats.uniqueOperations);
     autocontactAiContactsEl.textContent = formatNumber(autocontactStats.aiContacts);
     autocontactTotalContactsEl.textContent = formatNumber(autocontactStats.totalContacts);
     autocontactUsersEl.textContent = autocontactStats.uniqueUsers;

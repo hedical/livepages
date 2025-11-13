@@ -9,6 +9,7 @@ let availablePositions = [];
 // Filters
 const filters = {
     company: '',
+    role: '',
     position: 'all'
 };
 
@@ -17,6 +18,7 @@ const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 const mainContentEl = document.getElementById('main-content');
 const companySearchEl = document.getElementById('company-search');
+const roleSearchEl = document.getElementById('role-search');
 const positionFilterEl = document.getElementById('position-filter');
 const resetFiltersBtn = document.getElementById('reset-filters');
 const exportCsvBtn = document.getElementById('export-csv');
@@ -139,13 +141,13 @@ function parseCSVData(csvString) {
             createdAt: createdAtIndex !== -1 ? values[createdAtIndex]?.trim() || '' : ''
         };
         
-        // Only add contacts with external email (not @btp-consultants.fr)
-        if (contact.email && !contact.email.includes('@btp-consultants.fr')) {
+        // Add all contacts (including internal @btp-consultants.fr)
+        if (contact.email) {
             parsedData.push(contact);
         }
     }
     
-    console.log(`Parsed ${parsedData.length} external contacts`);
+    console.log(`Parsed ${parsedData.length} contacts`);
     return parsedData;
 }
 
@@ -179,6 +181,13 @@ function applyFilters() {
             const searchTerm = filters.company.toLowerCase();
             const companyMatch = contact.company.toLowerCase().includes(searchTerm);
             if (!companyMatch) return false;
+        }
+        
+        // Role filter (search)
+        if (filters.role) {
+            const searchTerm = filters.role.toLowerCase();
+            const roleMatch = contact.role.toLowerCase().includes(searchTerm);
+            if (!roleMatch) return false;
         }
         
         // Position filter (dropdown)
@@ -316,6 +325,11 @@ companySearchEl.addEventListener('input', (e) => {
     applyFilters();
 });
 
+roleSearchEl.addEventListener('input', (e) => {
+    filters.role = e.target.value;
+    applyFilters();
+});
+
 positionFilterEl.addEventListener('change', (e) => {
     filters.position = e.target.value;
     applyFilters();
@@ -323,8 +337,10 @@ positionFilterEl.addEventListener('change', (e) => {
 
 resetFiltersBtn.addEventListener('click', () => {
     companySearchEl.value = '';
+    roleSearchEl.value = '';
     positionFilterEl.value = 'all';
     filters.company = '';
+    filters.role = '';
     filters.position = 'all';
     applyFilters();
 });

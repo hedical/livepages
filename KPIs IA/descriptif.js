@@ -984,40 +984,137 @@ function updateChart(data) {
                 {
                     label: 'Nombre total de RICT',
                     data: rictData,
-                    backgroundColor: 'rgba(156, 163, 175, 0.8)', // Gray
-                    borderColor: 'rgba(156, 163, 175, 1)',
-                    borderWidth: 1
+                    backgroundColor: 'rgba(156, 163, 175, 0.6)',
+                    borderColor: 'rgba(107, 114, 128, 1)',
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    hoverBackgroundColor: 'rgba(156, 163, 175, 0.8)',
+                    hoverBorderColor: 'rgba(75, 85, 99, 1)',
+                    hoverBorderWidth: 3
                 },
                 {
                     label: 'Descriptifs effectifs générés',
                     data: operationsData,
-                    backgroundColor: 'rgba(59, 130, 246, 0.8)', // Blue
-                    borderColor: 'rgba(59, 130, 246, 1)',
-                    borderWidth: 1
+                    backgroundColor: 'rgba(59, 130, 246, 0.75)',
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    hoverBackgroundColor: 'rgba(59, 130, 246, 0.9)',
+                    hoverBorderColor: 'rgba(29, 78, 216, 1)',
+                    hoverBorderWidth: 3
                 }
             ]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
             plugins: {
                 legend: {
                     display: true,
-                    position: 'top'
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 13,
+                            weight: '500'
+                        },
+                        color: '#1F2937',
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'rectRounded'
+                    }
                 },
                 tooltip: {
-                    mode: 'index',
-                    intersect: false
+                    enabled: true,
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleColor: '#F9FAFB',
+                    bodyColor: '#E5E7EB',
+                    borderColor: 'rgba(75, 85, 99, 0.5)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label || '';
+                        },
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ' : ';
+                            }
+                            label += formatNumber(context.parsed.y);
+                            return label;
+                        },
+                        afterBody: function(context) {
+                            if (context.length >= 2) {
+                                const rictCount = context[0].parsed.y;
+                                const descriptifCount = context[1].parsed.y;
+                                const percentage = rictCount > 0 ? ((descriptifCount / rictCount) * 100).toFixed(1) : 0;
+                                return [
+                                    '',
+                                    'Taux de génération : ' + percentage + '%'
+                                ];
+                            }
+                            return [];
+                        }
+                    }
                 }
             },
             scales: {
                 x: {
-                    stacked: false
+                    stacked: false,
+                    grid: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Période',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280'
+                    }
                 },
                 y: {
                     stacked: false,
                     beginAtZero: true,
+                    grid: {
+                        color: 'rgba(229, 231, 235, 0.8)',
+                        lineWidth: 1
+                    },
+                    title: {
+                        display: true,
+                        text: 'Nombre',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
                     ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280',
                         precision: 0
                     }
                 }

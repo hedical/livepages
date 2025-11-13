@@ -904,24 +904,33 @@ function updateChart(data) {
                 {
                     label: 'Nombre de comparaisons',
                     data: comparisonsData,
-                    backgroundColor: 'rgba(59, 130, 246, 0.8)',
-                    borderColor: 'rgba(59, 130, 246, 1)',
-                    borderWidth: 1,
+                    backgroundColor: 'rgba(59, 130, 246, 0.75)',
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    hoverBackgroundColor: 'rgba(59, 130, 246, 0.9)',
+                    hoverBorderColor: 'rgba(29, 78, 216, 1)',
+                    hoverBorderWidth: 3,
                     yAxisID: 'y'
                 },
                 {
                     label: 'Nombre de pages analysées',
                     data: pagesData,
-                    backgroundColor: 'rgba(16, 185, 129, 0.8)',
-                    borderColor: 'rgba(16, 185, 129, 1)',
-                    borderWidth: 1,
+                    backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                    borderColor: 'rgba(5, 150, 105, 1)',
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    hoverBackgroundColor: 'rgba(16, 185, 129, 0.9)',
+                    hoverBorderColor: 'rgba(4, 120, 87, 1)',
+                    hoverBorderWidth: 3,
                     yAxisID: 'y1'
                 }
             ]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
             interaction: {
                 mode: 'index',
                 intersect: false,
@@ -929,24 +938,94 @@ function updateChart(data) {
             plugins: {
                 legend: {
                     display: true,
-                    position: 'top'
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 13,
+                            weight: '500'
+                        },
+                        color: '#1F2937',
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'rectRounded'
+                    }
                 },
                 tooltip: {
-                    mode: 'index',
-                    intersect: false
+                    enabled: true,
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleColor: '#F9FAFB',
+                    bodyColor: '#E5E7EB',
+                    borderColor: 'rgba(75, 85, 99, 0.5)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label || '';
+                        },
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ' : ';
+                            }
+                            label += formatNumber(context.parsed.y);
+                            return label;
+                        }
+                    }
                 }
             },
             scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Période',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280'
+                    }
+                },
                 y: {
                     type: 'linear',
                     display: true,
                     position: 'left',
                     beginAtZero: true,
+                    grid: {
+                        color: 'rgba(229, 231, 235, 0.8)',
+                        lineWidth: 1
+                    },
                     title: {
                         display: true,
-                        text: 'Comparaisons'
+                        text: 'Nombre de comparaisons',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#2563EB'
                     },
                     ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#2563EB',
                         precision: 0
                     }
                 },
@@ -957,12 +1036,21 @@ function updateChart(data) {
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Pages'
+                        text: 'Nombre de pages',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#059669'
                     },
                     grid: {
                         drawOnChartArea: false,
                     },
                     ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#059669',
                         precision: 0
                     }
                 }
