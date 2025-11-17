@@ -1,6 +1,9 @@
 // Configuration
-const DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/comparateur.json';
+const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 const POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+
+// Data URL will be fetched from webhook after authentication
+let DATA_URL = '';
 
 // State
 let allData = [];
@@ -1131,6 +1134,46 @@ settingsModal.addEventListener('click', (e) => {
     }
 });
 
+// Authenticate and get data URL
+async function authenticateAndGetURL() {
+    const storedPassword = localStorage.getItem('roi_password');
+    
+    if (!storedPassword) {
+        window.location.href = 'index.html';
+        return null;
+    }
+    
+    try {
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: storedPassword
+        });
+        
+        if (!response.ok) {
+            localStorage.removeItem('roi_password');
+            window.location.href = 'index.html';
+            return null;
+        }
+        
+        const result = await response.text();
+        const comparateurMatch = result.match(/COMPARATEUR_URL = '([^']+)'/);
+        
+        if (comparateurMatch) {
+            return comparateurMatch[1];
+        }
+        
+        window.location.href = 'index.html';
+        return null;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        window.location.href = 'index.html';
+        return null;
+    }
+}
+
 // Initialize
 async function init() {
     try {
@@ -1140,6 +1183,12 @@ async function init() {
         loadingEl.classList.remove('hidden');
         errorEl.classList.add('hidden');
         mainContentEl.classList.add('hidden');
+        
+        // Authenticate and get data URL
+        DATA_URL = await authenticateAndGetURL();
+        if (!DATA_URL) {
+            return;
+        }
 
         console.log('Fetching data from:', DATA_URL);
         

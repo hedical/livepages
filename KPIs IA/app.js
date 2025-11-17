@@ -1,7 +1,10 @@
 // Configuration
-const DESCRIPTIF_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/descriptif.json';
-const AUTOCONTACT_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/autocontact.json';
-const COMPARATEUR_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/comparateur.json';
+const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
+
+// URLs will be fetched from webhook after authentication
+let DESCRIPTIF_URL = '';
+let AUTOCONTACT_URL = '';
+let COMPARATEUR_URL = '';
 
 // Constants
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
@@ -648,6 +651,106 @@ function updateKPIs() {
     `;
 }
 
+// ==================== AUTHENTICATION ====================
+
+// Get login modal and form elements
+const loginModal = document.getElementById('login-modal');
+const loginForm = document.getElementById('login-form');
+const passwordInput = document.getElementById('password-input');
+const loginButton = document.getElementById('login-button');
+const loginText = document.getElementById('login-text');
+const loginError = document.getElementById('login-error');
+
+// Check if user is already authenticated
+async function checkAuthentication() {
+    const storedPassword = localStorage.getItem('roi_password');
+    
+    if (storedPassword) {
+        // Try to authenticate with stored password
+        const success = await authenticateWithPassword(storedPassword);
+        if (success) {
+            loginModal.classList.add('hidden');
+            await loadData();
+            return;
+        } else {
+            // Stored password is invalid, remove it
+            localStorage.removeItem('roi_password');
+        }
+    }
+    
+    // Show login modal
+    loginModal.classList.remove('hidden');
+    passwordInput.focus();
+}
+
+// Authenticate with webhook
+async function authenticateWithPassword(password) {
+    try {
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: password
+        });
+        
+        if (!response.ok) {
+            return false;
+        }
+        
+        const result = await response.text();
+        
+        // Parse the response to extract URLs
+        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
+        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
+        const comparateurMatch = result.match(/COMPARATEUR_URL = '([^']+)'/);
+        
+        if (descriptifMatch && autocontactMatch && comparateurMatch) {
+            DESCRIPTIF_URL = descriptifMatch[1];
+            AUTOCONTACT_URL = autocontactMatch[1];
+            COMPARATEUR_URL = comparateurMatch[1];
+            
+            console.log('Authentication successful');
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        return false;
+    }
+}
+
+// Handle login form submission
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const password = passwordInput.value;
+    loginError.classList.add('hidden');
+    loginButton.disabled = true;
+    loginText.textContent = 'Connexion...';
+    
+    const success = await authenticateWithPassword(password);
+    
+    if (success) {
+        // Store password in localStorage
+        localStorage.setItem('roi_password', password);
+        
+        // Hide login modal
+        loginModal.classList.add('hidden');
+        
+        // Load data
+        await loadData();
+    } else {
+        // Show error
+        loginError.classList.remove('hidden');
+        loginButton.disabled = false;
+        loginText.textContent = 'Se connecter';
+        passwordInput.value = '';
+        passwordInput.focus();
+    }
+});
+
 // ==================== INITIALIZATION ====================
 
 async function loadData() {
@@ -724,6 +827,9 @@ async function loadData() {
 
         // Update KPIs
         updateKPIs();
+
+        // Initialize feature cards after data is loaded
+        initializeFeatureCards();
 
         // Show main content
         loadingEl.classList.add('hidden');
@@ -866,8 +972,20 @@ async function refreshData() {
 // Add event listener to refresh button
 refreshBtn.addEventListener('click', refreshData);
 
+// Add event listener to logout button
+const logoutBtn = document.getElementById('logout-btn');
+logoutBtn.addEventListener('click', () => {
+    // Clear stored password
+    localStorage.removeItem('roi_password');
+    
+    // Reload page to show login modal
+    window.location.reload();
+});
+
 // Start the application
-loadData().then(() => {
-    // Initialize feature cards after data is loaded
-    initializeFeatureCards();
+checkAuthentication().catch(error => {
+    console.error('Error during initialization:', error);
+    errorEl.classList.remove('hidden');
+    loadingEl.classList.add('hidden');
+    loginModal.classList.add('hidden');
 });

@@ -1,6 +1,9 @@
 // Configuration
-const DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/descriptif.json';
+const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
+
+// Data URL will be fetched from webhook after authentication
+let DATA_URL = '';
 
 // Constants for similarity tests
 const HTML_TAG_RE = /<[^>]+>/g;
@@ -703,8 +706,54 @@ searchEmailInput.addEventListener('keydown', (e) => e.key === 'Enter' && search(
 
 // ==================== INITIALIZATION ====================
 
+// Authenticate and get data URL
+async function authenticateAndGetURL() {
+    const storedPassword = localStorage.getItem('roi_password');
+    
+    if (!storedPassword) {
+        window.location.href = 'index.html';
+        return null;
+    }
+    
+    try {
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: storedPassword
+        });
+        
+        if (!response.ok) {
+            localStorage.removeItem('roi_password');
+            window.location.href = 'index.html';
+            return null;
+        }
+        
+        const result = await response.text();
+        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
+        
+        if (descriptifMatch) {
+            return descriptifMatch[1];
+        }
+        
+        window.location.href = 'index.html';
+        return null;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        window.location.href = 'index.html';
+        return null;
+    }
+}
+
 async function init() {
     try {
+        // Authenticate and get data URL
+        DATA_URL = await authenticateAndGetURL();
+        if (!DATA_URL) {
+            return;
+        }
+        
         console.log('Loading data from:', DATA_URL);
         
         const response = await fetch(DATA_URL);
