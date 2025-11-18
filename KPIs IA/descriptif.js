@@ -427,6 +427,7 @@ function parseCSVData(csvString) {
     let contractIndex = -1;
     let diffusedAtIndex = -1;
     let emailIndex = -1;
+    let agencyIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -441,6 +442,9 @@ function parseCSVData(csvString) {
         }
         if (emailIndex === -1 && header.includes('user') && header.includes('email')) {
             emailIndex = i;
+        }
+        if (agencyIndex === -1 && header.includes('productionservice')) {
+            agencyIndex = i;
         }
     }
     
@@ -468,16 +472,14 @@ function parseCSVData(csvString) {
         const contractNumber = values[contractIndex] || '';
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
-        
-        // Extract agency from contract number (e.g., "C-CT78-2022-20-157875" → "CT78")
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         
         data.push({
             type: type.trim(),
             contractNumber: contractNumber.trim(),
             createdAt: diffusedAt.trim(), // Using Report → DiffusedAt as date
             email: email.trim(),
-            agency: agency
+            agency: agency.trim()
         });
     }
     
@@ -1197,6 +1199,157 @@ settingsModal.addEventListener('click', (e) => {
         settingsModal.classList.add('hidden');
     }
 });
+
+// Records Modal Elements
+const viewRecordsBtn = document.getElementById('view-records-btn');
+const recordsModal = document.getElementById('records-modal');
+const closeRecordsModalBtn = document.getElementById('close-records-modal');
+const closeRecordsModalBtn2 = document.getElementById('close-records-modal-btn');
+const recordsTableBodyEl = document.getElementById('records-table-body');
+const recordsCountEl = document.getElementById('records-count');
+const exportRecordsBtn = document.getElementById('export-records-btn');
+
+// Store current records for export
+let currentRecords = [];
+
+// Format date for display
+function formatDateForDisplay(dateString) {
+    if (!dateString) return '-';
+    const date = parseDate(dateString);
+    if (!date) return dateString; // Return original if can't parse
+    
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+// Show records modal with current filtered data
+function showRecordsModal() {
+    // Get the current filtered data (descriptifs only)
+    let filteredData = filterYieldAffairs(allData);
+    
+    // Apply filters
+    if (!isCumulativeMode) {
+        filteredData = filterByMonth(filteredData, filters.month);
+    }
+    filteredData = filterByDR(filteredData, filters.dr);
+    filteredData = filterByAgence(filteredData, filters.agence);
+    filteredData = filterByType(filteredData, DESCRIPTIF_TYPE);
+    
+    // Sort by date (most recent first)
+    filteredData.sort((a, b) => {
+        const dateA = parseDate(a.createdAt);
+        const dateB = parseDate(b.createdAt);
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return dateB - dateA;
+    });
+    
+    // Store for export
+    currentRecords = filteredData;
+    
+    // Update count
+    recordsCountEl.textContent = filteredData.length;
+    
+    // Clear table
+    recordsTableBodyEl.innerHTML = '';
+    
+    // Populate table
+    if (filteredData.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                Aucun enregistrement disponible pour cette période
+            </td>
+        `;
+        recordsTableBodyEl.appendChild(row);
+    } else {
+        filteredData.forEach((record, index) => {
+            const row = document.createElement('tr');
+            row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                    ${record.contractNumber || '-'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    ${formatDateForDisplay(record.createdAt)}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    ${record.email || '-'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
+                    ${record.agency || '-'}
+                </td>
+            `;
+            
+            recordsTableBodyEl.appendChild(row);
+        });
+    }
+    
+    // Show modal
+    recordsModal.classList.remove('hidden');
+}
+
+// Export records to CSV
+function exportRecordsToCSV() {
+    if (currentRecords.length === 0) {
+        alert('Aucun enregistrement à exporter');
+        return;
+    }
+    
+    // Create CSV content
+    const headers = ['Contract Number', 'Date de diffusion', 'User Email', 'ProductionService (Agence)'];
+    const csvRows = [headers.join(',')];
+    
+    currentRecords.forEach(record => {
+        const row = [
+            `"${record.contractNumber || ''}"`,
+            `"${record.createdAt || ''}"`,
+            `"${record.email || ''}"`,
+            `"${record.agency || ''}"`
+        ];
+        csvRows.push(row.join(','));
+    });
+    
+    const csvContent = csvRows.join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `enregistrements_descriptifs_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Records modal event listeners
+viewRecordsBtn.addEventListener('click', showRecordsModal);
+
+closeRecordsModalBtn.addEventListener('click', () => {
+    recordsModal.classList.add('hidden');
+});
+
+closeRecordsModalBtn2.addEventListener('click', () => {
+    recordsModal.classList.add('hidden');
+});
+
+recordsModal.addEventListener('click', (e) => {
+    if (e.target === recordsModal) {
+        recordsModal.classList.add('hidden');
+    }
+});
+
+exportRecordsBtn.addEventListener('click', exportRecordsToCSV);
 
 // Authenticate and get data URL
 async function authenticateAndGetURL() {

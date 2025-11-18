@@ -416,6 +416,7 @@ function parseCSVData(csvString) {
     let contractColumnIndex = -1;
     let createdAtColumnIndex = -1;
     let fromAIColumnIndex = -1;
+    let agencyIndex = -1;
     
     // Search for columns in headers
     for (let i = 0; i < headers.length; i++) {
@@ -439,6 +440,11 @@ function parseCSVData(csvString) {
         if (btpEmailColumnIndex === -1 && header.includes('user') && header.includes('email')) {
             btpEmailColumnIndex = i;
             console.log(`Found BTP User Email at column ${i}: ${headers[i]}`);
+        }
+        
+        if (agencyIndex === -1 && header.includes('productionservice')) {
+            agencyIndex = i;
+            console.log(`Found ProductionService at column ${i}: ${headers[i]}`);
         }
     }
     
@@ -489,9 +495,7 @@ function parseCSVData(csvString) {
         const contractNumber = values[contractColumnIndex] || '';
         const createdAt = values[createdAtColumnIndex] || '';
         const btpEmail = values[btpEmailColumnIndex] || '';
-        
-        // Extract agency from contract number
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         
         // Determine FromAI value
         let fromAI = false;
@@ -505,7 +509,7 @@ function parseCSVData(csvString) {
             createdAt: createdAt.trim(),
             email: btpEmail.trim(),
             fromAI: fromAI,
-            agency: agency,
+            agency: agency.trim(),
             contactCount: 1,
             aiContactCount: fromAI ? 1 : 0
         });

@@ -291,6 +291,7 @@ function parseCSVData(csvString) {
     let emailIndex = -1;
     let descriptionIndex = -1;
     let aiResultIndex = -1;
+    let agencyIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -311,6 +312,9 @@ function parseCSVData(csvString) {
         }
         if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) {
             aiResultIndex = i;
+        }
+        if (agencyIndex === -1 && header.includes('productionservice')) {
+            agencyIndex = i;
         }
     }
     
@@ -342,9 +346,7 @@ function parseCSVData(csvString) {
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
-        
-        // Extract agency from contract number
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         
         // Only keep DESCRIPTIF_SOMMAIRE_DES_TRAVAUX
         if (type.trim() === DESCRIPTIF_TYPE) {
@@ -353,7 +355,7 @@ function parseCSVData(csvString) {
                 contractNumber: contractNumber.trim(),
                 createdAt: diffusedAt.trim(),
                 email: email.trim(),
-                agency: agency,
+                agency: agency.trim(),
                 description: description,
                 aiResult: aiResult
             });

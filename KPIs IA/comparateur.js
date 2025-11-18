@@ -448,6 +448,7 @@ function parseCSVData(csvString) {
     let createdAtIndex = -1;
     let emailIndex = -1;
     let longResultIndex = -1;
+    let agencyIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i];
@@ -476,6 +477,12 @@ function parseCSVData(csvString) {
             longResultIndex = i;
             console.log(`Found LongResult at column ${i}: ${header}`);
         }
+        
+        // ProductionService (Agency)
+        if (agencyIndex === -1 && headerLower.includes('productionservice')) {
+            agencyIndex = i;
+            console.log(`Found ProductionService at column ${i}: ${header}`);
+        }
     }
     
     console.log('Column indices:', {
@@ -502,9 +509,7 @@ function parseCSVData(csvString) {
         const createdAt = createdAtIndex >= 0 ? values[createdAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const longResult = longResultIndex >= 0 ? values[longResultIndex] : '';
-        
-        // Extract agency from contract number
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         
         // Extract max page from LongResult
         const maxPage = extractMaxPage(longResult);
@@ -513,7 +518,7 @@ function parseCSVData(csvString) {
             contractNumber: contractNumber.trim(),
             createdAt: createdAt.trim(),
             email: email.trim(),
-            agency: agency,
+            agency: agency.trim(),
             maxPage: maxPage
         });
     }

@@ -171,6 +171,7 @@ function parseDescriptifCSV(csvString) {
     let contractIndex = -1;
     let diffusedAtIndex = -1;
     let emailIndex = -1;
+    let agencyIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -185,6 +186,9 @@ function parseDescriptifCSV(csvString) {
         }
         if (emailIndex === -1 && header.includes('user') && header.includes('email')) {
             emailIndex = i;
+        }
+        if (agencyIndex === -1 && header.includes('productionservice')) {
+            agencyIndex = i;
         }
     }
     
@@ -202,14 +206,14 @@ function parseDescriptifCSV(csvString) {
         const contractNumber = values[contractIndex] || '';
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         
         data.push({
             type: type.trim(),
             contractNumber: contractNumber.trim(),
             createdAt: diffusedAt.trim(),
             email: email.trim(),
-            agency: agency
+            agency: agency.trim()
         });
     }
     
@@ -242,6 +246,7 @@ function parseAutocontactCSV(csvString) {
     let fromAIIndex = -1;
     let emailIndex = -1;
     let createdAtIndex = -1;
+    let agencyIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -257,6 +262,9 @@ function parseAutocontactCSV(csvString) {
         }
         if (createdAtIndex === -1 && (header.includes('createdat') || header.includes('created_at'))) {
             createdAtIndex = i;
+        }
+        if (agencyIndex === -1 && header.includes('productionservice')) {
+            agencyIndex = i;
         }
     }
     
@@ -297,14 +305,14 @@ function parseAutocontactCSV(csvString) {
         const fromAI = fromAIIndex >= 0 ? (values[fromAIIndex] || '').toLowerCase() === 'true' : false;
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const createdAt = createdAtIndex >= 0 ? values[createdAtIndex] : '';
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         
         data.push({
             contractNumber: contractNumber.trim(),
             fromAI: fromAI,
             email: email.trim(),
             createdAt: createdAt.trim(),
-            agency: agency
+            agency: agency.trim()
         });
     }
     
@@ -371,6 +379,7 @@ function parseComparateurCSV(csvString) {
     let contractIndex = -1;
     let emailIndex = -1;
     let longResultIndex = -1;
+    let agencyIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i];
@@ -384,6 +393,9 @@ function parseComparateurCSV(csvString) {
         }
         if (longResultIndex === -1 && headerLower === 'longresult') {
             longResultIndex = i;
+        }
+        if (agencyIndex === -1 && headerLower.includes('productionservice')) {
+            agencyIndex = i;
         }
     }
     
@@ -400,13 +412,13 @@ function parseComparateurCSV(csvString) {
         const contractNumber = values[contractIndex] || '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const longResult = values[longResultIndex] || '';
-        const agency = extractAgency(contractNumber);
+        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
         const maxPage = extractMaxPage(longResult);
         
         data.push({
             contractNumber: contractNumber.trim(),
             email: email.trim(),
-            agency: agency,
+            agency: agency.trim(),
             maxPage: maxPage
         });
     }
