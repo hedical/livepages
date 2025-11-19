@@ -1,0 +1,598 @@
+// Configuration
+const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
+
+// Data URL will be fetched from webhook after authentication
+let DATA_URL = '';
+
+// State
+let allContacts = [];
+let filteredContacts = [];
+let availablePositions = [];
+let positionChart = null;
+
+// Filters
+const filters = {
+    company: '',
+    role: '',
+    position: 'all'
+};
+
+// DOM Elements
+const loadingEl = document.getElementById('loading');
+const errorEl = document.getElementById('error');
+const mainContentEl = document.getElementById('main-content');
+const companySearchEl = document.getElementById('company-search');
+const roleSearchEl = document.getElementById('role-search');
+const positionFilterEl = document.getElementById('position-filter');
+const resetFiltersBtn = document.getElementById('reset-filters');
+const exportCsvBtn = document.getElementById('export-csv');
+const tableBodyEl = document.getElementById('contacts-table-body');
+const filteredCountEl = document.getElementById('filtered-count');
+const totalCountEl = document.getElementById('total-count');
+
+// Helper function to parse a CSV line with quoted values
+function parseCSVLine(line) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            values.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    values.push(current.trim());
+    return values;
+}
+
+// Parse CSV data
+function parseCSVData(csvString) {
+    if (!csvString || typeof csvString !== 'string') {
+        console.warn('Invalid CSV string');
+        return [];
+    }
+    
+    // Clean up CSV string
+    csvString = csvString.trim();
+    while (csvString.startsWith('[') || csvString.startsWith('{')) {
+        csvString = csvString.substring(1).trim();
+    }
+    while (csvString.endsWith(']') || csvString.endsWith('}')) {
+        csvString = csvString.substring(0, csvString.length - 1).trim();
+    }
+    if (csvString.startsWith('data:')) {
+        csvString = csvString.substring(5).trim();
+    }
+    
+    const lines = csvString.split('\n').filter(line => {
+        const trimmed = line.trim();
+        return trimmed !== '' && trimmed !== '[' && trimmed !== ']';
+    });
+    
+    if (lines.length === 0) {
+        console.warn('No lines found in CSV');
+        return [];
+    }
+    
+    // Parse header
+    const headerLine = lines[0];
+    const headers = parseCSVLine(headerLine);
+    
+    console.log(`CSV has ${headers.length} columns and ${lines.length - 1} data rows`);
+    
+    // Find column indices
+    const emailIndex = headers.findIndex(h => h.toLowerCase() === 'email');
+    const roleIndex = headers.findIndex(h => h.toLowerCase() === 'role');
+    const firstNameIndex = headers.findIndex(h => h.toLowerCase() === 'firstname');
+    const lastNameIndex = headers.findIndex(h => h.toLowerCase() === 'lastname');
+    const positionIndex = headers.findIndex(h => h.toLowerCase() === 'position');
+    const companyIndex = headers.findIndex(h => h.toLowerCase().includes('company') && h.toLowerCase().includes('name'));
+    const btpEmailIndex = headers.findIndex(h => h.toLowerCase().includes('user') && h.toLowerCase().includes('email'));
+    const createdAtIndex = headers.findIndex(h => h.toLowerCase() === 'createdat' && !h.includes('→'));
+    const contractIndex = headers.findIndex(h => h.toLowerCase().includes('contractnumber'));
+    
+    console.log('Column indices:', {
+        email: emailIndex,
+        role: roleIndex,
+        firstName: firstNameIndex,
+        lastName: lastNameIndex,
+        position: positionIndex,
+        company: companyIndex,
+        btpEmail: btpEmailIndex,
+        createdAt: createdAtIndex,
+        contract: contractIndex
+    });
+    
+    if (emailIndex === -1) {
+        console.error('Email column not found');
+        return [];
+    }
+    
+    // Parse data rows
+    const parsedData = [];
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const values = parseCSVLine(line);
+        
+        if (values.length <= Math.max(emailIndex, companyIndex, btpEmailIndex)) {
+            continue;
+        }
+        
+        // Skip if contract contains YIELD
+        if (contractIndex !== -1 && values[contractIndex]) {
+            const contractNumber = values[contractIndex].trim().toUpperCase();
+            if (contractNumber.includes('YIELD')) {
+                continue;
+            }
+        }
+        
+        const contact = {
+            email: emailIndex !== -1 ? values[emailIndex]?.trim() || '' : '',
+            role: roleIndex !== -1 ? values[roleIndex]?.trim() || '' : '',
+            firstName: firstNameIndex !== -1 ? values[firstNameIndex]?.trim() || '' : '',
+            lastName: lastNameIndex !== -1 ? values[lastNameIndex]?.trim() || '' : '',
+            position: positionIndex !== -1 ? values[positionIndex]?.trim() || '' : '',
+            company: companyIndex !== -1 ? values[companyIndex]?.trim() || '' : '',
+            btpEmail: btpEmailIndex !== -1 ? values[btpEmailIndex]?.trim() || '' : '',
+            createdAt: createdAtIndex !== -1 ? values[createdAtIndex]?.trim() || '' : ''
+        };
+        
+        // Add all contacts (including internal @btp-consultants.fr)
+        if (contact.email) {
+            parsedData.push(contact);
+        }
+    }
+    
+    console.log(`Parsed ${parsedData.length} contacts`);
+    return parsedData;
+}
+
+// Get available positions
+function getAvailablePositions(contacts) {
+    const positions = new Set();
+    contacts.forEach(contact => {
+        if (contact.position && contact.position.trim() !== '') {
+            positions.add(contact.position);
+        }
+    });
+    return Array.from(positions).sort();
+}
+
+// Populate position filter
+function populatePositionFilter() {
+    positionFilterEl.innerHTML = '<option value="all">Toutes les positions</option>';
+    availablePositions.forEach(position => {
+        const option = document.createElement('option');
+        option.value = position;
+        option.textContent = position;
+        positionFilterEl.appendChild(option);
+    });
+}
+
+// Filter contacts
+function applyFilters() {
+    filteredContacts = allContacts.filter(contact => {
+        // Company filter (search)
+        if (filters.company) {
+            const searchTerm = filters.company.toLowerCase();
+            const companyMatch = contact.company.toLowerCase().includes(searchTerm);
+            if (!companyMatch) return false;
+        }
+        
+        // Role filter (search)
+        if (filters.role) {
+            const searchTerm = filters.role.toLowerCase();
+            const roleMatch = contact.role.toLowerCase().includes(searchTerm);
+            if (!roleMatch) return false;
+        }
+        
+        // Position filter (dropdown)
+        if (filters.position !== 'all') {
+            if (contact.position !== filters.position) return false;
+        }
+        
+        return true;
+    });
+    
+    renderTable();
+    updateStats();
+    updatePositionChart();
+}
+
+// Render table
+function renderTable() {
+    tableBodyEl.innerHTML = '';
+    
+    if (filteredContacts.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                Aucun contact trouvé avec les filtres actuels
+            </td>
+        `;
+        tableBodyEl.appendChild(row);
+        return;
+    }
+    
+    filteredContacts.forEach((contact, index) => {
+        const row = document.createElement('tr');
+        row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        
+        row.innerHTML = `
+            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(contact.email)}</td>
+            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(contact.firstName)}</td>
+            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(contact.lastName)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.position)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.role)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.company)}</td>
+            <td class="px-4 py-3 text-sm text-blue-600">${escapeHtml(contact.btpEmail)}</td>
+            <td class="px-4 py-3 text-sm text-gray-500">${formatDate(contact.createdAt)}</td>
+        `;
+        
+        tableBodyEl.appendChild(row);
+    });
+}
+
+// Update stats
+function updateStats() {
+    filteredCountEl.textContent = filteredContacts.length;
+    totalCountEl.textContent = allContacts.length;
+}
+
+// Update position chart
+function updatePositionChart() {
+    console.log('Updating position chart...');
+    console.log('Filtered contacts count:', filteredContacts.length);
+    
+    // Check if Chart is available
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded yet');
+        return;
+    }
+    
+    // Check if canvas exists
+    const canvas = document.getElementById('positionChart');
+    if (!canvas) {
+        console.error('Canvas element not found');
+        return;
+    }
+    
+    // Count contacts by position
+    const positionCounts = {};
+    filteredContacts.forEach(contact => {
+        const position = contact.position || 'Non spécifié';
+        positionCounts[position] = (positionCounts[position] || 0) + 1;
+    });
+    
+    console.log('Position counts:', positionCounts);
+    
+    // Sort by count descending
+    const sortedPositions = Object.entries(positionCounts)
+        .sort((a, b) => b[1] - a[1]);
+    
+    const labels = sortedPositions.map(([position]) => position);
+    const data = sortedPositions.map(([, count]) => count);
+    
+    console.log('Chart labels:', labels);
+    console.log('Chart data:', data);
+    
+    if (labels.length === 0) {
+        console.warn('No data to display in chart');
+        return;
+    }
+    
+    // Generate colors
+    const colors = [
+        '#3b82f6', // blue-500
+        '#10b981', // green-500
+        '#f59e0b', // amber-500
+        '#ef4444', // red-500
+        '#8b5cf6', // violet-500
+        '#ec4899', // pink-500
+        '#06b6d4', // cyan-500
+        '#f97316', // orange-500
+        '#14b8a6', // teal-500
+        '#a855f7', // purple-500
+    ];
+    
+    const backgroundColors = sortedPositions.map((_, index) => colors[index % colors.length]);
+    
+    // Destroy existing chart if it exists
+    if (positionChart) {
+        positionChart.destroy();
+    }
+    
+    try {
+        // Create new chart
+        positionChart = new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: '#ffffff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        padding: 15,
+                        font: {
+                            size: 12
+                        },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => {
+                                    const value = data.datasets[0].data[i];
+                                    const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return {
+                                        text: `${label} (${value} - ${percentage}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        hidden: false,
+                                        index: i
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} contacts (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+        console.log('Chart created successfully');
+    } catch (error) {
+        console.error('Error creating chart:', error);
+    }
+}
+
+// Format date
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    // Try to parse and format the date
+    try {
+        const date = new Date(dateString);
+        if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        }
+    } catch (e) {
+        // If parsing fails, return the original string
+    }
+    return dateString;
+}
+
+// Escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Export to CSV
+function exportToCSV() {
+    if (filteredContacts.length === 0) {
+        alert('Aucun contact à exporter');
+        return;
+    }
+    
+    // Create CSV content
+    const headers = ['Email', 'Prénom', 'Nom', 'Position', 'Rôle', 'Entreprise', 'Contact Interne', 'Date de création'];
+    const rows = filteredContacts.map(contact => [
+        contact.email,
+        contact.firstName,
+        contact.lastName,
+        contact.position,
+        contact.role,
+        contact.company,
+        contact.btpEmail,
+        contact.createdAt
+    ]);
+    
+    let csvContent = headers.join(',') + '\n';
+    rows.forEach(row => {
+        const escapedRow = row.map(cell => {
+            // Escape quotes and wrap in quotes if contains comma or quotes
+            const str = String(cell || '');
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        });
+        csvContent += escapedRow.join(',') + '\n';
+    });
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `contacts_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Event Listeners
+companySearchEl.addEventListener('input', (e) => {
+    filters.company = e.target.value;
+    applyFilters();
+});
+
+roleSearchEl.addEventListener('input', (e) => {
+    filters.role = e.target.value;
+    applyFilters();
+});
+
+positionFilterEl.addEventListener('change', (e) => {
+    filters.position = e.target.value;
+    applyFilters();
+});
+
+resetFiltersBtn.addEventListener('click', () => {
+    companySearchEl.value = '';
+    roleSearchEl.value = '';
+    positionFilterEl.value = 'all';
+    filters.company = '';
+    filters.role = '';
+    filters.position = 'all';
+    applyFilters();
+});
+
+exportCsvBtn.addEventListener('click', exportToCSV);
+
+// Authenticate and get data URL
+async function authenticateAndGetURL() {
+    const storedPassword = localStorage.getItem('roi_password');
+    
+    if (!storedPassword) {
+        window.location.href = 'index.html';
+        return null;
+    }
+    
+    try {
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: storedPassword
+        });
+        
+        if (!response.ok) {
+            localStorage.removeItem('roi_password');
+            window.location.href = 'index.html';
+            return null;
+        }
+        
+        const result = await response.text();
+        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
+        
+        if (autocontactMatch) {
+            return autocontactMatch[1];
+        }
+        
+        window.location.href = 'index.html';
+        return null;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        window.location.href = 'index.html';
+        return null;
+    }
+}
+
+// Initialize
+async function init() {
+    try {
+        loadingEl.classList.remove('hidden');
+        errorEl.classList.add('hidden');
+        mainContentEl.classList.add('hidden');
+
+        // Authenticate and get data URL
+        DATA_URL = await authenticateAndGetURL();
+        if (!DATA_URL) {
+            return;
+        }
+
+        console.log('Fetching data from:', DATA_URL);
+        const response = await fetch(DATA_URL);
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const rawText = await response.text();
+        console.log('Response received, length:', rawText.length);
+        
+        // Parse JSON array format: [{"data":"CSV content"}]
+        let csvData = null;
+        
+        try {
+            const jsonData = JSON.parse(rawText);
+            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].data) {
+                console.log('Found JSON array with data field');
+                csvData = jsonData[0].data;
+            } else if (jsonData.data && typeof jsonData.data === 'string') {
+                console.log('Found JSON object with data field');
+                csvData = jsonData.data;
+            }
+        } catch (jsonError) {
+            console.log('JSON parsing failed:', jsonError.message);
+            csvData = rawText;
+        }
+        
+        if (!csvData) {
+            throw new Error('No CSV data found');
+        }
+        
+        allContacts = parseCSVData(csvData);
+        
+        if (allContacts.length === 0) {
+            throw new Error('No contacts parsed');
+        }
+
+        console.log(`Loaded ${allContacts.length} contacts`);
+
+        // Get available positions
+        availablePositions = getAvailablePositions(allContacts);
+        populatePositionFilter();
+
+        // Initial render
+        filteredContacts = [...allContacts];
+        renderTable();
+        updateStats();
+
+        // Show main content
+        loadingEl.classList.add('hidden');
+        mainContentEl.classList.remove('hidden');
+        
+        // Update chart after a small delay to ensure everything is loaded
+        setTimeout(() => {
+            updatePositionChart();
+        }, 100);
+    } catch (error) {
+        console.error('Error loading data:', error);
+        loadingEl.classList.add('hidden');
+        errorEl.classList.remove('hidden');
+    }
+}
+
+// Start app
+init();
+
