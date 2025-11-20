@@ -346,16 +346,20 @@ function parseCSVData(csvString) {
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        
+        // Extract agency code from contract number using the global function
+        const agencyCode = extractAgency(contractNumber);
         
         // Only keep DESCRIPTIF_SOMMAIRE_DES_TRAVAUX
-        if (type.trim() === DESCRIPTIF_TYPE) {
+        if ((type || '').trim() === DESCRIPTIF_TYPE) {
             data.push({
-                type: type.trim(),
-                contractNumber: contractNumber.trim(),
-                createdAt: diffusedAt.trim(),
-                email: email.trim(),
-                agency: agency.trim(),
+                type: (type || '').trim(),
+                contractNumber: (contractNumber || '').trim(),
+                createdAt: (diffusedAt || '').trim(),
+                email: (email || '').trim(),
+                agency: (agency || '').trim(),
+                agencyCode: agencyCode,
                 description: description,
                 aiResult: aiResult
             });

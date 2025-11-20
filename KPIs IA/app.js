@@ -5,6 +5,8 @@ const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
+// Default Population URL (public)
+const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
 // Constants
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
@@ -16,19 +18,36 @@ const SECONDS_PER_CONTACT = 90; // Default value from autocontact.js
 const SECONDS_PER_PAGE = 20; // Default value for comparateur
 const ANNUAL_HOURS = 1607;
 const TOTAL_REVENUE = 44000000;
-const TOTAL_EFFECTIF = 192; // From population_cible.csv
+let TOTAL_EFFECTIF = 192; // Will be updated from population_cible.csv
+
+// Calculated Hourly Rate (Revenue / (Effectif * Hours))
+// Using default 192 effectif initially: 44,000,000 / (192 * 1607) ≈ 142.6 €/h
+function getHourlyRate() {
+    return TOTAL_REVENUE / (TOTAL_EFFECTIF * ANNUAL_HOURS);
+}
 
 // State
 let descriptifData = [];
 let autocontactData = [];
 let comparateurData = [];
+let agencyPopulation = {}; // {agencyCode: effectif}
+let availableAgencies = [];
+let availableDirections = [];
+let agencyToDirection = {};
+let tableSortState = {
+    column: 'total',
+    ascending: false
+};
 
 // DOM Elements
 const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 const mainContentEl = document.getElementById('main-content');
 const filialeFilterEl = document.getElementById('filiale-filter');
+const directionFilterEl = document.getElementById('direction-filter');
+const agencyFilterEl = document.getElementById('agency-filter');
 const resetFiltersBtn = document.getElementById('reset-filters');
+const agencyTableBodyEl = document.getElementById('agency-table-body');
 
 // KPI Elements
 const totalUtilisationsEl = document.getElementById('total-utilisations');
@@ -172,6 +191,7 @@ function parseDescriptifCSV(csvString) {
     let diffusedAtIndex = -1;
     let emailIndex = -1;
     let agencyIndex = -1;
+    let managementIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -190,6 +210,9 @@ function parseDescriptifCSV(csvString) {
         if (agencyIndex === -1 && header.includes('productionservice')) {
             agencyIndex = i;
         }
+        if (managementIndex === -1 && header.includes('management')) {
+            managementIndex = i;
+        }
     }
     
     if (typeIndex === -1 || contractIndex === -1) {
@@ -206,14 +229,16 @@ function parseDescriptifCSV(csvString) {
         const contractNumber = values[contractIndex] || '';
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
         
         data.push({
-            type: type.trim(),
-            contractNumber: contractNumber.trim(),
-            createdAt: diffusedAt.trim(),
-            email: email.trim(),
-            agency: agency.trim()
+            type: (type || '').trim(),
+            contractNumber: (contractNumber || '').trim(),
+            createdAt: (diffusedAt || '').trim(),
+            email: (email || '').trim(),
+            agency: (agency || '').trim(),
+            direction: (direction || '').trim()
         });
     }
     
@@ -247,6 +272,7 @@ function parseAutocontactCSV(csvString) {
     let emailIndex = -1;
     let createdAtIndex = -1;
     let agencyIndex = -1;
+    let managementIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -265,6 +291,9 @@ function parseAutocontactCSV(csvString) {
         }
         if (agencyIndex === -1 && header.includes('productionservice')) {
             agencyIndex = i;
+        }
+        if (managementIndex === -1 && header.includes('management')) {
+            managementIndex = i;
         }
     }
     
@@ -292,7 +321,9 @@ function parseAutocontactCSV(csvString) {
         contract: contractIndex,
         fromAI: fromAIIndex,
         email: emailIndex,
-        createdAt: createdAtIndex
+        createdAt: createdAtIndex,
+        agency: agencyIndex,
+        management: managementIndex
     });
     
     // Parse data rows
@@ -305,14 +336,16 @@ function parseAutocontactCSV(csvString) {
         const fromAI = fromAIIndex >= 0 ? (values[fromAIIndex] || '').toLowerCase() === 'true' : false;
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const createdAt = createdAtIndex >= 0 ? values[createdAtIndex] : '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
         
         data.push({
-            contractNumber: contractNumber.trim(),
+            contractNumber: (contractNumber || '').trim(),
             fromAI: fromAI,
-            email: email.trim(),
-            createdAt: createdAt.trim(),
-            agency: agency.trim()
+            email: (email || '').trim(),
+            createdAt: (createdAt || '').trim(),
+            agency: (agency || '').trim(),
+            direction: (direction || '').trim()
         });
     }
     
@@ -380,6 +413,7 @@ function parseComparateurCSV(csvString) {
     let emailIndex = -1;
     let longResultIndex = -1;
     let agencyIndex = -1;
+    let managementIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i];
@@ -397,6 +431,9 @@ function parseComparateurCSV(csvString) {
         if (agencyIndex === -1 && headerLower.includes('productionservice')) {
             agencyIndex = i;
         }
+        if (managementIndex === -1 && headerLower.includes('management')) {
+            managementIndex = i;
+        }
     }
     
     if (contractIndex === -1 || longResultIndex === -1) {
@@ -412,18 +449,420 @@ function parseComparateurCSV(csvString) {
         const contractNumber = values[contractIndex] || '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const longResult = values[longResultIndex] || '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
         const maxPage = extractMaxPage(longResult);
         
         data.push({
-            contractNumber: contractNumber.trim(),
-            email: email.trim(),
-            agency: agency.trim(),
+            contractNumber: (contractNumber || '').trim(),
+            email: (email || '').trim(),
+            agency: (agency || '').trim(),
+            direction: (direction || '').trim(),
             maxPage: maxPage
         });
     }
     
     return data;
+}
+
+/**
+ * Fix encoding issues in CSV text
+ */
+function fixEncoding(text) {
+    const replacements = {
+        'Ã©': 'é',
+        'Ã¨': 'è',
+        'Ãª': 'ê',
+        'Ã ': 'à',
+        'Ã¢': 'â',
+        'Ã´': 'ô',
+        'Ã»': 'û',
+        'Ã§': 'ç',
+        'Ã«': 'ë',
+        'Ã¯': 'ï',
+        'Ã¼': 'ü',
+        'Ã': 'É',
+        'Ã': 'È',
+        'Ã': 'À',
+        'Ã': 'Ç',
+        '�': 'é'
+    };
+    
+    let fixed = text;
+    for (const [bad, good] of Object.entries(replacements)) {
+        fixed = fixed.replace(new RegExp(bad, 'g'), good);
+    }
+    return fixed;
+}
+
+/**
+ * Parse Population Data CSV (using same logic as descriptif.js)
+ * Format: DR;Agence;Effectif
+ */
+function parsePopulationData(csvString) {
+    if (!csvString || typeof csvString !== 'string') return;
+    
+    console.log('=== Parsing Population Data ===');
+    
+    let csvText = fixEncoding(csvString);
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    
+    if (lines.length < 2) {
+        console.warn('Population CSV has less than 2 lines');
+        return;
+    }
+    
+    console.log('First line (header):', lines[0]);
+    console.log('Total lines:', lines.length);
+    
+    // Reset population map
+    agencyPopulation = {};
+    let total = 0;
+    
+    // Skip header (line 0: DR;Agence;Effectif)
+    for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(';');
+        if (parts.length >= 3) {
+            const dr = parts[0].trim();
+            const agencyCode = parts[1].trim();
+            const effectif = parseInt(parts[2].trim());
+            
+            if (agencyCode && !isNaN(effectif)) {
+                agencyPopulation[agencyCode] = effectif;
+                total += effectif;
+            }
+        }
+    }
+    
+    console.log('✓ Parsed population data:', Object.keys(agencyPopulation).length, 'agencies');
+    console.log('✓ Agency codes:', Object.keys(agencyPopulation));
+    console.log('✓ Sample entries:', Object.entries(agencyPopulation).slice(0, 5));
+    console.log('✓ Total effectif from file:', total);
+    
+    // Update global total effectif if data seems valid
+    if (total > 0) {
+        TOTAL_EFFECTIF = total;
+    }
+}
+
+// ==================== FILTERS AND TABLE MANAGEMENT ====================
+
+/**
+ * Extract unique directions and map agencies
+ */
+function extractDirectionsAndAgencies() {
+    const directions = new Set();
+    const agencies = new Set();
+    agencyToDirection = {};
+    
+    // Helper to process data
+    const processItems = (items) => {
+        items.forEach(item => {
+            const dir = item.direction;
+            const ag = item.agency;
+            
+            if (dir) directions.add(dir);
+            if (ag) agencies.add(ag);
+            
+            if (dir && ag) {
+                agencyToDirection[ag] = dir;
+            }
+        });
+    };
+    
+    processItems(descriptifData);
+    processItems(autocontactData);
+    processItems(comparateurData);
+    
+    availableDirections = Array.from(directions).sort();
+    availableAgencies = Array.from(agencies).sort();
+}
+
+/**
+ * Populate filter dropdowns
+ */
+function populateFilters() {
+    // Populate Directions
+    directionFilterEl.innerHTML = '<option value="">Toutes les directions</option>';
+    availableDirections.forEach(dir => {
+        const option = document.createElement('option');
+        option.value = dir;
+        option.textContent = dir;
+        directionFilterEl.appendChild(option);
+    });
+    
+    // Populate Agencies
+    populateAgencyFilter();
+}
+
+/**
+ * Populate agency filter based on selected direction
+ */
+function populateAgencyFilter() {
+    const selectedDirection = directionFilterEl.value;
+    const currentAgency = agencyFilterEl.value;
+    
+    agencyFilterEl.innerHTML = '<option value="">Toutes les agences</option>';
+    
+    const filteredAgencies = availableAgencies.filter(agency => {
+        if (!selectedDirection) return true;
+        return agencyToDirection[agency] === selectedDirection;
+    });
+    
+    filteredAgencies.forEach(agency => {
+        const option = document.createElement('option');
+        option.value = agency;
+        option.textContent = agency;
+        agencyFilterEl.appendChild(option);
+    });
+    
+    // Restore selection if valid
+    if (currentAgency && filteredAgencies.includes(currentAgency)) {
+        agencyFilterEl.value = currentAgency;
+    }
+}
+
+/**
+ * Filter data based on current filters
+ */
+function getFilteredData(data) {
+    const filiale = filialeFilterEl.value;
+    const direction = directionFilterEl.value;
+    const agency = agencyFilterEl.value;
+    
+    return data.filter(item => {
+        // Filiale filter (based on email)
+        if (filiale === 'BTP Consultants' && !item.email.includes('@btp-consultants.fr')) return false;
+        if (filiale === 'Citae' && !item.email.includes('@citae.fr')) return false;
+        
+        // Direction filter
+        if (direction && item.direction !== direction) return false;
+        
+        // Agency filter
+        if (agency && item.agency !== agency) return false;
+        
+        return true;
+    });
+}
+
+/**
+ * Update Agency Table
+ */
+function updateAgencyTable() {
+    const agencyStats = {};
+    const hourlyRate = getHourlyRate();
+    
+    // Initialize stats for all available agencies
+    availableAgencies.forEach(ag => {
+        // Filter by current direction filter if active
+        const selectedDirection = directionFilterEl.value;
+        if (selectedDirection && agencyToDirection[ag] !== selectedDirection) return;
+        
+        // Filter by selected agency if active (Show only selected agency row)
+        const selectedAgency = agencyFilterEl.value;
+        if (selectedAgency && ag !== selectedAgency) return;
+        
+        agencyStats[ag] = {
+            agency: ag,
+            usersDescriptif: new Set(),
+            usersAutocontact: new Set(),
+            usersComparateur: new Set(),
+            descriptifCount: 0,
+            descriptifPotential: 0,
+            autocontactCount: 0,
+            autocontactPotential: 0,
+            comparateurCount: 0,
+            comparateurPages: 0
+        };
+    });
+    
+    // Helper to aggregate stats
+    const aggregate = (data, type) => {
+        const filtered = getFilteredData(data);
+        filtered.forEach(item => {
+            const ag = item.agency;
+            if (!ag || !agencyStats[ag]) return;
+            
+            const isBtpOrCitae = item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'));
+            
+            if (type === 'descriptif' && !item.contractNumber.toUpperCase().includes('YIELD')) {
+                agencyStats[ag].descriptifPotential++;
+                if (item.type === DESCRIPTIF_TYPE) {
+                    agencyStats[ag].descriptifCount++;
+                    if (isBtpOrCitae) agencyStats[ag].usersDescriptif.add(item.email);
+                }
+            } else if (type === 'autocontact' && !item.contractNumber.toUpperCase().includes('YIELD')) {
+                agencyStats[ag].autocontactPotential++;
+                if (item.fromAI) {
+                    agencyStats[ag].autocontactCount++;
+                    if (isBtpOrCitae) agencyStats[ag].usersAutocontact.add(item.email);
+                }
+            } else if (type === 'comparateur') {
+                agencyStats[ag].comparateurCount++;
+                agencyStats[ag].comparateurPages += (item.maxPage || 0);
+                if (isBtpOrCitae) agencyStats[ag].usersComparateur.add(item.email);
+            }
+        });
+    };
+    
+    aggregate(descriptifData, 'descriptif');
+    aggregate(autocontactData, 'autocontact');
+    aggregate(comparateurData, 'comparateur');
+    
+    // Calculate final metrics
+    let rows = Object.values(agencyStats).map(stat => {
+        // Try to get effectif directly
+        let effectif = agencyPopulation[stat.agency] || 0;
+        
+        // Debug: show what we're trying to match
+        if (effectif === 0) {
+            console.log(`Looking for agency "${stat.agency}" in population map...`);
+            console.log('Available keys in population:', Object.keys(agencyPopulation));
+            
+            // Fallback: try to find matching key (case-insensitive, trim whitespace)
+            const cleanAgency = stat.agency.trim().toUpperCase();
+            const matchingKey = Object.keys(agencyPopulation).find(k => 
+                k.trim().toUpperCase() === cleanAgency
+            );
+            
+            if (matchingKey) {
+                effectif = agencyPopulation[matchingKey];
+                console.log(`✓ Matched agency "${stat.agency}" to population key "${matchingKey}" (effectif: ${effectif})`);
+            } else {
+                console.warn(`✗ No match found for agency "${stat.agency}"`);
+            }
+        }
+        
+        // Adoption rates per tool
+        const adoptionDescriptif = effectif > 0 ? (stat.usersDescriptif.size / effectif) * 100 : 0;
+        const adoptionAutocontact = effectif > 0 ? (stat.usersAutocontact.size / effectif) * 100 : 0;
+        const adoptionComparateur = effectif > 0 ? (stat.usersComparateur.size / effectif) * 100 : 0;
+        
+        // Debug logs
+        console.log(`Agency: ${stat.agency}, Effectif: ${effectif}, Users Descriptif: ${stat.usersDescriptif.size}, Adoption Descriptif: ${adoptionDescriptif.toFixed(1)}%`);
+        
+        if (effectif === 0 && (stat.usersDescriptif.size > 0 || stat.usersAutocontact.size > 0 || stat.usersComparateur.size > 0)) {
+            console.warn(`Agency "${stat.agency}" has users but 0 effectif. Check population_cible.csv mapping.`);
+            console.warn('This agency code may not exist in population_cible.csv or has a different format.');
+        }
+        
+        // Calculate Shortfall (Manque à gagner)
+        const costPerDescriptif = (MINUTES_PER_DESCRIPTIF / 60) * hourlyRate;
+        const costPerContact = (SECONDS_PER_CONTACT / 3600) * hourlyRate;
+        
+        const descriptifGap = Math.max(0, stat.descriptifPotential - stat.descriptifCount);
+        const descriptifShortfall = descriptifGap * costPerDescriptif;
+        
+        const autocontactGap = Math.max(0, stat.autocontactPotential - stat.autocontactCount);
+        const autocontactShortfall = autocontactGap * costPerContact;
+        
+        const totalShortfall = descriptifShortfall + autocontactShortfall;
+        
+        return {
+            agency: stat.agency,
+            shortfall: totalShortfall,
+            adoptionDescriptif: adoptionDescriptif,
+            adoptionAutocontact: adoptionAutocontact,
+            adoptionComparateur: adoptionComparateur,
+            descriptifCount: stat.descriptifCount,
+            autocontactCount: stat.autocontactCount,
+            comparateurCount: stat.comparateurCount,
+            total: stat.descriptifCount + stat.autocontactCount + stat.comparateurCount
+        };
+    });
+    
+    // Sort
+    rows.sort((a, b) => {
+        const valA = a[tableSortState.column];
+        const valB = b[tableSortState.column];
+        
+        if (typeof valA === 'string') {
+            return tableSortState.ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+        return tableSortState.ascending ? valA - valB : valB - valA;
+    });
+    
+    // Render
+    agencyTableBodyEl.innerHTML = '';
+    
+    if (rows.length === 0) {
+        agencyTableBodyEl.innerHTML = `
+            <tr>
+                <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                    Aucune donnée disponible
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    rows.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        
+        const getColorClass = (rate) => {
+            if (rate >= 50) return 'text-green-600';
+            if (rate >= 20) return 'text-yellow-600';
+            return 'text-red-600';
+        };
+        
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${row.agency}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                <span class="font-medium text-red-600">${formatNumber(row.shortfall)} €</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                <div class="flex flex-col items-center justify-center">
+                    <span class="font-medium ${getColorClass(row.adoptionDescriptif)}">${row.adoptionDescriptif.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400">(${row.descriptifCount})</span>
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                <div class="flex flex-col items-center justify-center">
+                    <span class="font-medium ${getColorClass(row.adoptionAutocontact)}">${row.adoptionAutocontact.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400">(${row.autocontactCount})</span>
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                <div class="flex flex-col items-center justify-center">
+                    <span class="font-medium ${getColorClass(row.adoptionComparateur)}">${row.adoptionComparateur.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400">(${row.comparateurCount})</span>
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600 text-center">${row.total}</td>
+        `;
+        agencyTableBodyEl.appendChild(tr);
+    });
+    
+    updateSortIcons();
+}
+
+/**
+ * Sort table function
+ */
+function sortTable(column) {
+    if (tableSortState.column === column) {
+        tableSortState.ascending = !tableSortState.ascending;
+    } else {
+        tableSortState.column = column;
+        tableSortState.ascending = false;
+    }
+    updateAgencyTable();
+}
+
+function updateSortIcons() {
+    ['agency', 'shortfall', 'descriptif', 'autocontact', 'comparateur', 'total'].forEach(col => {
+        const icon = document.getElementById(`sort-icon-${col}`);
+        if (icon) {
+            if (tableSortState.column === col) {
+                icon.textContent = tableSortState.ascending ? '↑' : '↓';
+                icon.className = 'ml-1 text-blue-600';
+            } else {
+                icon.textContent = '↕';
+                icon.className = 'ml-1 text-gray-400';
+            }
+        }
+    });
 }
 
 // ==================== DATA PROCESSING ====================
@@ -432,8 +871,8 @@ function parseComparateurCSV(csvString) {
  * Process descriptif data
  */
 function processDescriptifData(data) {
-    // Filter YIELD affairs
-    const filtered = data.filter(item => 
+    // Filter YIELD affairs and apply current filters
+    const filtered = getFilteredData(data).filter(item => 
         !item.contractNumber.toUpperCase().includes('YIELD')
     );
     
@@ -476,8 +915,8 @@ function processDescriptifData(data) {
  * Process autocontact data
  */
 function processAutocontactData(data) {
-    // Filter YIELD affairs
-    const filtered = data.filter(item => 
+    // Filter YIELD affairs and apply current filters
+    const filtered = getFilteredData(data).filter(item => 
         !item.contractNumber.toUpperCase().includes('YIELD')
     );
     
@@ -524,12 +963,15 @@ function processAutocontactData(data) {
  * Process comparateur data
  */
 function processComparateurData(data) {
+    // Apply filters
+    const filtered = getFilteredData(data);
+    
     // Total comparisons
-    const totalComparisons = data.length;
+    const totalComparisons = filtered.length;
     
     // Unique users
     const uniqueUsers = new Set();
-    data.forEach(item => {
+    filtered.forEach(item => {
         if (item.email && item.email.trim() !== '') {
             uniqueUsers.add(item.email);
         }
@@ -537,7 +979,7 @@ function processComparateurData(data) {
     
     // Unique operations (contracts)
     const uniqueOperations = new Set();
-    data.forEach(item => {
+    filtered.forEach(item => {
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             uniqueOperations.add(item.contractNumber);
         }
@@ -545,7 +987,7 @@ function processComparateurData(data) {
     
     // Total pages analyzed
     let totalPages = 0;
-    data.forEach(item => {
+    filtered.forEach(item => {
         totalPages += item.maxPage || 0;
     });
     
@@ -610,11 +1052,12 @@ function updateKPIs() {
     const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.aiContacts + comparateurStats.totalComparisons;
     const allUsers = new Set();
     
-    descriptifData.filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
+    getFilteredData(descriptifData).filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
+    
     // For autocontact: filter YIELD affairs first, then filter by FromAI
-    autocontactData
+    getFilteredData(autocontactData)
         .filter(item => !item.contractNumber.toUpperCase().includes('YIELD'))
         .filter(item => item.fromAI)
         .forEach(item => {
@@ -622,7 +1065,8 @@ function updateKPIs() {
                 allUsers.add(item.email);
             }
         });
-    comparateurData.forEach(item => {
+        
+    getFilteredData(comparateurData).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
     
@@ -771,6 +1215,21 @@ async function loadData() {
         errorEl.classList.add('hidden');
         mainContentEl.classList.add('hidden');
 
+        // 1. Load Population Data (Always available, public URL)
+        console.log('Loading population data...');
+        try {
+            const popResponse = await fetch(POPULATION_URL);
+            if (popResponse.ok) {
+                const popCsv = await popResponse.text();
+                parsePopulationData(popCsv);
+            } else {
+                console.warn('Failed to load population data:', popResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading population data:', e);
+        }
+
+        // 2. Load Main Data files
         console.log('Loading descriptif data...');
         const descriptifResponse = await fetch(DESCRIPTIF_URL);
         if (!descriptifResponse.ok) {
@@ -837,8 +1296,12 @@ async function loadData() {
             console.log('Loaded', comparateurData.length, 'comparateur records');
         }
 
-        // Update KPIs
-        updateKPIs();
+        // Initialize filters and table
+        extractDirectionsAndAgencies();
+        populateFilters();
+
+        // Update Dashboard (KPIs + Table)
+        updateDashboard();
 
         // Initialize feature cards after data is loaded
         initializeFeatureCards();
@@ -887,9 +1350,21 @@ function initializeFeatureCards() {
 }
 
 /**
- * Filter cards by filiale
+ * Update Dashboard
  */
-function filterCardsByFiliale(filiale) {
+function updateDashboard() {
+    // Update KPIs (calls process...Data which uses getFilteredData)
+    updateKPIs();
+    
+    // Update Agency Table
+    updateAgencyTable();
+    
+    // Update specific cards (Chat Projet, etc.) based on Filiale filter only?
+    // Or should they respect all filters?
+    // The previous implementation only filtered by Filiale.
+    // Let's keep filtering by Filiale for these specific cards as they seem tied to specific entities (Citae/BTP)
+    
+    const filiale = filialeFilterEl.value;
     featureCards.forEach(card => {
         if (!card.element) return;
         
@@ -905,7 +1380,7 @@ function filterCardsByFiliale(filiale) {
  * Update reset button visibility
  */
 function updateResetButtonVisibility() {
-    const hasFilters = filialeFilterEl.value !== '';
+    const hasFilters = filialeFilterEl.value !== '' || directionFilterEl.value !== '' || agencyFilterEl.value !== '';
     if (hasFilters) {
         resetFiltersBtn.classList.remove('hidden');
     } else {
@@ -914,14 +1389,29 @@ function updateResetButtonVisibility() {
 }
 
 // Event listeners
-filialeFilterEl.addEventListener('change', (e) => {
-    filterCardsByFiliale(e.target.value);
+filialeFilterEl.addEventListener('change', () => {
+    updateDashboard();
+    updateResetButtonVisibility();
+});
+
+directionFilterEl.addEventListener('change', () => {
+    populateAgencyFilter();
+    updateDashboard();
+    updateResetButtonVisibility();
+});
+
+agencyFilterEl.addEventListener('change', () => {
+    updateDashboard();
     updateResetButtonVisibility();
 });
 
 resetFiltersBtn.addEventListener('click', () => {
     filialeFilterEl.value = '';
-    filterCardsByFiliale('');
+    directionFilterEl.value = '';
+    populateAgencyFilter(); // Reset agencies
+    agencyFilterEl.value = '';
+    
+    updateDashboard();
     updateResetButtonVisibility();
 });
 

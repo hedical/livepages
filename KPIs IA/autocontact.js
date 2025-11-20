@@ -12,6 +12,7 @@ let availableDRs = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
 let dateChart = null;
+let ratesChart = null;
 let tableSortState = {
     column: 'users', // Default sort by users
     ascending: false
@@ -45,9 +46,10 @@ const firstDateTextEl = document.getElementById('first-date-text');
 
 // KPI Elements
 const totalUsersEl = document.getElementById('total-users');
-const totalContactsEl = document.getElementById('total-contacts');
 const aiContactsEl = document.getElementById('ai-contacts');
 const aiContactsPercentEl = document.getElementById('ai-contacts-percent');
+const aiContactsSubtitleEl = document.getElementById('ai-contacts-subtitle');
+const totalUsagesEl = document.getElementById('total-usages');
 const totalOperationsEl = document.getElementById('total-operations');
 
 // Gains Elements
@@ -417,6 +419,7 @@ function parseCSVData(csvString) {
     let createdAtColumnIndex = -1;
     let fromAIColumnIndex = -1;
     let agencyIndex = -1;
+    let aiProjectIdIndex = -1;
     
     // Search for columns in headers
     for (let i = 0; i < headers.length; i++) {
@@ -446,7 +449,21 @@ function parseCSVData(csvString) {
             agencyIndex = i;
             console.log(`Found ProductionService at column ${i}: ${headers[i]}`);
         }
+        
+        if (aiProjectIdIndex === -1 && header.includes('aiproject') && header.includes('id')) {
+            aiProjectIdIndex = i;
+            console.log(`Found AIProject ID at column ${i}: ${headers[i]}`);
+        }
     }
+    
+    console.log('Column indices found:', {
+        contract: contractColumnIndex,
+        createdAt: createdAtColumnIndex,
+        email: btpEmailColumnIndex,
+        fromAI: fromAIColumnIndex,
+        agency: agencyIndex,
+        aiProjectId: aiProjectIdIndex
+    });
     
     // Search for BTP email column by examining data rows
     if (btpEmailColumnIndex === -1) {
@@ -495,7 +512,11 @@ function parseCSVData(csvString) {
         const contractNumber = values[contractColumnIndex] || '';
         const createdAt = values[createdAtColumnIndex] || '';
         const btpEmail = values[btpEmailColumnIndex] || '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const aiProjectId = (aiProjectIdIndex >= 0 ? values[aiProjectIdIndex] : '') || '';
+        
+        // ProductionService already contains the agency code (CT78, LYCT, etc.)
+        // No need to extract from ContractNumber
         
         // Determine FromAI value
         let fromAI = false;
@@ -505,11 +526,12 @@ function parseCSVData(csvString) {
         }
         
         parsedData.push({
-            contractNumber: contractNumber.trim(),
-            createdAt: createdAt.trim(),
-            email: btpEmail.trim(),
+            contractNumber: (contractNumber || '').trim(),
+            createdAt: (createdAt || '').trim(),
+            email: (btpEmail || '').trim(),
             fromAI: fromAI,
-            agency: agency.trim(),
+            agency: (agency || '').trim(), // agency IS the code (CT78, LYCT, etc.)
+            aiProjectId: (aiProjectId || '').trim(),
             contactCount: 1,
             aiContactCount: fromAI ? 1 : 0
         });
@@ -558,7 +580,7 @@ function filterByDR(data, dr) {
     if (!dr || dr === 'all') return data;
     return data.filter((item) => {
         if (!item.agency) return false;
-        const itemDR = agencyToDR[item.agency];
+        const itemDR = agencyToDR[item.agency]; // agency IS the code
         return itemDR === dr;
     });
 }
@@ -599,17 +621,27 @@ function processData(data, filters, skipMonthFilter = false) {
         }
     });
     
+    // Count unique AIProject IDs
+    const uniqueAIProjects = new Set();
+    filtered.forEach(item => {
+        if (item.aiProjectId && item.aiProjectId.trim() !== '') {
+            uniqueAIProjects.add(item.aiProjectId);
+        }
+    });
+    
     console.log('KPI Calculation:');
     console.log('- Total rows (excl YIELD):', totalContacts);
     console.log('- AI rows (FromAI=true):', aiContacts);
     console.log('- Unique BTP emails with AI:', usersWithAI.size);
     console.log('- Unique operations with AI:', operationsWithAI.size);
+    console.log('- Unique AIProject IDs:', uniqueAIProjects.size);
     
     return {
         totalUsers: usersWithAI.size,
         totalContacts: totalContacts,
         aiContacts: aiContacts,
         totalOperations: operationsWithAI.size,
+        totalUsages: uniqueAIProjects.size,
         filteredData: filtered
     };
 }
@@ -630,7 +662,7 @@ function getAvailableDRs(data) {
     const drs = new Set();
     data.forEach((item) => {
         if (item.agency && agencyToDR[item.agency]) {
-            drs.add(agencyToDR[item.agency]);
+            drs.add(agencyToDR[item.agency]); // agency IS the code
         }
     });
     return Array.from(drs).sort();
@@ -708,6 +740,7 @@ function updateAgencyTable(data) {
                 aiContacts: 0,
                 operations: new Set(),
                 users: new Set()
+                // No need to store agencyCode - agency IS the code
             };
         }
         
@@ -736,6 +769,7 @@ function updateAgencyTable(data) {
         
         switch (tableSortState.column) {
             case 'dr':
+                // a and b ARE the agency codes
                 const drA = agencyToDR[a] || '';
                 const drB = agencyToDR[b] || '';
                 compareResult = drA.localeCompare(drB);
@@ -753,6 +787,7 @@ function updateAgencyTable(data) {
                 compareResult = agencyStats[a].users.size - agencyStats[b].users.size;
                 break;
             case 'rate':
+                // a and b ARE the agency codes
                 const effectifA = agencyPopulation[a] || 0;
                 const effectifB = agencyPopulation[b] || 0;
                 const rateA = effectifA > 0 ? (agencyStats[a].users.size / effectifA) : 0;
@@ -783,12 +818,30 @@ function updateAgencyTable(data) {
     
     sortedAgencies.forEach((agency, index) => {
         const stats = agencyStats[agency];
+        // agency IS the agency code (from ProductionService: CT78, LYCT, etc.)
         const aiContacts = stats.aiContacts;
         const operations = stats.operations.size;
         const users = stats.users.size;
         const effectif = agencyPopulation[agency] || 0;
         const dr = agencyToDR[agency] || '-';
         const tauxUtilisation = effectif > 0 ? ((users / effectif) * 100).toFixed(1) : '-';
+        
+        // Color coding for taux utilisation
+        let tauxClass = 'text-gray-500';
+        let tauxBg = '';
+        if (effectif > 0) {
+            const rate = parseFloat(tauxUtilisation);
+            if (rate >= 70) {
+                tauxClass = 'text-white font-bold';
+                tauxBg = 'bg-green-500';
+            } else if (rate >= 40) {
+                tauxClass = 'text-white font-bold';
+                tauxBg = 'bg-yellow-500';
+            } else {
+                tauxClass = 'text-white font-bold';
+                tauxBg = 'bg-red-500';
+            }
+        }
         
         const row = document.createElement('tr');
         row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
@@ -799,8 +852,8 @@ function updateAgencyTable(data) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${aiContacts}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${operations}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${users}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm ${effectif > 0 ? 'text-blue-600 font-semibold' : 'text-gray-500'}">
-                ${effectif > 0 ? `${tauxUtilisation}%` : '-'}
+            <td class="px-6 py-4 whitespace-nowrap text-sm ${tauxClass}">
+                ${effectif > 0 ? `<span class="px-3 py-1 rounded-full ${tauxBg}">${tauxUtilisation}%</span>` : '-'}
             </td>
         `;
         
@@ -814,8 +867,8 @@ function updateKPIs() {
     const kpis = processData(allData, filters, isCumulativeMode);
     
     totalUsersEl.textContent = kpis.totalUsers;
-    totalContactsEl.textContent = kpis.totalContacts;
     aiContactsEl.textContent = kpis.aiContacts;
+    totalUsagesEl.textContent = kpis.totalUsages;
     totalOperationsEl.textContent = kpis.totalOperations;
     
     // Calculate and display AI contacts percentage
@@ -825,6 +878,9 @@ function updateKPIs() {
     } else {
         aiContactsPercentEl.textContent = '(-)';
     }
+    
+    // Update subtitle with total contacts
+    aiContactsSubtitleEl.textContent = `Parmi ${kpis.totalContacts} contacts générés`;
     
     // Update gains
     updateGains(kpis.aiContacts, kpis.totalContacts);
@@ -841,6 +897,7 @@ function updateKPIs() {
     // For chart: apply all filters except month (always show all months)
     const chartData = getChartData();
     updateChart(chartData);
+    updateRatesChart(chartData);
 }
 
 // Get data for chart (filtered by DR and Agency, but not by month)
@@ -1060,6 +1117,222 @@ function updateChart(data) {
     });
 }
 
+// Update rates chart (taux d'utilisation contacts AI et taux utilisateurs)
+function updateRatesChart(data) {
+    const monthGroups = {
+        totalContacts: {},
+        aiContacts: {},
+        users: {}
+    };
+    
+    // Count all contacts and AI contacts by month
+    data.forEach((item) => {
+        const date = parseDate(item.createdAt);
+        if (!date) return;
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const monthKey = `${year}-${month}`;
+        
+        if (!monthGroups.totalContacts[monthKey]) {
+            monthGroups.totalContacts[monthKey] = 0;
+            monthGroups.aiContacts[monthKey] = 0;
+            monthGroups.users[monthKey] = new Set();
+        }
+        
+        monthGroups.totalContacts[monthKey]++;
+        
+        if (item.fromAI === true) {
+            monthGroups.aiContacts[monthKey]++;
+            
+            if (item.email && item.email.includes('@btp-consultants.fr')) {
+                monthGroups.users[monthKey].add(item.email);
+            }
+        }
+    });
+    
+    // Sort months
+    const sortedMonths = Object.keys(monthGroups.totalContacts).sort();
+    
+    // Format month labels
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+    const formattedLabels = sortedMonths.map(monthKey => {
+        const [year, month] = monthKey.split('-');
+        const monthIndex = parseInt(month) - 1;
+        return `${monthNames[monthIndex]} ${year}`;
+    });
+    
+    // Calculate rates
+    const tauxContactsAI = sortedMonths.map((month) => {
+        const total = monthGroups.totalContacts[month] || 0;
+        const ai = monthGroups.aiContacts[month] || 0;
+        return total > 0 ? (ai / total) * 100 : 0;
+    });
+    
+    // Get total effectif for user rate calculation
+    const totalEffectif = getTotalEffectif();
+    
+    const tauxUtilisateurs = sortedMonths.map((month) => {
+        const users = monthGroups.users[month] ? monthGroups.users[month].size : 0;
+        return totalEffectif > 0 ? (users / totalEffectif) * 100 : 0;
+    });
+    
+    // Create or update chart
+    const canvas = document.getElementById('ratesChart');
+    
+    if (!canvas) {
+        console.error('Canvas element "ratesChart" not found');
+        return;
+    }
+    
+    if (ratesChart) {
+        ratesChart.destroy();
+    }
+    
+    const ctx = canvas.getContext('2d');
+    
+    ratesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: formattedLabels,
+            datasets: [
+                {
+                    label: 'Taux de contacts IA (%)',
+                    data: tauxContactsAI,
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                },
+                {
+                    label: 'Taux d\'utilisateurs (%)',
+                    data: tauxUtilisateurs,
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 13,
+                            weight: '500'
+                        },
+                        color: '#1F2937',
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleColor: '#F9FAFB',
+                    bodyColor: '#E5E7EB',
+                    borderColor: 'rgba(75, 85, 99, 0.5)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label || '';
+                        },
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ' : ';
+                            }
+                            label += context.parsed.y.toFixed(1) + '%';
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Période',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: {
+                        color: 'rgba(229, 231, 235, 0.8)',
+                        lineWidth: 1
+                    },
+                    title: {
+                        display: true,
+                        text: 'Taux (%)',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280',
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 // Event Listeners
 monthFilterEl.addEventListener('change', (e) => {
     filters.month = e.target.value;
@@ -1268,6 +1541,176 @@ async function init() {
         }
     }
 }
+
+// Records Modal Elements
+const viewRecordsBtn = document.getElementById('view-records-btn');
+const recordsModal = document.getElementById('records-modal');
+const closeRecordsModalBtn = document.getElementById('close-records-modal-btn');
+const closeRecordsModal = document.getElementById('close-records-modal');
+const recordsTableBodyEl = document.getElementById('records-table-body');
+const recordsCountEl = document.getElementById('records-count');
+const exportRecordsBtn = document.getElementById('export-records-btn');
+
+let currentRecords = [];
+
+// Format date for display
+function formatDateForDisplay(dateString) {
+    if (!dateString) return '-';
+    
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+// Show records modal with current filtered data
+function showRecordsModal() {
+    // Get the current filtered data
+    let filteredData = filterYieldAffairs(allData);
+    
+    // Apply month filter (skip if in cumulative mode)
+    if (!isCumulativeMode) {
+        filteredData = filterByMonth(filteredData, filters.month);
+    }
+    
+    // Apply DR filter
+    if (filters.dr) {
+        filteredData = filterByDR(filteredData, filters.dr);
+    }
+    
+    // Apply agency filter
+    if (filters.agence) {
+        filteredData = filterByAgence(filteredData, filters.agence);
+    }
+    
+    // Group by contract number (affaire)
+    const groupedByContract = {};
+    filteredData.forEach(item => {
+        const contract = item.contractNumber || 'Sans numéro';
+        if (!groupedByContract[contract]) {
+            groupedByContract[contract] = {
+                contractNumber: item.contractNumber,
+                createdAt: item.createdAt,
+                emails: new Set(),
+                agency: item.agency,
+                totalContacts: 0,
+                aiContacts: 0
+            };
+        }
+        groupedByContract[contract].totalContacts++;
+        if (item.fromAI) {
+            groupedByContract[contract].aiContacts++;
+        }
+        if (item.email) {
+            groupedByContract[contract].emails.add(item.email);
+        }
+    });
+    
+    // Convert to array and sort by date
+    const recordsByContract = Object.values(groupedByContract).sort((a, b) => {
+        return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+    
+    currentRecords = recordsByContract;
+    
+    // Update records count
+    recordsCountEl.textContent = recordsByContract.length;
+    
+    // Populate table
+    recordsTableBodyEl.innerHTML = '';
+    
+    if (recordsByContract.length === 0) {
+        const emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = `
+            <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                Aucun enregistrement trouvé pour les filtres sélectionnés
+            </td>
+        `;
+        recordsTableBodyEl.appendChild(emptyRow);
+    } else {
+        recordsByContract.forEach(record => {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50';
+            const emailsList = Array.from(record.emails).join(', ');
+            row.innerHTML = `
+                <td class="px-4 py-3 text-sm text-gray-900">${record.contractNumber || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">${formatDateForDisplay(record.createdAt)}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${emailsList || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">${record.agency || '-'}</td>
+                <td class="px-4 py-3 text-sm text-center">
+                    <span class="font-semibold text-green-600">${record.aiContacts}</span>
+                    <span class="text-gray-500"> / ${record.totalContacts}</span>
+                </td>
+            `;
+            recordsTableBodyEl.appendChild(row);
+        });
+    }
+    
+    // Show modal
+    recordsModal.classList.remove('hidden');
+}
+
+// Export records to CSV
+function exportRecordsToCSV() {
+    if (currentRecords.length === 0) {
+        alert('Aucun enregistrement à exporter');
+        return;
+    }
+    
+    // Create CSV content
+    const headers = ['Numéro de contrat', 'Date de diffusion', 'Email utilisateur(s)', 'Agence', 'Contacts IA', 'Total contacts'];
+    const rows = currentRecords.map(record => [
+        record.contractNumber || '',
+        record.createdAt || '',
+        Array.from(record.emails || []).join('; '),
+        record.agency || '',
+        record.aiContacts || 0,
+        record.totalContacts || 0
+    ]);
+    
+    const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `autocontact_enregistrements_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Records modal event listeners
+viewRecordsBtn.addEventListener('click', showRecordsModal);
+
+closeRecordsModalBtn.addEventListener('click', () => {
+    recordsModal.classList.add('hidden');
+});
+
+closeRecordsModal.addEventListener('click', () => {
+    recordsModal.classList.add('hidden');
+});
+
+recordsModal.addEventListener('click', (e) => {
+    if (e.target === recordsModal) {
+        recordsModal.classList.add('hidden');
+    }
+});
+
+exportRecordsBtn.addEventListener('click', exportRecordsToCSV);
 
 // Start app
 init();

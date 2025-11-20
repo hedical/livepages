@@ -13,6 +13,7 @@ let availableDRs = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
 let dateChart = null;
+let ratesChart = null;
 let tableSortState = {
     column: 'users', // Default sort by users
     ascending: false
@@ -472,14 +473,19 @@ function parseCSVData(csvString) {
         const contractNumber = values[contractIndex] || '';
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        
+        // ProductionService already contains the agency code (CT95, LYCT, etc.)
+        // Use it directly as agencyCode for mapping with population_cible
+        const agencyCode = (agency || '').trim();
         
         data.push({
-            type: type.trim(),
-            contractNumber: contractNumber.trim(),
-            createdAt: diffusedAt.trim(), // Using Report → DiffusedAt as date
-            email: email.trim(),
-            agency: agency.trim()
+            type: (type || '').trim(),
+            contractNumber: (contractNumber || '').trim(),
+            createdAt: (diffusedAt || '').trim(), // Using Report → DiffusedAt as date
+            email: (email || '').trim(),
+            agency: (agency || '').trim(),
+            agencyCode: agencyCode // Same as agency - ProductionService is the code
         });
     }
     
@@ -559,8 +565,8 @@ function filterByAgence(data, agence) {
 function filterByDR(data, dr) {
     if (!dr || dr === 'all') return data;
     return data.filter((item) => {
-        if (!item.agency) return false;
-        const itemDR = agencyToDR[item.agency];
+        if (!item.agencyCode) return false;
+        const itemDR = agencyToDR[item.agencyCode];
         return itemDR === dr;
     });
 }
@@ -624,8 +630,8 @@ function getAvailableAgencies(data) {
 function getAvailableDRs(data) {
     const drs = new Set();
     data.forEach((item) => {
-        if (item.agency && agencyToDR[item.agency]) {
-            drs.add(agencyToDR[item.agency]);
+        if (item.agencyCode && agencyToDR[item.agencyCode]) {
+            drs.add(agencyToDR[item.agencyCode]);
         }
     });
     return Array.from(drs).sort();
@@ -696,12 +702,13 @@ function updateAgencyTable(allRictData, descriptifData) {
     const agencyStats = {};
     
     // Initialize structure for all agencies
-    const initAgency = (agency) => {
+    const initAgency = (agency, agencyCode) => {
         if (!agencyStats[agency]) {
             agencyStats[agency] = {
                 totalRict: 0,
                 operations: new Set(),
-                users: new Set()
+                users: new Set(),
+                agencyCode: agencyCode
             };
         }
     };
@@ -709,14 +716,14 @@ function updateAgencyTable(allRictData, descriptifData) {
     // Count total RICT per agency
     allRictData.forEach(item => {
         if (!item.agency) return;
-        initAgency(item.agency);
+        initAgency(item.agency, item.agencyCode);
         agencyStats[item.agency].totalRict++;
     });
     
     // Count descriptifs effectifs and users per agency
     descriptifData.forEach(item => {
         if (!item.agency) return;
-        initAgency(item.agency);
+        initAgency(item.agency, item.agencyCode);
         
         if (item.email && item.email.trim() !== '') {
             agencyStats[item.agency].users.add(item.email);
@@ -736,8 +743,10 @@ function updateAgencyTable(allRictData, descriptifData) {
         
         switch (tableSortState.column) {
             case 'dr':
-                const drA = agencyToDR[a] || '';
-                const drB = agencyToDR[b] || '';
+                const codeA = agencyStats[a].agencyCode;
+                const codeB = agencyStats[b].agencyCode;
+                const drA = codeA ? agencyToDR[codeA] || '' : '';
+                const drB = codeB ? agencyToDR[codeB] || '' : '';
                 compareResult = drA.localeCompare(drB);
                 break;
             case 'agency':
@@ -760,8 +769,10 @@ function updateAgencyTable(allRictData, descriptifData) {
                 compareResult = rateDescA - rateDescB;
                 break;
             case 'rateUsers':
-                const effectifA = agencyPopulation[a] || 0;
-                const effectifB = agencyPopulation[b] || 0;
+                const agencyCodeA = agencyStats[a].agencyCode;
+                const agencyCodeB = agencyStats[b].agencyCode;
+                const effectifA = agencyCodeA ? agencyPopulation[agencyCodeA] || 0 : 0;
+                const effectifB = agencyCodeB ? agencyPopulation[agencyCodeB] || 0 : 0;
                 const rateUsersA = effectifA > 0 ? (agencyStats[a].users.size / effectifA) : 0;
                 const rateUsersB = effectifB > 0 ? (agencyStats[b].users.size / effectifB) : 0;
                 compareResult = rateUsersA - rateUsersB;
@@ -790,20 +801,55 @@ function updateAgencyTable(allRictData, descriptifData) {
     
     sortedAgencies.forEach((agency, index) => {
         const stats = agencyStats[agency];
+        const agencyCode = stats.agencyCode;
         const totalRict = stats.totalRict || 0;
         const operations = stats.operations.size;
         const users = stats.users.size;
-        const effectif = agencyPopulation[agency] || 0;
-        const dr = agencyToDR[agency] || '-';
+        const effectif = agencyCode ? agencyPopulation[agencyCode] || 0 : 0;
+        const dr = agencyCode ? agencyToDR[agencyCode] || '-' : '-';
         
         // Taux d'utilisation descriptifs: operations / totalRict
         const tauxDescriptifs = totalRict > 0 ? ((operations / totalRict) * 100).toFixed(1) : '-';
         
-        // Taux d'utilisation utilisateurs: users / effectif
+        // Taux d'adoption: users / effectif
         const tauxUsers = effectif > 0 ? ((users / effectif) * 100).toFixed(1) : '-';
         
         const row = document.createElement('tr');
         row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        
+        // Color coding for taux descriptifs
+        let tauxDescriptifsClass = 'text-gray-500';
+        let tauxDescriptifsBg = '';
+        if (totalRict > 0) {
+            const rate = parseFloat(tauxDescriptifs);
+            if (rate >= 70) {
+                tauxDescriptifsClass = 'text-white font-bold';
+                tauxDescriptifsBg = 'bg-green-500';
+            } else if (rate >= 40) {
+                tauxDescriptifsClass = 'text-white font-bold';
+                tauxDescriptifsBg = 'bg-yellow-500';
+            } else {
+                tauxDescriptifsClass = 'text-white font-bold';
+                tauxDescriptifsBg = 'bg-red-500';
+            }
+        }
+        
+        // Color coding for taux users
+        let tauxUsersClass = 'text-gray-500';
+        let tauxUsersBg = '';
+        if (effectif > 0) {
+            const rate = parseFloat(tauxUsers);
+            if (rate >= 70) {
+                tauxUsersClass = 'text-white font-bold';
+                tauxUsersBg = 'bg-green-500';
+            } else if (rate >= 40) {
+                tauxUsersClass = 'text-white font-bold';
+                tauxUsersBg = 'bg-yellow-500';
+            } else {
+                tauxUsersClass = 'text-white font-bold';
+                tauxUsersBg = 'bg-red-500';
+            }
+        }
         
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${dr}</td>
@@ -811,11 +857,11 @@ function updateAgencyTable(allRictData, descriptifData) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${totalRict}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${operations}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${users}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm ${totalRict > 0 ? 'text-green-600 font-semibold' : 'text-gray-500'}">
-                ${totalRict > 0 ? `${tauxDescriptifs}%` : '-'}
+            <td class="px-6 py-4 whitespace-nowrap text-sm ${tauxDescriptifsClass}">
+                ${totalRict > 0 ? `<span class="px-3 py-1 rounded-full ${tauxDescriptifsBg}">${tauxDescriptifs}%</span>` : '-'}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm ${effectif > 0 ? 'text-blue-600 font-semibold' : 'text-gray-500'}">
-                ${effectif > 0 ? `${tauxUsers}%` : '-'}
+            <td class="px-6 py-4 whitespace-nowrap text-sm ${tauxUsersClass}">
+                ${effectif > 0 ? `<span class="px-3 py-1 rounded-full ${tauxUsersBg}">${tauxUsers}%</span>` : '-'}
             </td>
         `;
         
@@ -871,6 +917,7 @@ function updateKPIs() {
     // For chart: apply all filters except month (always show all months)
     const chartData = getChartData();
     updateChart(chartData);
+    updateRatesChart(chartData);
 }
 
 // Get data for chart (filtered by DR and Agency, but not by month or type)
@@ -1121,6 +1168,258 @@ function updateChart(data) {
                         },
                         color: '#6B7280',
                         precision: 0
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Update rates chart (taux d'utilisation descriptifs et taux d'adoption)
+function updateRatesChart(data) {
+    const monthGroups = {
+        rict: {},
+        operations: {},
+        users: {}
+    };
+    
+    // Count all RICT by month
+    data.all.forEach((item) => {
+        const date = parseDate(item.createdAt);
+        if (!date) return;
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const monthKey = `${year}-${month}`;
+        
+        if (!monthGroups.rict[monthKey]) {
+            monthGroups.rict[monthKey] = 0;
+        }
+        
+        monthGroups.rict[monthKey]++;
+    });
+    
+    // Count unique operations (descriptifs effectifs) and users by month
+    data.descriptifs.forEach((item) => {
+        const date = parseDate(item.createdAt);
+        if (!date) return;
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const monthKey = `${year}-${month}`;
+        
+        if (!monthGroups.operations[monthKey]) {
+            monthGroups.operations[monthKey] = new Set();
+        }
+        if (!monthGroups.users[monthKey]) {
+            monthGroups.users[monthKey] = new Set();
+        }
+        
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            monthGroups.operations[monthKey].add(item.contractNumber);
+        }
+        if (item.email && item.email.trim() !== '') {
+            monthGroups.users[monthKey].add(item.email);
+        }
+    });
+    
+    // Get all unique months
+    const allMonths = new Set([
+        ...Object.keys(monthGroups.rict),
+        ...Object.keys(monthGroups.operations)
+    ]);
+    
+    // Sort months
+    const sortedMonths = Array.from(allMonths).sort();
+    
+    // Format month labels
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+    const formattedLabels = sortedMonths.map(monthKey => {
+        const [year, month] = monthKey.split('-');
+        const monthIndex = parseInt(month) - 1;
+        return `${monthNames[monthIndex]} ${year}`;
+    });
+    
+    // Calculate rates
+    const tauxDescriptifs = sortedMonths.map((month) => {
+        const rict = monthGroups.rict[month] || 0;
+        const ops = monthGroups.operations[month] ? monthGroups.operations[month].size : 0;
+        return rict > 0 ? (ops / rict) * 100 : 0;
+    });
+    
+    // Get effectif for agencies present in the filtered data
+    const agenciesInData = new Set();
+    data.all.forEach(item => {
+        if (item.agencyCode) {
+            agenciesInData.add(item.agencyCode);
+        }
+    });
+    
+    // Calculate total effectif only for agencies in filtered data
+    let totalEffectif = 0;
+    agenciesInData.forEach(agencyCode => {
+        totalEffectif += agencyPopulation[agencyCode] || 0;
+    });
+    
+    console.log('Chart - Agencies in data:', Array.from(agenciesInData));
+    console.log('Chart - Total effectif for filtered agencies:', totalEffectif);
+    
+    const tauxUtilisateurs = sortedMonths.map((month) => {
+        const users = monthGroups.users[month] ? monthGroups.users[month].size : 0;
+        const rate = totalEffectif > 0 ? (users / totalEffectif) * 100 : 0;
+        console.log(`Chart - Month ${month}: ${users} users / ${totalEffectif} effectif = ${rate.toFixed(1)}%`);
+        return rate;
+    });
+    
+    // Create or update chart
+    const canvas = document.getElementById('ratesChart');
+    
+    if (!canvas) {
+        console.error('Canvas element "ratesChart" not found');
+        return;
+    }
+    
+    if (ratesChart) {
+        ratesChart.destroy();
+    }
+    
+    const ctx = canvas.getContext('2d');
+    
+    ratesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: formattedLabels,
+            datasets: [
+                {
+                    label: 'Taux d\'utilisation descriptifs (%)',
+                    data: tauxDescriptifs,
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                },
+                {
+                    label: 'Taux d\'adoption (%)',
+                    data: tauxUtilisateurs,
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 2.5,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 13,
+                            weight: '500'
+                        },
+                        color: '#1F2937',
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleColor: '#F9FAFB',
+                    bodyColor: '#E5E7EB',
+                    borderColor: 'rgba(75, 85, 99, 0.5)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label || '';
+                        },
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ' : ';
+                            }
+                            label += context.parsed.y.toFixed(1) + '%';
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Période',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: {
+                        color: 'rgba(229, 231, 235, 0.8)',
+                        lineWidth: 1
+                    },
+                    title: {
+                        display: true,
+                        text: 'Taux (%)',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        color: '#374151'
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        color: '#6B7280',
+                        callback: function(value) {
+                            return value + '%';
+                        }
                     }
                 }
             }

@@ -8,6 +8,7 @@ let DATA_URL = '';
 let allContacts = [];
 let filteredContacts = [];
 let availablePositions = [];
+let positionChart = null;
 
 // Filters
 const filters = {
@@ -203,6 +204,7 @@ function applyFilters() {
     
     renderTable();
     updateStats();
+    updatePositionChart();
 }
 
 // Render table
@@ -243,6 +245,132 @@ function renderTable() {
 function updateStats() {
     filteredCountEl.textContent = filteredContacts.length;
     totalCountEl.textContent = allContacts.length;
+}
+
+// Update position chart
+function updatePositionChart() {
+    console.log('Updating position chart...');
+    console.log('Filtered contacts count:', filteredContacts.length);
+    
+    // Check if Chart is available
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded yet');
+        return;
+    }
+    
+    // Check if canvas exists
+    const canvas = document.getElementById('positionChart');
+    if (!canvas) {
+        console.error('Canvas element not found');
+        return;
+    }
+    
+    // Count contacts by position
+    const positionCounts = {};
+    filteredContacts.forEach(contact => {
+        const position = contact.position || 'Non spécifié';
+        positionCounts[position] = (positionCounts[position] || 0) + 1;
+    });
+    
+    console.log('Position counts:', positionCounts);
+    
+    // Sort by count descending
+    const sortedPositions = Object.entries(positionCounts)
+        .sort((a, b) => b[1] - a[1]);
+    
+    const labels = sortedPositions.map(([position]) => position);
+    const data = sortedPositions.map(([, count]) => count);
+    
+    console.log('Chart labels:', labels);
+    console.log('Chart data:', data);
+    
+    if (labels.length === 0) {
+        console.warn('No data to display in chart');
+        return;
+    }
+    
+    // Generate colors
+    const colors = [
+        '#3b82f6', // blue-500
+        '#10b981', // green-500
+        '#f59e0b', // amber-500
+        '#ef4444', // red-500
+        '#8b5cf6', // violet-500
+        '#ec4899', // pink-500
+        '#06b6d4', // cyan-500
+        '#f97316', // orange-500
+        '#14b8a6', // teal-500
+        '#a855f7', // purple-500
+    ];
+    
+    const backgroundColors = sortedPositions.map((_, index) => colors[index % colors.length]);
+    
+    // Destroy existing chart if it exists
+    if (positionChart) {
+        positionChart.destroy();
+    }
+    
+    try {
+        // Create new chart
+        positionChart = new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: '#ffffff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        padding: 15,
+                        font: {
+                            size: 12
+                        },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => {
+                                    const value = data.datasets[0].data[i];
+                                    const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return {
+                                        text: `${label} (${value} - ${percentage}%)`,
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        hidden: false,
+                                        index: i
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} contacts (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+        console.log('Chart created successfully');
+    } catch (error) {
+        console.error('Error creating chart:', error);
+    }
 }
 
 // Format date
@@ -453,6 +581,11 @@ async function init() {
         // Show main content
         loadingEl.classList.add('hidden');
         mainContentEl.classList.remove('hidden');
+        
+        // Update chart after a small delay to ensure everything is loaded
+        setTimeout(() => {
+            updatePositionChart();
+        }, 100);
     } catch (error) {
         console.error('Error loading data:', error);
         loadingEl.classList.add('hidden');

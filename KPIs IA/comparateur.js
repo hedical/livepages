@@ -509,16 +509,20 @@ function parseCSVData(csvString) {
         const createdAt = createdAtIndex >= 0 ? values[createdAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const longResult = longResultIndex >= 0 ? values[longResultIndex] : '';
-        const agency = agencyIndex >= 0 ? values[agencyIndex] : '';
+        const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        
+        // Extract agency code from contract number using the global function
+        const agencyCode = extractAgency(contractNumber);
         
         // Extract max page from LongResult
         const maxPage = extractMaxPage(longResult);
         
         data.push({
-            contractNumber: contractNumber.trim(),
-            createdAt: createdAt.trim(),
-            email: email.trim(),
-            agency: agency.trim(),
+            contractNumber: (contractNumber || '').trim(),
+            createdAt: (createdAt || '').trim(),
+            email: (email || '').trim(),
+            agency: (agency || '').trim(),
+            agencyCode: agencyCode,
             maxPage: maxPage
         });
     }
@@ -571,8 +575,8 @@ function filterByAgence(data, agence) {
 function filterByDR(data, dr) {
     if (!dr || dr === 'all') return data;
     return data.filter((item) => {
-        if (!item.agency) return false;
-        const itemDR = agencyToDR[item.agency];
+        if (!item.agencyCode) return false;
+        const itemDR = agencyToDR[item.agencyCode];
         return itemDR === dr;
     });
 }
@@ -631,8 +635,8 @@ function getAvailableAgencies(data) {
 function getAvailableDRs(data) {
     const drs = new Set();
     data.forEach((item) => {
-        if (item.agency && agencyToDR[item.agency]) {
-            drs.add(agencyToDR[item.agency]);
+        if (item.agencyCode && agencyToDR[item.agencyCode]) {
+            drs.add(agencyToDR[item.agencyCode]);
         }
     });
     return Array.from(drs).sort();
@@ -710,7 +714,8 @@ function updateAgencyTable(data) {
                 comparisons: 0,
                 pages: 0,
                 operations: new Set(),
-                users: new Set()
+                users: new Set(),
+                agencyCode: item.agencyCode
             };
         }
         
@@ -735,8 +740,10 @@ function updateAgencyTable(data) {
         
         switch (tableSortState.column) {
             case 'dr':
-                const drA = agencyToDR[a] || '';
-                const drB = agencyToDR[b] || '';
+                const codeA = agencyStats[a].agencyCode;
+                const codeB = agencyStats[b].agencyCode;
+                const drA = codeA ? agencyToDR[codeA] || '' : '';
+                const drB = codeB ? agencyToDR[codeB] || '' : '';
                 compareResult = drA.localeCompare(drB);
                 break;
             case 'agency':
@@ -755,8 +762,10 @@ function updateAgencyTable(data) {
                 compareResult = agencyStats[a].users.size - agencyStats[b].users.size;
                 break;
             case 'rate':
-                const effectifA = agencyPopulation[a] || 0;
-                const effectifB = agencyPopulation[b] || 0;
+                const agencyCodeA = agencyStats[a].agencyCode;
+                const agencyCodeB = agencyStats[b].agencyCode;
+                const effectifA = agencyCodeA ? agencyPopulation[agencyCodeA] || 0 : 0;
+                const effectifB = agencyCodeB ? agencyPopulation[agencyCodeB] || 0 : 0;
                 const rateA = effectifA > 0 ? (agencyStats[a].users.size / effectifA) : 0;
                 const rateB = effectifB > 0 ? (agencyStats[b].users.size / effectifB) : 0;
                 compareResult = rateA - rateB;
@@ -785,12 +794,13 @@ function updateAgencyTable(data) {
     
     sortedAgencies.forEach((agency, index) => {
         const stats = agencyStats[agency];
+        const agencyCode = stats.agencyCode;
         const comparisons = stats.comparisons;
         const pages = stats.pages;
         const operations = stats.operations.size;
         const users = stats.users.size;
-        const effectif = agencyPopulation[agency] || 0;
-        const dr = agencyToDR[agency] || '-';
+        const effectif = agencyCode ? agencyPopulation[agencyCode] || 0 : 0;
+        const dr = agencyCode ? agencyToDR[agencyCode] || '-' : '-';
         const tauxUtilisation = effectif > 0 ? ((users / effectif) * 100).toFixed(1) : '-';
         
         const row = document.createElement('tr');
