@@ -3,440 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnalyzTech - KPIs IA Groupe BTP Consultants</title>
+    <title>Tableau de Bord et prototypes </title>
+    <!-- Intégration de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Intégration de Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: #f8fafc;
+        body { font-family: 'Inter', sans-serif; }
+        .main-bg {
+            background-color: #f0f2f5;
+            background-image:
+                radial-gradient(at 40% 20%, hsla(28,100%,74%,1) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, hsla(189,100%,56%,1) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, hsla(355,100%,93%,1) 0px, transparent 50%),
+                radial-gradient(at 80% 50%, hsla(340,100%,76%,1) 0px, transparent 50%),
+                radial-gradient(at 0% 100%, hsla(22,100%,77%,1) 0px, transparent 50%),
+                radial-gradient(at 80% 100%, hsla(242,100%,70%,1) 0px, transparent 50%),
+                radial-gradient(at 0% 0%, hsla(343,100%,76%,1) 0px, transparent 50%);
         }
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body>
-    <div class="min-h-screen bg-gray-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <!-- Header -->
-            <div class="mb-10">
-                <div class="flex items-center justify-between mb-4">
-                    <div>
-                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
-                            AnalyzTech - KPIs IA Groupe BTP Consultants
-                        </h1>
-                        <p class="text-gray-500 text-sm">Tableau de bord d'utilisation des fonctionnalités IA</p>
-                    </div>
-                    <div class="flex gap-3">
-                        <button
-                            id="refresh-data-btn"
-                            class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            <span id="refresh-text">Rafraîchir les données</span>
-                        </button>
-                        <button
-                            id="logout-btn"
-                            class="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg shadow-sm transition-all duration-200 flex items-center gap-2"
-                            title="Se déconnecter"
-                        >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
-                            Déconnexion
-                        </button>
-                    </div>
-                </div>
-            </div>
+<body class="main-bg">
 
-            <!-- Login Modal -->
-            <div id="login-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-                <div class="relative p-8 bg-white w-full max-w-md m-auto rounded-lg shadow-lg">
-                    <div class="text-center">
-                        <h3 class="text-2xl font-bold text-gray-900 mb-2">Accès sécurisé</h3>
-                        <p class="text-gray-600 mb-6">Veuillez entrer le mot de passe pour accéder aux données</p>
-                        
-                        <form id="login-form" class="space-y-4">
-                            <div>
-                                <input
-                                    type="password"
-                                    id="password-input"
-                                    placeholder="Mot de passe"
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    required
-                                />
-                            </div>
-                            
-                            <div id="login-error" class="hidden text-red-600 text-sm">
-                                Mot de passe incorrect
-                            </div>
-                            
-                            <button
-                                type="submit"
-                                id="login-button"
-                                class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <span id="login-text">Se connecter</span>
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
+    <div class="min-h-screen flex flex-col items-center p-4">
+        
+        <header class="text-center mb-8 w-full max-w-5xl">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Pages disponibles</h1>
+            <p class="text-gray-600 mt-2 text-lg">Projets, Dashboards et prototypes</p>
+        </header>
 
-            <!-- Loading State -->
-            <div id="loading" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
-                <div class="text-center">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p class="mt-4 text-gray-600">Chargement des données...</p>
-                </div>
-            </div>
+        <!-- Barre de navigation (pour le retour en arrière) -->
+        <nav id="navigation" class="w-full max-w-5xl mb-8"></nav>
 
-            <!-- Error State -->
-            <div id="error" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
-                <div class="text-center">
-                    <p class="text-red-600 text-lg">Erreur lors du chargement des données</p>
-                </div>
-            </div>
-
-            <!-- Main Content -->
-            <div id="main-content" class="hidden">
-                <!-- Filters -->
-                <div class="mb-8">
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-                        <!-- Date Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
-                                Filtrer par période
-                            </label>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-2">Date de début</label>
-                                    <input
-                                        type="date"
-                                        id="start-date"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-2">Date de fin</label>
-                                    <input
-                                        type="date"
-                                        id="end-date"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Filiale Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
-                                Filtrer par filiale
-                            </label>
-                            <select
-                                id="filiale-filter"
-                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="">Toutes les filiales</option>
-                                <option value="BTP Consultants">BTP Consultants</option>
-                                <option value="Citae">Citae</option>
-                            </select>
-                        </div>
-
-                        <!-- Direction & Agency Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
-                                Filtrer par organisation
-                            </label>
-                            <div class="grid grid-cols-1 gap-4">
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Direction Régionale</label>
-                                    <select
-                                        id="direction-filter"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
-                                    >
-                                        <option value="">Toutes les directions</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Agence</label>
-                                    <select
-                                        id="agency-filter"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    >
-                                        <option value="">Toutes les agences</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <button
-                        id="reset-filters"
-                        class="hidden px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                    >
-                        Réinitialiser les filtres
-                    </button>
-                </div>
-
-                <!-- General KPIs -->
-                <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs généraux</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <!-- Total Utilisations -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Utilisation totales des fonctionnalités IA</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="total-utilisations">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Nombre total d'utilisations</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Gain Total Heures -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Gain total estimé en heures</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="gain-heures">0</p>
-                                    <p class="text-xs text-gray-400 mt-1" id="gain-subtitle">Heures économisées</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Total Users -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Nombre total d'utilisateurs</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="total-users">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Utilisateurs uniques</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Feature-specific KPIs -->
-                <div>
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs par fonctionnalité</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <!-- Descriptif Sommaire -->
-                        <a href="descriptif.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Descriptif sommaire des travaux</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="descriptif-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="descriptif-ops">0</strong> descriptifs effectifs générés</p>
-                                <p>Sur un total de <strong id="descriptif-total-rict">0</strong> RICT</p>
-                                <p>Avec <strong id="descriptif-users">0</strong> utilisateurs uniques</p>
-                            </div>
-                        </a>
-
-                        <!-- Auto Contacts -->
-                        <a href="autocontact.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Auto Contacts</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="autocontact-ops">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="autocontact-ai-contacts">0</strong> contacts générés par IA</p>
-                                <p>Sur un total de <strong id="autocontact-total-contacts">0</strong> contacts</p>
-                                <p>Avec <strong id="autocontact-users">0</strong> utilisateurs uniques</p>
-                            </div>
-                        </a>
-
-                        <!-- Comparateur Indices -->
-                        <a href="comparateur.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Comparateur d'indices</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="comparateur-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="comparateur-ops">0</strong> opérations</p>
-                                <p>Sur un total de <strong id="comparateur-pages">0</strong> pages analysées</p>
-                                <p>Avec <strong id="comparateur-users">0</strong> utilisateurs uniques</p>
-                            </div>
-                        </a>
-
-                        <!-- Chat Projet (BTP Consultants) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="chat-projet-btp-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="chat-projet-btp-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </div>
-
-                        <!-- Expert Technique (BTP Consultants) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="expert-tech-btp-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="expert-tech-btp-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </div>
-
-                        <!-- Analyse Géotechnique (BTP Consultants) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Analyse géotechnique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="analyse-geo-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="analyse-geo-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </div>
-
-                        <!-- Chat Projet (Citae) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="chat-projet-citae-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="chat-projet-citae-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </div>
-
-                        <!-- Expert Technique (Citae) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="expert-tech-citae-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="expert-tech-citae-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </div>
-
-                        <!-- NF Habitat (Citae) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">NF Habitat</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
-                            </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="nf-habitat-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
-                            </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="nf-habitat-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Agency Detail Table -->
-                <div class="mb-10">
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                            <h3 class="text-lg font-semibold text-gray-900">Détail par Agence</h3>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
-                                            <div class="flex items-center">
-                                                Agence
-                                                <span id="sort-icon-agency" class="ml-1 text-gray-400">↕</span>
-                                            </div>
-                                        </th>
-                                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('shortfall')">
-                                            <div class="flex items-center justify-center">
-                                                Manque à gagner
-                                                <span id="sort-icon-shortfall" class="ml-1 text-gray-400">↕</span>
-                                            </div>
-                                        </th>
-                                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('descriptif')">
-                                            <div class="flex items-center justify-center">
-                                                Taux Descriptif
-                                                <span id="sort-icon-descriptif" class="ml-1 text-gray-400">↕</span>
-                                            </div>
-                                        </th>
-                                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('autocontact')">
-                                            <div class="flex items-center justify-center">
-                                                Taux Auto Contact
-                                                <span id="sort-icon-autocontact" class="ml-1 text-gray-400">↕</span>
-                                            </div>
-                                        </th>
-                                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('comparateur')">
-                                            <div class="flex items-center justify-center">
-                                                Taux Comparateur
-                                                <span id="sort-icon-comparateur" class="ml-1 text-gray-400">↕</span>
-                                            </div>
-                                        </th>
-                                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('total')">
-                                            <div class="flex items-center justify-center">
-                                                Total Utilisations
-                                                <span id="sort-icon-total" class="ml-1 text-blue-600">↓</span>
-                                            </div>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody id="agency-table-body" class="bg-white divide-y divide-gray-200">
-                                    <!-- Rows will be populated by JS -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Conteneur de la grille qui sera rempli par JavaScript -->
+        <main id="pages-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 w-full max-w-5xl min-h-[200px] flex items-center justify-center">
+            <!-- Le contenu (cartes ou loader) sera injecté ici -->
+            <div class="loader"></div>
+        </main>
+        
+        <footer class="text-center mt-12 text-gray-500">
+            <p>Contenu chargé dynamiquement depuis GitHub</p>
+        </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        // --- Configuration GitHub ---
+        const GITHUB_USER = 'hedical';
+        const GITHUB_REPO = 'livepages';
+
+        // --- Logique de navigation et d'affichage ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            const grid = document.getElementById('pages-grid');
+            const nav = document.getElementById('navigation');
+
+            // Récupérer le chemin du dossier depuis l'URL (ex: ?path=agency)
+            const urlParams = new URLSearchParams(window.location.search);
+            const path = urlParams.get('path') || '';
+
+            // Mettre à jour la barre de navigation (le fil d'Ariane)
+            updateNavigation(path);
+
+            const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`;
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error(`Erreur réseau : ${response.statusText}`);
+                }
+                const data = await response.json();
+
+                // Filtrer pour ne garder que les fichiers pertinents
+                const items = data.filter(item => {
+                    if (item.type === 'dir') return true;
+                    if (item.type === 'file') {
+                        const nameLower = item.name.toLowerCase();
+                        // Exclure les fichiers cachés (commençant par un point)
+                        if (nameLower.startsWith('.')) return false;
+                        // Inclure les fichiers .html
+                        if (nameLower.endsWith('.html')) return true;
+                        // Inclure les fichiers sans extension (comme 'chatmanager')
+                        if (!nameLower.includes('.')) return true;
+                    }
+                    return false;
+                });
+
+                // À la racine, on ne veut pas afficher le lien vers index.html lui-même
+                const finalItems = (path === '')
+                    ? items.filter(item => item.name.toLowerCase() !== 'index.html')
+                    : items;
+
+                // Vider la grille (supprimer le loader)
+                grid.innerHTML = '';
+                grid.classList.remove('flex', 'items-center', 'justify-center');
+
+                if (finalItems.length === 0) {
+                    grid.innerHTML = `<p class="text-center text-gray-500 col-span-full">Ce dossier est vide ou ne contient aucune page HTML.</p>`;
+                    return;
+                }
+
+                // Créer une carte pour chaque élément trouvé
+                finalItems.forEach(item => {
+                    const isDir = item.type === 'dir';
+                    // Correction du titre pour ne pas laisser un ".html" orphelin si pas d'extension
+                    const title = item.name.toLowerCase().endsWith('.html') 
+                        ? item.name.slice(0, -5).replace(/-/g, ' ').replace(/_/g, ' ')
+                        : item.name.replace(/-/g, ' ').replace(/_/g, ' ');
+                    
+                    // Si c'est un dossier, le lien recharge la page avec le nouveau chemin.
+                    // Si c'est un fichier, le lien pointe directement vers le fichier.
+                    const href = isDir ? `?path=${item.path}` : `./${item.path}`;
+
+                    const icon = isDir 
+                        ? `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8 text-amber-500"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>` 
+                        : `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8 text-sky-500"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
+
+                    const cardHTML = `
+                    <a href="${href}" class="group block bg-white/70 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 ease-in-out">
+                        <div class="flex items-center mb-4">
+                            <div class="bg-white p-3 rounded-full shadow-md mr-4">${icon}</div>
+                            <h2 class="text-xl font-bold text-gray-800" style="text-transform: capitalize;">${title}</h2>
+                        </div>
+                        <p class="text-gray-600 mb-4">Cliquer pour ${isDir ? "explorer le dossier" : "ouvrir la page"} <span class="font-semibold">${item.name}</span>.</p>
+                        <div class="flex justify-end items-center text-indigo-600 font-semibold">
+                            ${isDir ? "Explorer" : "Visiter"}
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 ml-2 transform group-hover:translate-x-1 transition-transform duration-300"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        </div>
+                    </a>`;
+                    grid.innerHTML += cardHTML;
+                });
+
+            } catch (error) {
+                grid.innerHTML = `<p class="text-center text-red-500 col-span-full">Impossible de charger les projets depuis GitHub. Vérifiez la configuration et la console.</p>`;
+                console.error('Erreur lors de la récupération des données depuis GitHub:', error);
+            }
+        });
+
+        function updateNavigation(currentPath) {
+            const nav = document.getElementById('navigation');
+            if (!currentPath) {
+                nav.innerHTML = '';
+                return;
+            }
+
+            const pathParts = currentPath.split('/').filter(p => p);
+            const parentPath = pathParts.slice(0, -1).join('/');
+
+            const backUrl = parentPath ? `?path=${parentPath}` : './index.html';
+
+            nav.innerHTML = `
+            <div class="flex items-center space-x-4 bg-white/60 backdrop-blur-sm p-3 rounded-xl shadow-sm">
+                <a href="${backUrl}" class="flex items-center text-indigo-600 hover:text-indigo-800 font-semibold transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2"><path d="m15 18-6-6 6-6"/></svg>
+                    Retour
+                </a>
+                <span class="text-gray-400">/</span>
+                <span class="text-gray-700 font-medium break-all">
+                    ${currentPath}
+                </span>
+            </div>`;
+        }
+    </script>
 </body>
 </html>
