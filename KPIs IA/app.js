@@ -38,11 +38,18 @@ let tableSortState = {
     column: 'total',
     ascending: false
 };
+let dateFilter = {
+    startDate: null,
+    endDate: null
+};
 
 // DOM Elements
 const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 const mainContentEl = document.getElementById('main-content');
+const startDateEl = document.getElementById('start-date');
+const endDateEl = document.getElementById('end-date');
+const applyDateFilterBtn = document.getElementById('apply-date-filter');
 const filialeFilterEl = document.getElementById('filiale-filter');
 const directionFilterEl = document.getElementById('direction-filter');
 const agencyFilterEl = document.getElementById('agency-filter');
@@ -139,18 +146,27 @@ function parseFrenchDate(dateString) {
     // If that fails, try French format
     if (isNaN(date.getTime())) {
         const months = {
-            'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
-            'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11
+            'janvier': 0, 'février': 1, 'fevrier': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+            'juillet': 6, 'août': 7, 'aout': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11, 'decembre': 11
         };
         
-        const match = cleanDate.match(/(\d+)\s+(\w+),?\s+(\d{4})/);
+        // Match with optional time part: "DD Month, YYYY" or "DD Month, YYYY, HH:MM"
+        const match = cleanDate.match(/(\d+)\s+([a-zàâäéèêëïôùûü]+)[,\s]+(\d{4})/i);
         if (match) {
             const day = parseInt(match[1]);
-            const monthName = match[2].toLowerCase();
+            const monthName = match[2].toLowerCase().trim();
             const year = parseInt(match[3]);
             
             if (months[monthName] !== undefined) {
                 date = new Date(year, months[monthName], day);
+                
+                // Try to parse time if present
+                const timeMatch = cleanDate.match(/(\d{1,2}):(\d{2})/);
+                if (timeMatch) {
+                    const hours = parseInt(timeMatch[1]);
+                    const minutes = parseInt(timeMatch[2]);
+                    date.setHours(hours, minutes, 0, 0);
+                }
             }
         }
     }
@@ -640,6 +656,24 @@ function getFilteredData(data) {
         
         // Agency filter
         if (agency && item.agency !== agency) return false;
+        
+        // Date filter
+        if (dateFilter.startDate || dateFilter.endDate) {
+            const itemDate = parseFrenchDate(item.createdAt);
+            if (!itemDate) return false; // Skip items with invalid dates
+            
+            if (dateFilter.startDate) {
+                const start = new Date(dateFilter.startDate);
+                start.setHours(0, 0, 0, 0);
+                if (itemDate < start) return false;
+            }
+            
+            if (dateFilter.endDate) {
+                const end = new Date(dateFilter.endDate);
+                end.setHours(23, 59, 59, 999);
+                if (itemDate > end) return false;
+            }
+        }
         
         return true;
     });
@@ -1380,7 +1414,8 @@ function updateDashboard() {
  * Update reset button visibility
  */
 function updateResetButtonVisibility() {
-    const hasFilters = filialeFilterEl.value !== '' || directionFilterEl.value !== '' || agencyFilterEl.value !== '';
+    const hasFilters = filialeFilterEl.value !== '' || directionFilterEl.value !== '' || agencyFilterEl.value !== '' || 
+                       startDateEl.value !== '' || endDateEl.value !== '';
     if (hasFilters) {
         resetFiltersBtn.classList.remove('hidden');
     } else {
@@ -1410,6 +1445,21 @@ resetFiltersBtn.addEventListener('click', () => {
     directionFilterEl.value = '';
     populateAgencyFilter(); // Reset agencies
     agencyFilterEl.value = '';
+    startDateEl.value = '';
+    endDateEl.value = '';
+    dateFilter.startDate = null;
+    dateFilter.endDate = null;
+    
+    updateDashboard();
+    updateResetButtonVisibility();
+});
+
+// Apply date filter button
+applyDateFilterBtn.addEventListener('click', () => {
+    dateFilter.startDate = startDateEl.value || null;
+    dateFilter.endDate = endDateEl.value || null;
+    
+    console.log('Applying date filter:', dateFilter);
     
     updateDashboard();
     updateResetButtonVisibility();
