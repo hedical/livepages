@@ -1083,7 +1083,8 @@ function updateKPIs() {
     const comparateurStats = processComparateurData(comparateurData);
     
     // Global stats
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.aiContacts + comparateurStats.totalComparisons;
+    // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
