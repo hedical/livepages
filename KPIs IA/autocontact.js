@@ -97,12 +97,50 @@ function parseNumber(value) {
 }
 
 function parseDate(dateString) {
-    if (!dateString) return null;
-    const date = new Date(dateString);
-    if (!isNaN(date.getTime())) {
-        return date;
+    if (!dateString || dateString.trim() === '') {
+        return null;
     }
-    return null;
+    
+    // Remove backslashes that might be escaping commas
+    let cleanDate = dateString.replace(/\\/g, '');
+    
+    // Try standard date parsing first
+    let date = new Date(cleanDate);
+    
+    // If that fails, try to parse different formats
+    if (isNaN(date.getTime())) {
+        // Try format: "DD Month, YYYY, HH:MM" or "DD Month, YYYY" (e.g., "5 décembre, 2025, 15:33" or "25 octobre, 2025")
+        const frenchMonths = {
+            'janvier': 0, 'février': 1, 'fevrier': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+            'juillet': 6, 'août': 7, 'aout': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11, 'decembre': 11
+        };
+        
+        // Match with optional time part: "DD Month, YYYY" or "DD Month, YYYY, HH:MM"
+        const match = cleanDate.match(/(\d+)\s+([a-zàâäéèêëïôùûü]+)[,\s]+(\d{4})/i);
+        if (match) {
+            const day = parseInt(match[1]);
+            const monthName = match[2].toLowerCase().trim();
+            const year = parseInt(match[3]);
+            
+            if (frenchMonths[monthName] !== undefined) {
+                date = new Date(year, frenchMonths[monthName], day);
+                
+                // Try to parse time if present
+                const timeMatch = cleanDate.match(/(\d{1,2}):(\d{2})/);
+                if (timeMatch) {
+                    const hours = parseInt(timeMatch[1]);
+                    const minutes = parseInt(timeMatch[2]);
+                    date.setHours(hours, minutes, 0, 0);
+                }
+            }
+        }
+    }
+    
+    if (isNaN(date.getTime())) {
+        return null;
+    }
+    
+    return date;
 }
 
 // Extract agency code from ContractNumber
