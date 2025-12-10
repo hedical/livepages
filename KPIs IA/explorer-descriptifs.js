@@ -32,6 +32,7 @@ const scoreStatsEl = document.getElementById('score-stats');
 const highQualityEl = document.getElementById('high-quality');
 const mediumQualityEl = document.getElementById('medium-quality');
 const lowQualityEl = document.getElementById('low-quality');
+const lowWordCountEl = document.getElementById('low-word-count');
 const avgScoreEl = document.getElementById('avg-score');
 
 const qualityFilterEl = document.getElementById('quality-filter');
@@ -59,6 +60,8 @@ const scoreBarEl = document.getElementById('score-bar');
 const scorePercentageEl = document.getElementById('score-percentage');
 const descBlockEl = document.getElementById('desc-block');
 const aiBlockEl = document.getElementById('ai-block');
+const descWordCountEl = document.getElementById('desc-word-count');
+const aiWordCountEl = document.getElementById('ai-word-count');
 const segmentsListEl = document.getElementById('segments-list');
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -170,6 +173,16 @@ function formatDate(dateString) {
     const year = date.getFullYear();
     
     return `${day}/${month}/${year}`;
+}
+
+/**
+ * Count words in text (only words, not numbers)
+ */
+function countWords(text) {
+    if (!text || typeof text !== 'string') return 0;
+    // Match only sequences of letters (including accented characters)
+    const words = text.match(/[a-zA-ZÀ-ÿ]+/g);
+    return words ? words.length : 0;
 }
 
 /**
@@ -400,6 +413,10 @@ function processRecords(rawData) {
         const { matches, tests, logs } = similarityTests(processedDesc, processedAI);
         const score = tests ? (matches / tests) : 0;
         
+        // Count words in description and AI result
+        const descWordCount = countWords(processedDesc);
+        const aiWordCount = countWords(processedAI);
+        
         records.push({
             contractNumber: item.contractNumber,
             email: item.email,
@@ -407,6 +424,8 @@ function processRecords(rawData) {
             createdAt: item.createdAt,
             processedDesc,
             processedAI,
+            descWordCount,
+            aiWordCount,
             matches,
             tests,
             score,
@@ -434,6 +453,7 @@ function calculateSummary(records, allRecordsForUsers = null) {
     let highQuality = 0;
     let mediumQuality = 0;
     let lowQuality = 0;
+    let lowWordCount = 0; // Count records with less than 500 words
     
     // Calculate stats from filtered records
     records.forEach(rec => {
@@ -445,6 +465,9 @@ function calculateSummary(records, allRecordsForUsers = null) {
         if (rec.score >= 0.70) highQuality++;
         else if (rec.score >= 0.30) mediumQuality++;
         else lowQuality++;
+        
+        // Count records with less than 300 words
+        if (rec.descWordCount < 500) lowWordCount++;
     });
     
     const avgScore = records.length > 0 ? (totalScore / records.length) : 0;
@@ -500,6 +523,7 @@ function calculateSummary(records, allRecordsForUsers = null) {
         highQuality,
         mediumQuality,
         lowQuality,
+        lowWordCount,
         bestUsers,
         lowScoreUsers
     };
@@ -520,6 +544,10 @@ function updateSummary() {
     highQualityEl.innerHTML = `Qualité élevée (≥70%): <strong class="float-right text-green-600">${summary.highQuality}</strong>`;
     mediumQualityEl.innerHTML = `Qualité moyenne (30-70%): <strong class="float-right text-yellow-600">${summary.mediumQuality}</strong>`;
     lowQualityEl.innerHTML = `Qualité faible (<30%): <strong class="float-right text-red-600">${summary.lowQuality}</strong>`;
+    
+    // Add word count stats
+    const lowWordPercentage = summary.totalRecords > 0 ? ((summary.lowWordCount / summary.totalRecords) * 100).toFixed(1) : 0;
+    lowWordCountEl.innerHTML = `Descriptions < 500 mots: <strong class="float-right text-blue-600">${summary.lowWordCount} (${lowWordPercentage}%)</strong>`;
     
     avgScoreEl.textContent = `Score moyen global: ${(summary.avgScore * 100).toFixed(1)}%`;
     
@@ -641,6 +669,10 @@ function showRecord() {
     // Update text blocks
     descBlockEl.innerHTML = highlight(rec.processedDesc, rec.logs, true);
     aiBlockEl.innerHTML = highlight(rec.processedAI, rec.logs, false);
+    
+    // Update word counts
+    descWordCountEl.textContent = `(${rec.descWordCount} mots)`;
+    aiWordCountEl.textContent = `(${rec.aiWordCount} mots)`;
     
     // Update segments list
     segmentsListEl.innerHTML = '';

@@ -910,8 +910,14 @@ function processDescriptifData(data) {
         !item.contractNumber.toUpperCase().includes('YIELD')
     );
     
-    // Total RICT = all filtered rows
-    const totalRict = filtered.length;
+    // Total RICT = nombre unique d'affaires (contractNumber uniques)
+    const uniqueContracts = new Set();
+    filtered.forEach(item => {
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            uniqueContracts.add(item.contractNumber);
+        }
+    });
+    const totalRict = uniqueContracts.size;
     
     // Filter by type
     const descriptifFiltered = filtered.filter(item => 

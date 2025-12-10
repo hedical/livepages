@@ -596,8 +596,14 @@ function processData(data, filters, skipMonthFilter = false) {
     // Apply agence filter
     allFiltered = filterByAgence(allFiltered, filters.agence);
     
-    // Total RICT = all filtered rows (without type filter)
-    const totalRict = allFiltered.length;
+    // Total RICT = nombre unique d'affaires (contractNumber uniques)
+    const uniqueContracts = new Set();
+    allFiltered.forEach(item => {
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            uniqueContracts.add(item.contractNumber);
+        }
+    });
+    const totalRict = uniqueContracts.size;
     
     // Now filter by type for descriptifs
     let descriptifFiltered = filterByType(allFiltered, DESCRIPTIF_TYPE);
@@ -617,7 +623,7 @@ function processData(data, filters, skipMonthFilter = false) {
 
     return {
         totalUsers: uniqueUsers.size,
-        totalRict: totalRict, // All lines without type filter
+        totalRict: totalRict, // Nombre unique d'affaires (contractNumber uniques)
         totalDescriptifs: descriptifFiltered.length, // Filtered by type
         totalOperations: uniqueOperations.size,
         filteredData: descriptifFiltered // For table and chart
@@ -722,11 +728,24 @@ function updateAgencyTable(allRictData, descriptifData) {
         }
     };
     
-    // Count total RICT per agency
+    // Count total RICT per agency (nombre unique d'affaires)
     allRictData.forEach(item => {
         if (!item.agency) return;
         initAgency(item.agency, item.agencyCode);
-        agencyStats[item.agency].totalRict++;
+        
+        // Créer un Set pour les contractNumber uniques si pas encore fait
+        if (!agencyStats[item.agency].uniqueContracts) {
+            agencyStats[item.agency].uniqueContracts = new Set();
+        }
+        
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            agencyStats[item.agency].uniqueContracts.add(item.contractNumber);
+        }
+    });
+    
+    // Calculer le totalRict à partir des contractNumber uniques
+    Object.keys(agencyStats).forEach(agency => {
+        agencyStats[agency].totalRict = agencyStats[agency].uniqueContracts ? agencyStats[agency].uniqueContracts.size : 0;
     });
     
     // Count descriptifs effectifs and users per agency
@@ -955,7 +974,7 @@ function updateChart(data) {
         operations: {}
     };
     
-    // Count all RICT by month
+    // Count unique RICT (affaires uniques) by month
     data.all.forEach((item) => {
         const date = parseDate(item.createdAt);
         if (!date) {
@@ -969,10 +988,13 @@ function updateChart(data) {
         const monthKey = `${year}-${month}`;
         
         if (!monthGroups.rict[monthKey]) {
-            monthGroups.rict[monthKey] = 0;
+            monthGroups.rict[monthKey] = new Set();
         }
         
-        monthGroups.rict[monthKey]++;
+        // Ajouter le contractNumber au Set pour compter les affaires uniques
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            monthGroups.rict[monthKey].add(item.contractNumber);
+        }
     });
     
     // Count unique operations (descriptifs effectifs) by month
@@ -1017,7 +1039,10 @@ function updateChart(data) {
         return `${monthNames[monthIndex]} ${year}`;
     });
     
-    const rictData = sortedMonths.map((month) => monthGroups.rict[month] || 0);
+    const rictData = sortedMonths.map((month) => {
+        const ricts = monthGroups.rict[month];
+        return ricts ? ricts.size : 0;
+    });
     const operationsData = sortedMonths.map((month) => {
         const ops = monthGroups.operations[month];
         return ops ? ops.size : 0;
@@ -1192,7 +1217,7 @@ function updateRatesChart(data) {
         users: {}
     };
     
-    // Count all RICT by month
+    // Count unique RICT (affaires uniques) by month
     data.all.forEach((item) => {
         const date = parseDate(item.createdAt);
         if (!date) return;
@@ -1202,10 +1227,13 @@ function updateRatesChart(data) {
         const monthKey = `${year}-${month}`;
         
         if (!monthGroups.rict[monthKey]) {
-            monthGroups.rict[monthKey] = 0;
+            monthGroups.rict[monthKey] = new Set();
         }
         
-        monthGroups.rict[monthKey]++;
+        // Ajouter le contractNumber au Set pour compter les affaires uniques
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            monthGroups.rict[monthKey].add(item.contractNumber);
+        }
     });
     
     // Count unique operations (descriptifs effectifs) and users by month
@@ -1251,7 +1279,8 @@ function updateRatesChart(data) {
     
     // Calculate rates
     const tauxDescriptifs = sortedMonths.map((month) => {
-        const rict = monthGroups.rict[month] || 0;
+        const ricts = monthGroups.rict[month];
+        const rict = ricts ? ricts.size : 0;
         const ops = monthGroups.operations[month] ? monthGroups.operations[month].size : 0;
         return rict > 0 ? (ops / rict) * 100 : 0;
     });
