@@ -922,13 +922,66 @@ resetFiltersBtn.addEventListener('click', () => {
 
 exportCsvBtn.addEventListener('click', exportToCSV);
 
+// Check if we're on the commerce page
+function isCommercePage() {
+    return window.location.pathname.includes('commerce') || 
+           window.location.href.includes('commerce');
+}
+
 // Authenticate and get data URL
 async function authenticateAndGetURL() {
     const storedPassword = localStorage.getItem('roi_password');
+    const isCommerce = isCommercePage();
     
     if (!storedPassword) {
-        window.location.href = 'index.html';
-        return null;
+        if (isCommerce) {
+            // Show login modal instead of redirecting
+            const loginModal = document.getElementById('login-modal');
+            const loginForm = document.getElementById('login-form');
+            const passwordInput = document.getElementById('password-input');
+            const loginError = document.getElementById('login-error');
+            const loginButton = document.getElementById('login-button');
+            const loginText = document.getElementById('login-text');
+            
+            if (loginModal) {
+                loginModal.classList.remove('hidden');
+                
+                // Handle form submission
+                loginForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const password = passwordInput.value;
+                    loginError.classList.add('hidden');
+                    loginButton.disabled = true;
+                    loginText.textContent = 'Connexion...';
+                    
+                    const success = await authenticateWithPassword(password);
+                    
+                    if (success) {
+                        // Store password
+                        localStorage.setItem('roi_password', password);
+                        
+                        // Hide modal
+                        loginModal.classList.add('hidden');
+                        
+                        // Reload page to initialize with authenticated state
+                        window.location.reload();
+                    } else {
+                        // Show error
+                        loginError.classList.remove('hidden');
+                        loginButton.disabled = false;
+                        loginText.textContent = 'Se connecter';
+                        passwordInput.value = '';
+                        passwordInput.focus();
+                    }
+                });
+                
+                passwordInput.focus();
+            }
+            return null;
+        } else {
+            window.location.href = 'index.html';
+            return null;
+        }
     }
     
     try {
@@ -942,7 +995,15 @@ async function authenticateAndGetURL() {
         
         if (!response.ok) {
             localStorage.removeItem('roi_password');
-            window.location.href = 'index.html';
+            if (isCommerce) {
+                // Show login modal again
+                const loginModal = document.getElementById('login-modal');
+                if (loginModal) {
+                    loginModal.classList.remove('hidden');
+                }
+            } else {
+                window.location.href = 'index.html';
+            }
             return null;
         }
         
@@ -962,12 +1023,55 @@ async function authenticateAndGetURL() {
             return autocontactMatch[1];
         }
         
-        window.location.href = 'index.html';
+        if (isCommerce) {
+            const loginModal = document.getElementById('login-modal');
+            if (loginModal) {
+                loginModal.classList.remove('hidden');
+            }
+        } else {
+            window.location.href = 'index.html';
+        }
         return null;
     } catch (error) {
         console.error('Authentication error:', error);
-        window.location.href = 'index.html';
+        if (isCommerce) {
+            const loginModal = document.getElementById('login-modal');
+            if (loginModal) {
+                loginModal.classList.remove('hidden');
+            }
+        } else {
+            window.location.href = 'index.html';
+        }
         return null;
+    }
+}
+
+// Authenticate with password (used by commerce page login form)
+async function authenticateWithPassword(password) {
+    try {
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: password
+        });
+        
+        if (!response.ok) {
+            return false;
+        }
+        
+        const result = await response.text();
+        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
+        
+        if (autocontactMatch) {
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        return false;
     }
 }
 
