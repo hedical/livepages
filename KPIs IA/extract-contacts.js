@@ -1,8 +1,8 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
-// Use a CORS proxy or direct export URL
-// Try using the gviz export format which works better with CORS
-const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1vUrqckVmTD8yePcsAbVzKy_pTp7zuSIwkRaAi0Jbwhw/export?format=csv&gid=1039655127&t=' + Date.now();
+// Default Google Sheet URL (fallback if not provided by webhook)
+const DEFAULT_GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1vUrqckVmTD8yePcsAbVzKy_pTp7zuSIwkRaAi0Jbwhw/export?format=csv&gid=1039655127';
+let GOOGLE_SHEET_URL = DEFAULT_GOOGLE_SHEET_URL;
 
 // Data URL will be fetched from webhook after authentication
 let DATA_URL = '';
@@ -627,22 +627,23 @@ async function loadGoogleSheetMapping() {
         let response = null;
         let lastError = null;
         
-        // First try direct fetch (works if served from web server)
+        // First try direct fetch (works if served from web server or if URL is from webhook)
         try {
             response = await fetch(GOOGLE_SHEET_URL, {
                 mode: 'cors',
-                cache: 'no-cache'
+                cache: 'no-cache',
+                credentials: 'omit'
             });
             if (response.ok) {
                 console.log('✓ Google Sheet loaded directly');
             }
         } catch (directError) {
-            console.warn('Direct fetch failed (CORS - expected when opening file://)');
+            console.warn('Direct fetch failed, trying CORS proxies...');
             lastError = directError;
         }
         
-        // If direct fetch failed, try proxies
-        if (!response || !response.ok) {
+        // If direct fetch failed, try proxies (only if not from webhook)
+        if ((!response || !response.ok) && GOOGLE_SHEET_URL === DEFAULT_GOOGLE_SHEET_URL) {
             for (const proxy of proxies) {
                 try {
                     const proxyUrl = proxy + encodeURIComponent(GOOGLE_SHEET_URL);
@@ -665,15 +666,10 @@ async function loadGoogleSheetMapping() {
         }
         
         if (!response || !response.ok) {
-            console.error('❌ Could not load Google Sheet after trying all methods');
-            console.error('Status:', response?.status);
-            console.error('');
-            console.error('SOLUTION: Please serve the app from a web server:');
-            console.error('  Option 1: python -m http.server 8000');
-            console.error('  Option 2: npx http-server');
-            console.error('  Then open: http://localhost:8000/extract-contacts.html');
-            console.error('');
-            console.error('Or configure the Google Sheet URL in your n8n webhook.');
+            console.warn('⚠ Could not load Google Sheet');
+            console.warn('Status:', response?.status);
+            console.warn('This will not prevent the app from working, but typologie batiment will be empty.');
+            console.warn('To fix: Add GOOGLE_SHEET_URL to your n8n webhook response.');
             return {};
         }
         
@@ -952,6 +948,15 @@ async function authenticateAndGetURL() {
         
         const result = await response.text();
         const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
+        
+        // Try to get Google Sheet URL from webhook response
+        const googleSheetMatch = result.match(/GOOGLE_SHEET_URL = '([^']+)'/);
+        if (googleSheetMatch) {
+            GOOGLE_SHEET_URL = googleSheetMatch[1];
+            console.log('Google Sheet URL loaded from webhook');
+        } else {
+            console.log('Using default Google Sheet URL');
+        }
         
         if (autocontactMatch) {
             return autocontactMatch[1];
