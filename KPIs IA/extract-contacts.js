@@ -105,6 +105,7 @@ function parseCSVData(csvString) {
     const btpEmailIndex = headers.findIndex(h => h.toLowerCase().includes('user') && h.toLowerCase().includes('email'));
     const createdAtIndex = headers.findIndex(h => h.toLowerCase() === 'createdat' && !h.includes('→'));
     const contractIndex = headers.findIndex(h => h.toLowerCase().includes('contractnumber'));
+    const phoneIndex = headers.findIndex(h => h.toLowerCase().includes('phone') || h.toLowerCase().includes('téléphone') || h.toLowerCase().includes('telephone'));
     
     console.log('Column indices:', {
         email: emailIndex,
@@ -115,7 +116,8 @@ function parseCSVData(csvString) {
         company: companyIndex,
         btpEmail: btpEmailIndex,
         createdAt: createdAtIndex,
-        contract: contractIndex
+        contract: contractIndex,
+        phone: phoneIndex
     });
     
     if (emailIndex === -1) {
@@ -152,7 +154,8 @@ function parseCSVData(csvString) {
             company: companyIndex !== -1 ? values[companyIndex]?.trim() || '' : '',
             btpEmail: btpEmailIndex !== -1 ? values[btpEmailIndex]?.trim() || '' : '',
             createdAt: createdAtIndex !== -1 ? values[createdAtIndex]?.trim() || '' : '',
-            contractNumber: contractIndex !== -1 ? values[contractIndex]?.trim() || '' : ''
+            contractNumber: contractIndex !== -1 ? values[contractIndex]?.trim() || '' : '',
+            phone: phoneIndex !== -1 ? values[phoneIndex]?.trim() || '' : ''
         };
         
         // Add all contacts (including internal @btp-consultants.fr)
@@ -231,7 +234,7 @@ function renderTable() {
     if (filteredContacts.length === 0) {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+            <td colspan="10" class="px-4 py-8 text-center text-gray-500">
                 Aucun contact trouvé avec les filtres actuels
             </td>
         `;
@@ -253,6 +256,7 @@ function renderTable() {
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.role)}</td>
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.company)}</td>
             <td class="px-4 py-3 text-sm text-blue-600">${escapeHtml(contact.btpEmail)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.phone || '-')}</td>
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(typologieBatiment)}</td>
             <td class="px-4 py-3 text-sm text-gray-500">${formatDate(contact.createdAt)}</td>
         `;
