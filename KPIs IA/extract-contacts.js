@@ -1,5 +1,8 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
+// Use a CORS proxy or direct export URL
+// Try using the gviz export format which works better with CORS
+const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1vUrqckVmTD8yePcsAbVzKy_pTp7zuSIwkRaAi0Jbwhw/export?format=csv&gid=1039655127&t=' + Date.now();
 
 // Data URL will be fetched from webhook after authentication
 let DATA_URL = '';
@@ -9,6 +12,12 @@ let allContacts = [];
 let filteredContacts = [];
 let availablePositions = [];
 let positionChart = null;
+let typologieChart = null;
+let googleSheetMapping = {}; // {numeroAffaireOpportunite: typologieBatiment}
+let activeFilters = {
+    position: null,
+    typologie: null
+};
 
 // Filters
 const filters = {
@@ -142,7 +151,8 @@ function parseCSVData(csvString) {
             position: positionIndex !== -1 ? values[positionIndex]?.trim() || '' : '',
             company: companyIndex !== -1 ? values[companyIndex]?.trim() || '' : '',
             btpEmail: btpEmailIndex !== -1 ? values[btpEmailIndex]?.trim() || '' : '',
-            createdAt: createdAtIndex !== -1 ? values[createdAtIndex]?.trim() || '' : ''
+            createdAt: createdAtIndex !== -1 ? values[createdAtIndex]?.trim() || '' : '',
+            contractNumber: contractIndex !== -1 ? values[contractIndex]?.trim() || '' : ''
         };
         
         // Add all contacts (including internal @btp-consultants.fr)
@@ -194,9 +204,15 @@ function applyFilters() {
             if (!roleMatch) return false;
         }
         
-        // Position filter (dropdown)
+        // Position filter (dropdown or chart click)
         if (filters.position !== 'all') {
             if (contact.position !== filters.position) return false;
+        }
+        
+        // Typologie filter (chart click) - use pre-calculated value
+        if (activeFilters.typologie !== null) {
+            const typologieBatiment = (contact.typologieBatiment || '-');
+            if (typologieBatiment !== activeFilters.typologie) return false;
         }
         
         return true;
@@ -205,6 +221,7 @@ function applyFilters() {
     renderTable();
     updateStats();
     updatePositionChart();
+    updateTypologieChart();
 }
 
 // Render table
@@ -214,7 +231,7 @@ function renderTable() {
     if (filteredContacts.length === 0) {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+            <td colspan="9" class="px-4 py-8 text-center text-gray-500">
                 Aucun contact trouvé avec les filtres actuels
             </td>
         `;
@@ -226,6 +243,8 @@ function renderTable() {
         const row = document.createElement('tr');
         row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
         
+        const typologieBatiment = contact.typologieBatiment || '-';
+        
         row.innerHTML = `
             <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(contact.email)}</td>
             <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(contact.firstName)}</td>
@@ -234,6 +253,7 @@ function renderTable() {
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.role)}</td>
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(contact.company)}</td>
             <td class="px-4 py-3 text-sm text-blue-600">${escapeHtml(contact.btpEmail)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(typologieBatiment)}</td>
             <td class="px-4 py-3 text-sm text-gray-500">${formatDate(contact.createdAt)}</td>
         `;
         
@@ -249,8 +269,7 @@ function updateStats() {
 
 // Update position chart
 function updatePositionChart() {
-    console.log('Updating position chart...');
-    console.log('Filtered contacts count:', filteredContacts.length);
+    // Removed verbose logs for performance
     
     // Check if Chart is available
     if (typeof Chart === 'undefined') {
@@ -272,17 +291,12 @@ function updatePositionChart() {
         positionCounts[position] = (positionCounts[position] || 0) + 1;
     });
     
-    console.log('Position counts:', positionCounts);
-    
     // Sort by count descending
     const sortedPositions = Object.entries(positionCounts)
         .sort((a, b) => b[1] - a[1]);
     
     const labels = sortedPositions.map(([position]) => position);
     const data = sortedPositions.map(([, count]) => count);
-    
-    console.log('Chart labels:', labels);
-    console.log('Chart data:', data);
     
     if (labels.length === 0) {
         console.warn('No data to display in chart');
@@ -326,6 +340,28 @@ function updatePositionChart() {
         options: {
             responsive: true,
             maintainAspectRatio: true,
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const clickedPosition = labels[index];
+                    
+                    // Toggle filter: if same position clicked, remove filter; otherwise apply filter
+                    if (activeFilters.position === clickedPosition) {
+                        activeFilters.position = null;
+                        filters.position = 'all';
+                        positionFilterEl.value = 'all';
+                    } else {
+                        activeFilters.position = clickedPosition;
+                        filters.position = clickedPosition;
+                        positionFilterEl.value = clickedPosition;
+                    }
+                    
+                    applyFilters();
+                }
+            },
+            onHover: (event, elements) => {
+                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
             plugins: {
                 legend: {
                     position: 'right',
@@ -341,11 +377,14 @@ function updatePositionChart() {
                                     const value = data.datasets[0].data[i];
                                     const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
                                     const percentage = ((value / total) * 100).toFixed(1);
+                                    const isActive = activeFilters.position === label;
                                     return {
-                                        text: `${label} (${value} - ${percentage}%)`,
+                                        text: `${label} (${value} - ${percentage}%)${isActive ? ' ✓' : ''}`,
                                         fillStyle: data.datasets[0].backgroundColor[i],
                                         hidden: false,
-                                        index: i
+                                        index: i,
+                                        fontColor: isActive ? '#1f2937' : '#6b7280',
+                                        fontStyle: isActive ? 'bold' : 'normal'
                                     };
                                 });
                             }
@@ -367,9 +406,150 @@ function updatePositionChart() {
             }
         }
     });
-        console.log('Chart created successfully');
+        // Chart created successfully
     } catch (error) {
         console.error('Error creating chart:', error);
+    }
+}
+
+// Update typologie batiment chart
+function updateTypologieChart() {
+    // Removed verbose logs for performance
+    
+    // Check if Chart is available
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded yet');
+        return;
+    }
+    
+    // Check if canvas exists
+    const canvas = document.getElementById('typologieChart');
+    if (!canvas) {
+        console.error('Canvas element "typologieChart" not found');
+        return;
+    }
+    
+    // Count contacts by typologie batiment (use pre-calculated value)
+    const typologieCounts = {};
+    filteredContacts.forEach(contact => {
+        const typologieBatiment = (contact.typologieBatiment || 'Non spécifié');
+        typologieCounts[typologieBatiment] = (typologieCounts[typologieBatiment] || 0) + 1;
+    });
+    
+    // Sort by count descending
+    const sortedTypologies = Object.entries(typologieCounts)
+        .sort((a, b) => b[1] - a[1]);
+    
+    const labels = sortedTypologies.map(([typologie]) => typologie);
+    const data = sortedTypologies.map(([, count]) => count);
+    
+    if (labels.length === 0) {
+        console.warn('No data to display in typologie chart');
+        return;
+    }
+    
+    // Generate colors
+    const colors = [
+        '#3b82f6', // blue-500
+        '#10b981', // green-500
+        '#f59e0b', // amber-500
+        '#ef4444', // red-500
+        '#8b5cf6', // violet-500
+        '#ec4899', // pink-500
+        '#06b6d4', // cyan-500
+        '#f97316', // orange-500
+        '#14b8a6', // teal-500
+        '#a855f7', // purple-500
+    ];
+    
+    const backgroundColors = sortedTypologies.map((_, index) => colors[index % colors.length]);
+    
+    // Destroy existing chart if it exists
+    if (typologieChart) {
+        typologieChart.destroy();
+    }
+    
+    try {
+        // Create new chart
+        typologieChart = new Chart(canvas, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const clickedTypologie = labels[index];
+                    
+                    // Toggle filter: if same typologie clicked, remove filter; otherwise apply filter
+                    if (activeFilters.typologie === clickedTypologie) {
+                        activeFilters.typologie = null;
+                    } else {
+                        activeFilters.typologie = clickedTypologie;
+                    }
+                    
+                    applyFilters();
+                }
+            },
+            onHover: (event, elements) => {
+                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            padding: 15,
+                            font: {
+                                size: 12
+                            },
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map((label, i) => {
+                                        const value = data.datasets[0].data[i];
+                                        const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                        const percentage = ((value / total) * 100).toFixed(1);
+                                        const isActive = activeFilters.typologie === label;
+                                        return {
+                                            text: `${label} (${value} - ${percentage}%)${isActive ? ' ✓' : ''}`,
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            hidden: false,
+                                            index: i,
+                                            fontColor: isActive ? '#1f2937' : '#6b7280',
+                                            fontStyle: isActive ? 'bold' : 'normal'
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} contacts (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        // Typologie chart created successfully
+    } catch (error) {
+        console.error('Error creating typologie chart:', error);
     }
 }
 
@@ -405,6 +585,271 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, m => map[m]);
 }
 
+// Fix encoding issues in text (convert from Latin-1/Windows-1252 to UTF-8)
+function fixEncoding(text) {
+    const replacements = {
+        'Ã©': 'é',
+        'Ã¨': 'è',
+        'Ãª': 'ê',
+        'Ã ': 'à',
+        'Ã¢': 'â',
+        'Ã´': 'ô',
+        'Ã»': 'û',
+        'Ã§': 'ç',
+        'Ã«': 'ë',
+        'Ã¯': 'ï',
+        'Ã¼': 'ü',
+        'Ã': 'É',
+        'Ã': 'È',
+        'Ã': 'À',
+        'Ã': 'Ç',
+        '�': 'é'
+    };
+    
+    let fixed = text;
+    for (const [wrong, correct] of Object.entries(replacements)) {
+        fixed = fixed.replace(new RegExp(wrong, 'g'), correct);
+    }
+    
+    return fixed;
+}
+
+// Load Google Sheet data and create mapping
+async function loadGoogleSheetMapping() {
+    try {
+        // Try multiple CORS proxy services as fallback
+        // Note: CORS proxies may be slow or unreliable. Best solution is to serve from a web server.
+        const proxies = [
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+        
+        let response = null;
+        let lastError = null;
+        
+        // First try direct fetch (works if served from web server)
+        try {
+            response = await fetch(GOOGLE_SHEET_URL, {
+                mode: 'cors',
+                cache: 'no-cache'
+            });
+            if (response.ok) {
+                console.log('✓ Google Sheet loaded directly');
+            }
+        } catch (directError) {
+            console.warn('Direct fetch failed (CORS - expected when opening file://)');
+            lastError = directError;
+        }
+        
+        // If direct fetch failed, try proxies
+        if (!response || !response.ok) {
+            for (const proxy of proxies) {
+                try {
+                    const proxyUrl = proxy + encodeURIComponent(GOOGLE_SHEET_URL);
+                    console.log('Trying CORS proxy:', proxy.substring(0, 30) + '...');
+                    response = await fetch(proxyUrl, {
+                        method: 'GET',
+                        signal: AbortSignal.timeout(10000) // 10 second timeout
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✓ Google Sheet loaded via CORS proxy');
+                        break;
+                    }
+                } catch (proxyError) {
+                    console.warn('Proxy failed:', proxyError.message);
+                    lastError = proxyError;
+                    continue;
+                }
+            }
+        }
+        
+        if (!response || !response.ok) {
+            console.error('❌ Could not load Google Sheet after trying all methods');
+            console.error('Status:', response?.status);
+            console.error('');
+            console.error('SOLUTION: Please serve the app from a web server:');
+            console.error('  Option 1: python -m http.server 8000');
+            console.error('  Option 2: npx http-server');
+            console.error('  Then open: http://localhost:8000/extract-contacts.html');
+            console.error('');
+            console.error('Or configure the Google Sheet URL in your n8n webhook.');
+            return {};
+        }
+        
+        let csvText = await response.text();
+        csvText = fixEncoding(csvText);
+        const lines = csvText.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            console.warn('Google Sheet is empty');
+            return {};
+        }
+        
+        // Parse header to find column indices
+        const headerLine = lines[0];
+        const headers = parseCSVLine(headerLine);
+        
+        let numeroAffaireIndex = -1;
+        let typologieBatimentIndex = -1;
+        
+        for (let i = 0; i < headers.length; i++) {
+            const header = headers[i].toLowerCase().trim();
+            if (numeroAffaireIndex === -1 && (header.includes('numéro affaire opportunité') || header.includes('numero affaire opportunite') || header.includes('numero affaire'))) {
+                numeroAffaireIndex = i;
+            }
+            if (typologieBatimentIndex === -1 && (header.includes('typologie batiment') || header.includes('typologie'))) {
+                typologieBatimentIndex = i;
+            }
+        }
+        
+        if (numeroAffaireIndex === -1 || typologieBatimentIndex === -1) {
+            console.error('Could not find required columns in Google Sheet');
+            console.error('Headers found:', headers);
+            console.error('Looking for:', {
+                numeroAffaire: 'numéro affaire opportunité',
+                typologieBatiment: 'typologie batiment'
+            });
+            return {};
+        }
+        
+        console.log('Found columns:', {
+            numeroAffaire: numeroAffaireIndex,
+            typologieBatiment: typologieBatimentIndex,
+            numeroAffaireHeader: headers[numeroAffaireIndex],
+            typologieBatimentHeader: headers[typologieBatimentIndex]
+        });
+        console.log('Total headers:', headers.length);
+        
+        // Create mapping
+        const mapping = {};
+        let sampleData = [];
+        for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]);
+            if (values.length > Math.max(numeroAffaireIndex, typologieBatimentIndex)) {
+                const numeroAffaire = (values[numeroAffaireIndex] || '').trim();
+                const typologieBatiment = (values[typologieBatimentIndex] || '').trim();
+                
+                // Skip empty values and "NA"
+                if (numeroAffaire && numeroAffaire.toUpperCase() !== 'NA' && typologieBatiment && typologieBatiment.toUpperCase() !== 'NA') {
+                    // Remove prefix (P- or C-) and normalize
+                    const withoutPrefix = numeroAffaire.replace(/^[PC]-/, '').trim();
+                    const normalizedWithoutPrefix = withoutPrefix.toUpperCase().replace(/\s+/g, '');
+                    
+                    // Store with original format
+                    mapping[numeroAffaire] = typologieBatiment;
+                    mapping[numeroAffaire.toUpperCase().replace(/\s+/g, '')] = typologieBatiment;
+                    
+                    // Store WITHOUT prefix (this is the key matching strategy)
+                    mapping[withoutPrefix] = typologieBatiment;
+                    mapping[normalizedWithoutPrefix] = typologieBatiment;
+                    
+                    // Also store with C- and P- prefixes for flexibility
+                    mapping['C-' + withoutPrefix] = typologieBatiment;
+                    mapping['P-' + withoutPrefix] = typologieBatiment;
+                    mapping['C-' + normalizedWithoutPrefix] = typologieBatiment;
+                    mapping['P-' + normalizedWithoutPrefix] = typologieBatiment;
+                    
+                    // Store partial matches (for truncated numbers)
+                    const parts = withoutPrefix.split('-');
+                    if (parts.length >= 4) {
+                        // Full number without prefix: XXXX-YYYY-ZZ-NNNNNN
+                        const fullWithoutPrefix = parts.join('-').toUpperCase().replace(/\s+/g, '');
+                        mapping[fullWithoutPrefix] = typologieBatiment;
+                        
+                        // First 3 segments: XXXX-YYYY-ZZ
+                        const firstThree = parts.slice(0, 3).join('-').toUpperCase().replace(/\s+/g, '');
+                        mapping[firstThree] = typologieBatiment;
+                    } else if (parts.length >= 3) {
+                        // First 3 segments: XXXX-YYYY-ZZ
+                        const firstThree = parts.join('-').toUpperCase().replace(/\s+/g, '');
+                        mapping[firstThree] = typologieBatiment;
+                    }
+                    
+                    if (sampleData.length < 5) {
+                        sampleData.push({ 
+                            numeroAffaire, 
+                            typologieBatiment, 
+                            withoutPrefix: withoutPrefix,
+                            parts: parts.length 
+                        });
+                    }
+                }
+            }
+        }
+        
+        console.log('Loaded Google Sheet mapping for', Object.keys(mapping).length, 'records');
+        console.log('Sample data from Google Sheet:', sampleData);
+        console.log('Sample mapping keys:', Object.keys(mapping).slice(0, 20));
+        
+        // Test matching with a sample contract number
+        if (Object.keys(mapping).length > 0) {
+            const testContract = 'C-MECT-2025-20-285515';
+            const testWithoutPrefix = testContract.replace(/^[PC]-/, '').trim();
+            console.log('=== TESTING MATCHING ===');
+            console.log('Test contract:', testContract);
+            console.log('Without prefix:', testWithoutPrefix);
+            console.log('Trying key:', testWithoutPrefix);
+            console.log('Found?', mapping[testWithoutPrefix]);
+            console.log('Trying normalized:', testWithoutPrefix.toUpperCase().replace(/\s+/g, ''));
+            console.log('Found?', mapping[testWithoutPrefix.toUpperCase().replace(/\s+/g, '')]);
+            console.log('Sample keys in mapping:', Object.keys(mapping).slice(0, 30));
+            console.log('=== END TEST ===');
+        } else {
+            console.error('Mapping is empty! No data loaded from Google Sheet.');
+        }
+        
+        return mapping;
+    } catch (error) {
+        console.warn('Error loading Google Sheet:', error);
+        return {};
+    }
+}
+
+// Get typologie batiment for a contract number
+function getTypologieBatiment(contractNumber) {
+    if (!contractNumber) return '-';
+    
+    // Remove prefix (P- or C-) and normalize - this is the main matching strategy
+    const withoutPrefix = contractNumber.replace(/^[PC]-/, '').trim();
+    const normalizedWithoutPrefix = withoutPrefix.toUpperCase().replace(/\s+/g, '');
+    
+    // Removed debug logs for performance
+    
+    // Try exact match without prefix first (most common case) - this is how we stored it
+    if (googleSheetMapping[withoutPrefix]) {
+        return googleSheetMapping[withoutPrefix];
+    }
+    
+    // Try normalized without prefix
+    if (googleSheetMapping[normalizedWithoutPrefix]) {
+        return googleSheetMapping[normalizedWithoutPrefix];
+    }
+    
+    // Try with original format
+    if (googleSheetMapping[contractNumber]) {
+        return googleSheetMapping[contractNumber];
+    }
+    
+    // Try normalized with prefix
+    const normalizedContract = contractNumber.toUpperCase().replace(/\s+/g, '');
+    if (googleSheetMapping[normalizedContract]) {
+        return googleSheetMapping[normalizedContract];
+    }
+    
+    // Try partial match for truncated numbers
+    const parts = withoutPrefix.split('-');
+    if (parts.length >= 4) {
+        // Try first 3 segments: XXXX-YYYY-ZZ
+        const firstThree = parts.slice(0, 3).join('-').toUpperCase().replace(/\s+/g, '');
+        if (googleSheetMapping[firstThree]) {
+            return googleSheetMapping[firstThree];
+        }
+    }
+    
+    return '-';
+}
+
 // Export to CSV
 function exportToCSV() {
     if (filteredContacts.length === 0) {
@@ -413,7 +858,7 @@ function exportToCSV() {
     }
     
     // Create CSV content
-    const headers = ['Email', 'Prénom', 'Nom', 'Position', 'Rôle', 'Entreprise', 'Contact Interne', 'Date de création'];
+        const headers = ['Email', 'Prénom', 'Nom', 'Position', 'Rôle', 'Entreprise', 'Contact Interne', 'Typologie batiment', 'Date de création'];
     const rows = filteredContacts.map(contact => [
         contact.email,
         contact.firstName,
@@ -422,6 +867,7 @@ function exportToCSV() {
         contact.role,
         contact.company,
         contact.btpEmail,
+        contact.typologieBatiment || '-',
         contact.createdAt
     ]);
     
@@ -473,6 +919,8 @@ resetFiltersBtn.addEventListener('click', () => {
     filters.company = '';
     filters.role = '';
     filters.position = 'all';
+    activeFilters.position = null;
+    activeFilters.typologie = null;
     applyFilters();
 });
 
@@ -532,12 +980,20 @@ async function init() {
         }
 
         console.log('Fetching data from:', DATA_URL);
-        const response = await fetch(DATA_URL);
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+        
+        // Load both data sources in parallel
+        const [dataResponse, googleSheetMappingResult] = await Promise.all([
+            fetch(DATA_URL),
+            loadGoogleSheetMapping()
+        ]);
+        
+        if (!dataResponse.ok) {
+            throw new Error(`HTTP error! Status: ${dataResponse.status}`);
         }
         
-        const rawText = await response.text();
+        googleSheetMapping = googleSheetMappingResult;
+        
+        const rawText = await dataResponse.text();
         console.log('Response received, length:', rawText.length);
         
         // Parse JSON array format: [{"data":"CSV content"}]
@@ -567,6 +1023,11 @@ async function init() {
             throw new Error('No contacts parsed');
         }
 
+        // Pre-calculate typologie batiment for all contacts to improve performance
+        console.log('Pre-calculating typologie batiment for all contacts...');
+        allContacts.forEach(contact => {
+            contact.typologieBatiment = getTypologieBatiment(contact.contractNumber);
+        });
         console.log(`Loaded ${allContacts.length} contacts`);
 
         // Get available positions
@@ -582,9 +1043,10 @@ async function init() {
         loadingEl.classList.add('hidden');
         mainContentEl.classList.remove('hidden');
         
-        // Update chart after a small delay to ensure everything is loaded
+        // Update charts after a small delay to ensure everything is loaded
         setTimeout(() => {
             updatePositionChart();
+            updateTypologieChart();
         }, 100);
     } catch (error) {
         console.error('Error loading data:', error);

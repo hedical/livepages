@@ -1,6 +1,7 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 const POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1vUrqckVmTD8yePcsAbVzKy_pTp7zuSIwkRaAi0Jbwhw/export?format=csv&gid=1039655127';
 
 // Data URL will be fetched from webhook after authentication
 let DATA_URL = '';
@@ -11,6 +12,7 @@ let availableAgencies = [];
 let availableDRs = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
+let googleSheetMapping = {}; // {numeroAffaireOpportunite: typologieBatiment}
 let dateChart = null;
 let ratesChart = null;
 let tableSortState = {
@@ -413,6 +415,108 @@ async function loadAgencyPopulation() {
     } catch (error) {
         console.warn('Error loading population data:', error);
         return { population: {}, drMapping: {} };
+    }
+}
+
+// Load Google Sheet data and create mapping
+async function loadGoogleSheetMapping() {
+    try {
+        const response = await fetch(GOOGLE_SHEET_URL);
+        if (!response.ok) {
+            console.warn('Could not load Google Sheet');
+            return {};
+        }
+        
+        let csvText = await response.text();
+        csvText = fixEncoding(csvText);
+        const lines = csvText.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            console.warn('Google Sheet is empty');
+            return {};
+        }
+        
+        // Parse header to find column indices
+        const headerLine = lines[0];
+        const headers = parseCSVLine(headerLine);
+        
+        let numeroAffaireIndex = -1;
+        let typologieBatimentIndex = -1;
+        
+        for (let i = 0; i < headers.length; i++) {
+            const header = headers[i].toLowerCase().trim();
+            if (numeroAffaireIndex === -1 && (header.includes('numéro affaire opportunité') || header.includes('numero affaire opportunite') || header.includes('numero affaire'))) {
+                numeroAffaireIndex = i;
+            }
+            if (typologieBatimentIndex === -1 && (header.includes('typologie batiment') || header.includes('typologie'))) {
+                typologieBatimentIndex = i;
+            }
+        }
+        
+        if (numeroAffaireIndex === -1 || typologieBatimentIndex === -1) {
+            console.warn('Could not find required columns in Google Sheet');
+            console.log('Headers found:', headers);
+            return {};
+        }
+        
+        console.log('Found columns:', {
+            numeroAffaire: numeroAffaireIndex,
+            typologieBatiment: typologieBatimentIndex
+        });
+        
+        // Create mapping
+        const mapping = {};
+        for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]);
+            if (values.length > Math.max(numeroAffaireIndex, typologieBatimentIndex)) {
+                const numeroAffaire = (values[numeroAffaireIndex] || '').trim();
+                const typologieBatiment = (values[typologieBatimentIndex] || '').trim();
+                
+                // Skip empty values and "NA"
+                if (numeroAffaire && numeroAffaire.toUpperCase() !== 'NA' && typologieBatiment && typologieBatiment.toUpperCase() !== 'NA') {
+                    // Remove prefix (P- or C-) and normalize - this is the key matching strategy
+                    const withoutPrefix = numeroAffaire.replace(/^[PC]-/, '').trim();
+                    const normalizedWithoutPrefix = withoutPrefix.toUpperCase().replace(/\s+/g, '');
+                    
+                    // Store with original format
+                    mapping[numeroAffaire] = typologieBatiment;
+                    mapping[numeroAffaire.toUpperCase().replace(/\s+/g, '')] = typologieBatiment;
+                    
+                    // Store WITHOUT prefix (this is the main matching key)
+                    mapping[withoutPrefix] = typologieBatiment;
+                    mapping[normalizedWithoutPrefix] = typologieBatiment;
+                    
+                    // Also store with C- and P- prefixes for flexibility
+                    mapping['C-' + withoutPrefix] = typologieBatiment;
+                    mapping['P-' + withoutPrefix] = typologieBatiment;
+                    mapping['C-' + normalizedWithoutPrefix] = typologieBatiment;
+                    mapping['P-' + normalizedWithoutPrefix] = typologieBatiment;
+                    
+                    // Store partial matches (for truncated numbers)
+                    const parts = withoutPrefix.split('-');
+                    if (parts.length >= 4) {
+                        // Full number without prefix: XXXX-YYYY-ZZ-NNNNNN
+                        const fullWithoutPrefix = parts.join('-').toUpperCase().replace(/\s+/g, '');
+                        mapping[fullWithoutPrefix] = typologieBatiment;
+                        
+                        // First 3 segments: XXXX-YYYY-ZZ
+                        const firstThree = parts.slice(0, 3).join('-').toUpperCase().replace(/\s+/g, '');
+                        mapping[firstThree] = typologieBatiment;
+                    } else if (parts.length >= 3) {
+                        // First 3 segments: XXXX-YYYY-ZZ
+                        const firstThree = parts.join('-').toUpperCase().replace(/\s+/g, '');
+                        mapping[firstThree] = typologieBatiment;
+                    }
+                }
+            }
+        }
+        
+        console.log('Loaded Google Sheet mapping for', Object.keys(mapping).length, 'records');
+        console.log('Sample mapping keys:', Object.keys(mapping).slice(0, 20));
+        return mapping;
+    } catch (error) {
+        console.warn('Error loading Google Sheet:', error);
+        return {};
     }
 }
 
@@ -1504,10 +1608,11 @@ async function init() {
 
         console.log('Fetching data from:', DATA_URL);
         
-        // Load both data sources in parallel
-        const [dataResponse, populationDataResult] = await Promise.all([
+        // Load all data sources in parallel
+        const [dataResponse, populationDataResult, googleSheetMappingResult] = await Promise.all([
             fetch(DATA_URL),
-            loadAgencyPopulation()
+            loadAgencyPopulation(),
+            loadGoogleSheetMapping()
         ]);
         
         if (!dataResponse.ok) {
@@ -1516,6 +1621,7 @@ async function init() {
         
         agencyPopulation = populationDataResult.population;
         agencyToDR = populationDataResult.drMapping;
+        googleSheetMapping = googleSheetMappingResult;
         
         const rawText = await dataResponse.text();
         console.log('Response received, length:', rawText.length);
@@ -1632,11 +1738,38 @@ function showRecordsModal() {
     filteredData.forEach(item => {
         const contract = item.contractNumber || 'Sans numéro';
         if (!groupedByContract[contract]) {
+            // Try to find typologie batiment from Google Sheet mapping
+            // Remove prefix (P- or C-) and normalize - this is the main matching strategy
+            const withoutPrefix = contract.replace(/^[PC]-/, '').trim();
+            const normalizedWithoutPrefix = withoutPrefix.toUpperCase().replace(/\s+/g, '');
+            
+            let typologieBatiment = '-';
+            
+            // Try exact match without prefix first (most common case)
+            if (googleSheetMapping[withoutPrefix]) {
+                typologieBatiment = googleSheetMapping[withoutPrefix];
+            } else if (googleSheetMapping[normalizedWithoutPrefix]) {
+                typologieBatiment = googleSheetMapping[normalizedWithoutPrefix];
+            } else if (googleSheetMapping[contract]) {
+                typologieBatiment = googleSheetMapping[contract];
+            } else {
+                // Try partial match for truncated numbers
+                const parts = withoutPrefix.split('-');
+                if (parts.length >= 4) {
+                    // Try first 3 segments: XXXX-YYYY-ZZ
+                    const firstThree = parts.slice(0, 3).join('-').toUpperCase().replace(/\s+/g, '');
+                    if (googleSheetMapping[firstThree]) {
+                        typologieBatiment = googleSheetMapping[firstThree];
+                    }
+                }
+            }
+            
             groupedByContract[contract] = {
                 contractNumber: item.contractNumber,
                 createdAt: item.createdAt,
                 emails: new Set(),
                 agency: item.agency,
+                typologieBatiment: typologieBatiment,
                 totalContacts: 0,
                 aiContacts: 0
             };
@@ -1666,7 +1799,7 @@ function showRecordsModal() {
     if (recordsByContract.length === 0) {
         const emptyRow = document.createElement('tr');
         emptyRow.innerHTML = `
-            <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+            <td colspan="6" class="px-4 py-8 text-center text-gray-500">
                 Aucun enregistrement trouvé pour les filtres sélectionnés
             </td>
         `;
@@ -1681,6 +1814,7 @@ function showRecordsModal() {
                 <td class="px-4 py-3 text-sm text-gray-900">${formatDateForDisplay(record.createdAt)}</td>
                 <td class="px-4 py-3 text-sm text-gray-600">${emailsList || '-'}</td>
                 <td class="px-4 py-3 text-sm text-gray-900">${record.agency || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${record.typologieBatiment || '-'}</td>
                 <td class="px-4 py-3 text-sm text-center">
                     <span class="font-semibold text-green-600">${record.aiContacts}</span>
                     <span class="text-gray-500"> / ${record.totalContacts}</span>
@@ -1702,12 +1836,13 @@ function exportRecordsToCSV() {
     }
     
     // Create CSV content
-    const headers = ['Numéro de contrat', 'Date de diffusion', 'Email utilisateur(s)', 'Agence', 'Contacts IA', 'Total contacts'];
+    const headers = ['Numéro de contrat', 'Date de diffusion', 'Email utilisateur(s)', 'Agence', 'Typologie batiment', 'Contacts IA', 'Total contacts'];
     const rows = currentRecords.map(record => [
         record.contractNumber || '',
         record.createdAt || '',
         Array.from(record.emails || []).join('; '),
         record.agency || '',
+        record.typologieBatiment || '',
         record.aiContacts || 0,
         record.totalContacts || 0
     ]);
