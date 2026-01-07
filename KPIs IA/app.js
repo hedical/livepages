@@ -5,6 +5,14 @@ const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
+// Expert BTP Consultants URL (public)
+const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
+// Chat BTP Consultants URL (public)
+const CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
+// Expert Citae URL (public)
+const EXPERT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json';
+// Chat Citae URL (public)
+const CHAT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json';
 // Default Population URL (public)
 const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
@@ -30,6 +38,10 @@ function getHourlyRate() {
 let descriptifData = [];
 let autocontactData = [];
 let comparateurData = [];
+let expertBTPData = [];
+let chatBTPData = [];
+let expertCitaeData = [];
+let chatCitaeData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let availableAgencies = [];
 let availableDirections = [];
@@ -79,6 +91,30 @@ const comparateurCountEl = document.getElementById('comparateur-count');
 const comparateurOpsEl = document.getElementById('comparateur-ops');
 const comparateurPagesEl = document.getElementById('comparateur-pages');
 const comparateurUsersEl = document.getElementById('comparateur-users');
+
+// Expert BTP Consultants elements
+const expertTechBTPCountEl = document.getElementById('expert-tech-btp-count');
+const expertTechBTPUsersEl = document.getElementById('expert-tech-btp-users');
+const expertTechBTPMessagesEl = document.getElementById('expert-tech-btp-messages');
+const expertTechBTPCostEl = document.getElementById('expert-tech-btp-cost');
+
+// Chat BTP Consultants elements
+const chatProjetBTPCountEl = document.getElementById('chat-projet-btp-count');
+const chatProjetBTPUsersEl = document.getElementById('chat-projet-btp-users');
+const chatProjetBTPMessagesEl = document.getElementById('chat-projet-btp-messages');
+const chatProjetBTPCostEl = document.getElementById('chat-projet-btp-cost');
+
+// Expert Citae elements
+const expertTechCitaeCountEl = document.getElementById('expert-tech-citae-count');
+const expertTechCitaeUsersEl = document.getElementById('expert-tech-citae-users');
+const expertTechCitaeMessagesEl = document.getElementById('expert-tech-citae-messages');
+const expertTechCitaeCostEl = document.getElementById('expert-tech-citae-cost');
+
+// Chat Citae elements
+const chatProjetCitaeCountEl = document.getElementById('chat-projet-citae-count');
+const chatProjetCitaeUsersEl = document.getElementById('chat-projet-citae-users');
+const chatProjetCitaeMessagesEl = document.getElementById('chat-projet-citae-messages');
+const chatProjetCitaeCostEl = document.getElementById('chat-projet-citae-cost');
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -589,6 +625,10 @@ function extractDirectionsAndAgencies() {
     processItems(descriptifData);
     processItems(autocontactData);
     processItems(comparateurData);
+    processItems(expertBTPData);
+    processItems(chatBTPData);
+    processItems(expertCitaeData);
+    processItems(chatCitaeData);
     
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
@@ -701,6 +741,8 @@ function updateAgencyTable() {
             usersDescriptif: new Set(),
             usersAutocontact: new Set(),
             usersComparateur: new Set(),
+            usersExpertBTP: new Set(),
+            usersChatBTP: new Set(),
             descriptifCount: 0,
             descriptifPotential: 0,
             autocontactCount: 0,
@@ -743,6 +785,28 @@ function updateAgencyTable() {
     aggregate(autocontactData, 'autocontact');
     aggregate(comparateurData, 'comparateur');
     
+    // Aggregate Expert BTP Consultants data
+    const expertBTPFiltered = getFilteredData(expertBTPData);
+    expertBTPFiltered.forEach(item => {
+        const ag = item.agency;
+        if (!ag || !agencyStats[ag]) return;
+        
+        if (item.email && item.email.includes('@btp-consultants.fr')) {
+            agencyStats[ag].usersExpertBTP.add(item.email);
+        }
+    });
+    
+    // Aggregate Chat BTP Consultants data
+    const chatBTPFiltered = getFilteredData(chatBTPData);
+    chatBTPFiltered.forEach(item => {
+        const ag = item.agency;
+        if (!ag || !agencyStats[ag]) return;
+        
+        if (item.email && item.email.includes('@btp-consultants.fr')) {
+            agencyStats[ag].usersChatBTP.add(item.email);
+        }
+    });
+    
     // Calculate final metrics
     let rows = Object.values(agencyStats).map(stat => {
         // Try to get effectif directly
@@ -771,6 +835,8 @@ function updateAgencyTable() {
         const adoptionDescriptif = effectif > 0 ? (stat.usersDescriptif.size / effectif) * 100 : 0;
         const adoptionAutocontact = effectif > 0 ? (stat.usersAutocontact.size / effectif) * 100 : 0;
         const adoptionComparateur = effectif > 0 ? (stat.usersComparateur.size / effectif) * 100 : 0;
+        const adoptionExpertBTP = effectif > 0 ? (stat.usersExpertBTP.size / effectif) * 100 : 0;
+        const adoptionChatBTP = effectif > 0 ? (stat.usersChatBTP.size / effectif) * 100 : 0;
         
         // Debug logs
         console.log(`Agency: ${stat.agency}, Effectif: ${effectif}, Users Descriptif: ${stat.usersDescriptif.size}, Adoption Descriptif: ${adoptionDescriptif.toFixed(1)}%`);
@@ -798,9 +864,13 @@ function updateAgencyTable() {
             adoptionDescriptif: adoptionDescriptif,
             adoptionAutocontact: adoptionAutocontact,
             adoptionComparateur: adoptionComparateur,
+            adoptionExpertBTP: adoptionExpertBTP,
+            adoptionChatBTP: adoptionChatBTP,
             descriptifCount: stat.descriptifCount,
             autocontactCount: stat.autocontactCount,
             comparateurCount: stat.comparateurCount,
+            expertBTPCount: stat.usersExpertBTP.size,
+            chatBTPCount: stat.usersChatBTP.size,
             total: stat.descriptifCount + stat.autocontactCount + stat.comparateurCount
         };
     });
@@ -822,7 +892,7 @@ function updateAgencyTable() {
     if (rows.length === 0) {
         agencyTableBodyEl.innerHTML = `
             <tr>
-                <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                <td colspan="8" class="px-6 py-4 text-center text-gray-500">
                     Aucune donnée disponible
                 </td>
             </tr>
@@ -863,6 +933,18 @@ function updateAgencyTable() {
                     <span class="text-xs text-gray-400">(${row.comparateurCount})</span>
                 </div>
             </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                <div class="flex flex-col items-center justify-center">
+                    <span class="font-medium ${getColorClass(row.adoptionExpertBTP)}">${row.adoptionExpertBTP.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400">(${row.expertBTPCount})</span>
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                <div class="flex flex-col items-center justify-center">
+                    <span class="font-medium ${getColorClass(row.adoptionChatBTP)}">${row.adoptionChatBTP.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400">(${row.chatBTPCount})</span>
+                </div>
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600 text-center">${row.total}</td>
         `;
         agencyTableBodyEl.appendChild(tr);
@@ -885,7 +967,7 @@ function sortTable(column) {
 }
 
 function updateSortIcons() {
-    ['agency', 'shortfall', 'descriptif', 'autocontact', 'comparateur', 'total'].forEach(col => {
+    ['agency', 'shortfall', 'descriptif', 'autocontact', 'comparateur', 'expert-btp', 'chat-btp', 'total'].forEach(col => {
         const icon = document.getElementById(`sort-icon-${col}`);
         if (icon) {
             if (tableSortState.column === col) {
@@ -1083,14 +1165,134 @@ function formatNumber(num) {
 
 // ==================== UPDATE UI ====================
 
+function processExpertBTPData(data) {
+    // Apply filters
+    const filtered = getFilteredData(data);
+    
+    // Total sessions (each item is a session)
+    const totalSessions = filtered.length;
+    
+    // Unique users
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') {
+            uniqueUsers.add(item.email);
+        }
+    });
+    
+    // Total messages
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    
+    // Total cost
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    
+    return {
+        totalSessions,
+        uniqueUsers: uniqueUsers.size,
+        totalMessages,
+        totalCost
+    };
+}
+
+function processChatBTPData(data) {
+    // Apply filters
+    const filtered = getFilteredData(data);
+    
+    // Total sessions (each item is a session)
+    const totalSessions = filtered.length;
+    
+    // Unique users
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') {
+            uniqueUsers.add(item.email);
+        }
+    });
+    
+    // Total messages
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    
+    // Total cost
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    
+    return {
+        totalSessions,
+        uniqueUsers: uniqueUsers.size,
+        totalMessages,
+        totalCost
+    };
+}
+
+function processExpertCitaeData(data) {
+    // Apply filters
+    const filtered = getFilteredData(data);
+    
+    // Total sessions (each item is a session)
+    const totalSessions = filtered.length;
+    
+    // Unique users
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') {
+            uniqueUsers.add(item.email);
+        }
+    });
+    
+    // Total messages
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    
+    // Total cost
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    
+    return {
+        totalSessions,
+        uniqueUsers: uniqueUsers.size,
+        totalMessages,
+        totalCost
+    };
+}
+
+function processChatCitaeData(data) {
+    // Apply filters
+    const filtered = getFilteredData(data);
+    
+    // Total sessions (each item is a session)
+    const totalSessions = filtered.length;
+    
+    // Unique users
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') {
+            uniqueUsers.add(item.email);
+        }
+    });
+    
+    // Total messages
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    
+    // Total cost
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    
+    return {
+        totalSessions,
+        uniqueUsers: uniqueUsers.size,
+        totalMessages,
+        totalCost
+    };
+}
+
 function updateKPIs() {
     const descriptifStats = processDescriptifData(descriptifData);
     const autocontactStats = processAutocontactData(autocontactData);
     const comparateurStats = processComparateurData(comparateurData);
+    const expertBTPStats = processExpertBTPData(expertBTPData);
+    const chatBTPStats = processChatBTPData(chatBTPData);
+    const expertCitaeStats = processExpertCitaeData(expertCitaeData);
+    const chatCitaeStats = processChatCitaeData(chatCitaeData);
     
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
@@ -1109,6 +1311,30 @@ function updateKPIs() {
         
     getFilteredData(comparateurData).forEach(item => {
         if (item.email) allUsers.add(item.email);
+    });
+    
+    getFilteredData(expertBTPData).forEach(item => {
+        if (item.email && item.email.includes('@btp-consultants.fr')) {
+            allUsers.add(item.email);
+        }
+    });
+    
+    getFilteredData(chatBTPData).forEach(item => {
+        if (item.email && item.email.includes('@btp-consultants.fr')) {
+            allUsers.add(item.email);
+        }
+    });
+    
+    getFilteredData(expertCitaeData).forEach(item => {
+        if (item.email && item.email.includes('@citae.fr')) {
+            allUsers.add(item.email);
+        }
+    });
+    
+    getFilteredData(chatCitaeData).forEach(item => {
+        if (item.email && item.email.includes('@citae.fr')) {
+            allUsers.add(item.email);
+        }
     });
     
     totalUtilisationsEl.textContent = formatNumber(totalUtilisations);
@@ -1131,6 +1357,50 @@ function updateKPIs() {
     comparateurOpsEl.textContent = formatNumber(comparateurStats.uniqueOperations);
     comparateurPagesEl.textContent = formatNumber(comparateurStats.totalPages);
     comparateurUsersEl.textContent = comparateurStats.uniqueUsers;
+    
+    // Expert BTP stats
+    if (expertTechBTPCountEl) expertTechBTPCountEl.textContent = formatNumber(expertBTPStats.totalSessions);
+    if (expertTechBTPUsersEl) expertTechBTPUsersEl.textContent = formatNumber(expertBTPStats.uniqueUsers);
+    if (expertTechBTPMessagesEl) expertTechBTPMessagesEl.textContent = formatNumber(expertBTPStats.totalMessages);
+    if (expertTechBTPCostEl) expertTechBTPCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(expertBTPStats.totalCost);
+    
+    // Chat BTP stats
+    if (chatProjetBTPCountEl) chatProjetBTPCountEl.textContent = formatNumber(chatBTPStats.totalSessions);
+    if (chatProjetBTPUsersEl) chatProjetBTPUsersEl.textContent = formatNumber(chatBTPStats.uniqueUsers);
+    if (chatProjetBTPMessagesEl) chatProjetBTPMessagesEl.textContent = formatNumber(chatBTPStats.totalMessages);
+    if (chatProjetBTPCostEl) chatProjetBTPCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(chatBTPStats.totalCost);
+    
+    // Expert Citae stats
+    if (expertTechCitaeCountEl) expertTechCitaeCountEl.textContent = formatNumber(expertCitaeStats.totalSessions);
+    if (expertTechCitaeUsersEl) expertTechCitaeUsersEl.textContent = formatNumber(expertCitaeStats.uniqueUsers);
+    if (expertTechCitaeMessagesEl) expertTechCitaeMessagesEl.textContent = formatNumber(expertCitaeStats.totalMessages);
+    if (expertTechCitaeCostEl) expertTechCitaeCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(expertCitaeStats.totalCost);
+    
+    // Chat Citae stats
+    if (chatProjetCitaeCountEl) chatProjetCitaeCountEl.textContent = formatNumber(chatCitaeStats.totalSessions);
+    if (chatProjetCitaeUsersEl) chatProjetCitaeUsersEl.textContent = formatNumber(chatCitaeStats.uniqueUsers);
+    if (chatProjetCitaeMessagesEl) chatProjetCitaeMessagesEl.textContent = formatNumber(chatCitaeStats.totalMessages);
+    if (chatProjetCitaeCostEl) chatProjetCitaeCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(chatCitaeStats.totalCost);
     
     // Calculate and display gains - USE SAME VALUES AS IN DETAIL PAGES
     // Descriptif page uses: totalOperations (unique operations)
@@ -1335,6 +1605,165 @@ async function loadData() {
         if (comparateurCSV) {
             comparateurData = parseComparateurCSV(comparateurCSV);
             console.log('Loaded', comparateurData.length, 'comparateur records');
+        }
+
+        // Load Expert BTP Consultants data
+        console.log('Loading Expert BTP Consultants data...');
+        try {
+            const expertBTPResponse = await fetch(EXPERT_BTP_URL);
+            if (expertBTPResponse.ok) {
+                const expertBTPJson = await expertBTPResponse.json();
+                // Transform JSON data to our format
+                expertBTPData = expertBTPJson.map(item => {
+                    const metadata = item.metadata || {};
+                    const productionService = metadata.productionService || '';
+                    const management = metadata.management || '';
+                    
+                    return {
+                        id: item.id,
+                        title: item.title || '',
+                        email: item.email || '',
+                        createdAt: item.createdAt || '',
+                        updatedAt: item.updatedAt || '',
+                        messagesLength: item.messagesLength || item._count?.messages || 0,
+                        totalCostInDollars: item.totalCostInDollars || 0,
+                        agency: productionService,
+                        agencyCode: productionService,
+                        direction: management || (agencyToDirection[productionService] || ''),
+                        metadata: metadata
+                    };
+                });
+                
+                // Update directions based on agencyToDirection mapping
+                expertBTPData.forEach(item => {
+                    if (!item.direction && item.agencyCode && agencyToDirection[item.agencyCode]) {
+                        item.direction = agencyToDirection[item.agencyCode];
+                    }
+                });
+                
+                console.log('Loaded', expertBTPData.length, 'Expert BTP Consultants records');
+            } else {
+                console.warn('Failed to load Expert BTP Consultants data:', expertBTPResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Expert BTP Consultants data:', e);
+        }
+
+        // Load Chat BTP Consultants data
+        console.log('Loading Chat BTP Consultants data...');
+        try {
+            const chatBTPResponse = await fetch(CHAT_BTP_URL);
+            if (chatBTPResponse.ok) {
+                const chatBTPJson = await chatBTPResponse.json();
+                // Transform JSON data to our format
+                chatBTPData = chatBTPJson.map(item => {
+                    const metadata = item.metadata || {};
+                    const productionService = metadata.productionService || '';
+                    let management = metadata.management || '';
+                    
+                    // Fix encoding for management field
+                    if (management) {
+                        management = fixEncoding(management);
+                    }
+                    
+                    return {
+                        id: item.id,
+                        title: item.title || '',
+                        email: item.email || '',
+                        createdAt: item.createdAt || '',
+                        updatedAt: item.updatedAt || '',
+                        messagesLength: item.messagesLength || item._count?.messages || 0,
+                        totalCostInDollars: item.totalCostInDollars || 0,
+                        agency: productionService,
+                        agencyCode: productionService,
+                        direction: management || (agencyToDirection[productionService] || ''),
+                        metadata: metadata
+                    };
+                });
+                
+                // Update directions based on agencyToDirection mapping
+                chatBTPData.forEach(item => {
+                    if (!item.direction && item.agencyCode && agencyToDirection[item.agencyCode]) {
+                        item.direction = fixEncoding(agencyToDirection[item.agencyCode]);
+                    }
+                });
+                
+                console.log('Loaded', chatBTPData.length, 'Chat BTP Consultants records');
+            } else {
+                console.warn('Failed to load Chat BTP Consultants data:', chatBTPResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Chat BTP Consultants data:', e);
+        }
+
+        // Load Expert Citae data
+        console.log('Loading Expert Citae data...');
+        try {
+            const expertCitaeResponse = await fetch(EXPERT_CITAE_URL);
+            if (expertCitaeResponse.ok) {
+                const expertCitaeJson = await expertCitaeResponse.json();
+                // Transform JSON data to our format
+                expertCitaeData = expertCitaeJson.map(item => {
+                    const metadata = item.metadata || {};
+                    const productionService = metadata.productionService || '';
+                    let management = metadata.management || '';
+                    
+                    return {
+                        id: item.id,
+                        title: item.title || '',
+                        email: item.email || '',
+                        createdAt: item.createdAt || '',
+                        updatedAt: item.updatedAt || '',
+                        messagesLength: item.messagesLength || item._count?.messages || 0,
+                        totalCostInDollars: item.totalCostInDollars || 0,
+                        agency: productionService || 'Non spécifié',
+                        agencyCode: productionService || '',
+                        direction: management || '',
+                        metadata: metadata
+                    };
+                });
+                
+                console.log('Loaded', expertCitaeData.length, 'Expert Citae records');
+            } else {
+                console.warn('Failed to load Expert Citae data:', expertCitaeResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Expert Citae data:', e);
+        }
+
+        // Load Chat Citae data
+        console.log('Loading Chat Citae data...');
+        try {
+            const chatCitaeResponse = await fetch(CHAT_CITAE_URL);
+            if (chatCitaeResponse.ok) {
+                const chatCitaeJson = await chatCitaeResponse.json();
+                // Transform JSON data to our format
+                chatCitaeData = chatCitaeJson.map(item => {
+                    const metadata = item.metadata || {};
+                    const productionService = metadata.productionService || '';
+                    let management = metadata.management || '';
+                    
+                    return {
+                        id: item.id,
+                        title: item.title || '',
+                        email: item.email || '',
+                        createdAt: item.createdAt || '',
+                        updatedAt: item.updatedAt || '',
+                        messagesLength: item.messagesLength || item._count?.messages || 0,
+                        totalCostInDollars: item.totalCostInDollars || 0,
+                        agency: productionService || 'Non spécifié',
+                        agencyCode: productionService || '',
+                        direction: management || '',
+                        metadata: metadata
+                    };
+                });
+                
+                console.log('Loaded', chatCitaeData.length, 'Chat Citae records');
+            } else {
+                console.warn('Failed to load Chat Citae data:', chatCitaeResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Chat Citae data:', e);
         }
 
         // Initialize filters and table

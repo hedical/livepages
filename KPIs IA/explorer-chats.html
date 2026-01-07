@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr" class="bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorateur de Chats - AnalyzTech</title>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom spinner for loading overlay */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #ffffff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Tag styles for themes */
+        .theme-tag {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="text-center">
+            <div class="spinner mx-auto mb-4"></div>
+            <p class="text-white text-lg">Chargement des données...</p>
+        </div>
+    </div>
+
+    <div class="min-h-screen bg-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="mb-8">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <a href="index.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
+                        <h1 class="text-3xl font-bold text-gray-900">Explorateur de Chats</h1>
+                        <p class="text-gray-600 mt-2">Explorez les sessions de chat et analysez les thèmes de discussion</p>
+                    </div>
+                    <div class="flex gap-4">
+                        <select id="data-source" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="chat-btp">Chat BTP Consultants</option>
+                            <option value="expert-btp">Expert BTP Consultants</option>
+                            <option value="chat-citae">Chat Citae</option>
+                            <option value="expert-citae">Expert Citae</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left Column: Summary Stats -->
+                <div id="summary" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-4">Résumé</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-sm text-gray-600">Total de sessions</p>
+                            <p class="text-2xl font-bold text-gray-900" id="total-sessions">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">Utilisateurs uniques</p>
+                            <p class="text-2xl font-bold text-gray-900" id="unique-users">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">Messages totaux</p>
+                            <p class="text-2xl font-bold text-gray-900" id="total-messages">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">Coût total</p>
+                            <p class="text-2xl font-bold text-gray-900" id="total-cost">$0.00</p>
+                        </div>
+                        <div class="pt-4 border-t">
+                            <p class="text-sm text-gray-600 mb-2">Utilisateurs filtrés</p>
+                            <p class="text-2xl font-bold text-blue-600" id="filtered-users">0</p>
+                            <p class="text-xs text-gray-500 mt-1" id="record-counter">Utilisateur 0 / 0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Quick Filters -->
+                <div id="filters-section" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-4">Filtres rapides</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <!-- Filter by user -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Filtrer par utilisateur</label>
+                            <select id="user-filter" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="all">Tous les utilisateurs</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Filter by agency -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Filtrer par agence</label>
+                            <select id="agency-filter" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="all">Toutes les agences</option>
+                            </select>
+                        </div>
+
+                        <!-- Sort by -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Trier par</label>
+                            <select id="sort-by" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="date-desc">Date (récent)</option>
+                                <option value="date-asc">Date (ancien)</option>
+                                <option value="messages-desc">Messages (décroissant)</option>
+                                <option value="messages-asc">Messages (croissant)</option>
+                                <option value="cost-desc">Coût (décroissant)</option>
+                                <option value="cost-asc">Coût (croissant)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Search by email -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Rechercher par email</label>
+                        <div class="flex gap-2">
+                            <input type="email" id="search-email" placeholder="email@example.com" class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button id="search-email-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Rechercher</button>
+                        </div>
+                    </div>
+
+                    <button id="reset-filters" class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                        Réinitialiser les filtres
+                    </button>
+                </div>
+            </div>
+
+            <!-- User Display -->
+            <div id="user-display" class="mt-6 bg-white rounded-xl shadow-lg p-6 hidden">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900" id="user-email">Utilisateur</h2>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="text-sm text-gray-600" id="user-agency"></span>
+                            <span class="text-sm text-gray-400">•</span>
+                            <span class="text-sm text-gray-600" id="user-first-session">Première session: -</span>
+                            <span class="text-sm text-gray-400">•</span>
+                            <span class="text-sm text-gray-600" id="user-last-session">Dernière session: -</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="prev" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                            ← Précédent
+                        </button>
+                        <button id="next" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Suivant →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- User Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
+                    <div>
+                        <p class="text-xs text-blue-700">Total sessions</p>
+                        <p class="text-lg font-semibold text-blue-900" id="user-total-sessions">0</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-blue-700">Total messages</p>
+                        <p class="text-lg font-semibold text-blue-900" id="user-total-messages">0</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-blue-700">Coût total</p>
+                        <p class="text-lg font-semibold text-blue-900" id="user-total-cost">$0.00</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-blue-700">Moyenne msg/session</p>
+                        <p class="text-lg font-semibold text-blue-900" id="user-avg-messages">0</p>
+                    </div>
+                </div>
+
+                <!-- All Themes -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3">Thèmes de discussion (toutes sessions)</h3>
+                    <div id="user-themes" class="flex flex-wrap gap-2">
+                        <!-- Themes will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Sessions List -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3">Sessions de l'utilisateur</h3>
+                    <div id="user-sessions-list" class="space-y-2">
+                        <!-- Sessions will be inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="mt-6 bg-white rounded-xl shadow-lg p-12 text-center hidden">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <h3 class="mt-4 text-lg font-medium text-gray-900">Aucun utilisateur trouvé</h3>
+                <p class="mt-2 text-sm text-gray-500">Essayez de modifier vos filtres pour voir plus de résultats.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="explorer-chats.js"></script>
+</body>
+</html>
+
