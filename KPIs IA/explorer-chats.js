@@ -27,6 +27,8 @@ const totalSessionsEl = document.getElementById('total-sessions');
 const uniqueUsersEl = document.getElementById('unique-users');
 const totalMessagesEl = document.getElementById('total-messages');
 const totalCostEl = document.getElementById('total-cost');
+const avgMessagesPerSessionEl = document.getElementById('avg-messages-per-session');
+const avgCostPerSessionEl = document.getElementById('avg-cost-per-session');
 const filteredUsersEl = document.getElementById('filtered-users');
 const recordCounterEl = document.getElementById('record-counter');
 
@@ -52,6 +54,11 @@ const userThemesEl = document.getElementById('user-themes');
 const userSessionsListEl = document.getElementById('user-sessions-list');
 const prevBtn = document.getElementById('prev');
 const nextBtn = document.getElementById('next');
+
+const analyticsSectionEl = document.getElementById('analytics-section');
+const topUsersTableEl = document.getElementById('top-users-table');
+const topFlopsTableEl = document.getElementById('top-flops-table');
+let usersChart = null;
 
 // Utility Functions
 function formatDate(dateString) {
@@ -350,16 +357,186 @@ function updateSummary() {
         totalCost += rec.totalCostInDollars || 0;
     });
     
-    totalSessionsEl.textContent = formatNumber(allRecords.length);
+    const totalSessions = allRecords.length;
+    const avgMessagesPerSession = totalSessions > 0 ? (totalMessages / totalSessions) : 0;
+    const avgCostPerSession = totalSessions > 0 ? (totalCost / totalSessions) : 0;
+    
+    totalSessionsEl.textContent = formatNumber(totalSessions);
     uniqueUsersEl.textContent = formatNumber(uniqueUsers.size);
     totalMessagesEl.textContent = formatNumber(totalMessages);
     totalCostEl.textContent = formatCurrency(totalCost);
+    avgMessagesPerSessionEl.textContent = avgMessagesPerSession.toFixed(1);
+    avgCostPerSessionEl.textContent = formatCurrency(avgCostPerSession);
     
     // Filtered stats
     filteredUsersEl.textContent = formatNumber(filteredUserGroups.length);
     recordCounterEl.textContent = filteredUserGroups.length > 0 
         ? `Utilisateur ${currentIndex + 1} / ${filteredUserGroups.length}`
         : 'Aucun utilisateur';
+    
+    // Update analytics section
+    updateAnalytics();
+}
+
+// ==================== ANALYTICS SECTION ====================
+
+function updateAnalytics() {
+    if (userGroups.length === 0) {
+        analyticsSectionEl.classList.add('hidden');
+        return;
+    }
+    
+    analyticsSectionEl.classList.remove('hidden');
+    
+    // Calculate top users and flops
+    const sortedUsers = [...userGroups].sort((a, b) => {
+        // Sort by total messages (or could use totalCost, totalSessions, etc.)
+        return b.stats.totalMessages - a.stats.totalMessages;
+    });
+    
+    const topUsers = sortedUsers.slice(0, 10);
+    const topFlops = sortedUsers.slice(-10).reverse();
+    
+    // Update top users table
+    topUsersTableEl.innerHTML = '';
+    topUsers.forEach((userGroup, index) => {
+        const row = document.createElement('tr');
+        row.className = index % 2 === 0 ? 'bg-gray-50' : '';
+        row.innerHTML = `
+            <td class="py-2 px-2 font-semibold text-gray-700">${index + 1}</td>
+            <td class="py-2 px-2 text-gray-900" title="${userGroup.email}">${truncateEmail(userGroup.email, 25)}</td>
+            <td class="py-2 px-2 text-right text-gray-700">${formatNumber(userGroup.stats.totalSessions)}</td>
+            <td class="py-2 px-2 text-right text-gray-700">${formatNumber(userGroup.stats.totalMessages)}</td>
+            <td class="py-2 px-2 text-right text-gray-700">${formatCurrency(userGroup.stats.totalCost)}</td>
+        `;
+        topUsersTableEl.appendChild(row);
+    });
+    
+    // Update top flops table
+    topFlopsTableEl.innerHTML = '';
+    topFlops.forEach((userGroup, index) => {
+        const row = document.createElement('tr');
+        row.className = index % 2 === 0 ? 'bg-gray-50' : '';
+        row.innerHTML = `
+            <td class="py-2 px-2 font-semibold text-gray-700">${index + 1}</td>
+            <td class="py-2 px-2 text-gray-900" title="${userGroup.email}">${truncateEmail(userGroup.email, 25)}</td>
+            <td class="py-2 px-2 text-right text-gray-700">${formatNumber(userGroup.stats.totalSessions)}</td>
+            <td class="py-2 px-2 text-right text-gray-700">${formatNumber(userGroup.stats.totalMessages)}</td>
+            <td class="py-2 px-2 text-right text-gray-700">${formatCurrency(userGroup.stats.totalCost)}</td>
+        `;
+        topFlopsTableEl.appendChild(row);
+    });
+    
+    // Update chart
+    updateUsersChart(sortedUsers.slice(0, 15)); // Show top 15 for better visualization
+}
+
+function truncateEmail(email, maxLength) {
+    if (!email) return 'Non spécifié';
+    if (email.length <= maxLength) return email;
+    return email.substring(0, maxLength - 3) + '...';
+}
+
+function updateUsersChart(userGroups) {
+    const ctx = document.getElementById('users-chart');
+    if (!ctx) return;
+    
+    // Destroy existing chart if it exists
+    if (usersChart) {
+        usersChart.destroy();
+    }
+    
+    // Prepare data for chart (top users by messages)
+    const labels = userGroups.map((ug, i) => `#${i + 1}`);
+    const messagesData = userGroups.map(ug => ug.stats.totalMessages);
+    const costData = userGroups.map(ug => ug.stats.totalCost);
+    const sessionsData = userGroups.map(ug => ug.stats.totalSessions);
+    const emails = userGroups.map(ug => ug.email || 'Non spécifié');
+    
+    usersChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Messages',
+                    data: messagesData,
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Sessions',
+                    data: sessionsData,
+                    backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                    borderColor: 'rgba(139, 92, 246, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Coût ($)',
+                    data: costData,
+                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            const dataIndex = context[0].dataIndex;
+                            return emails[dataIndex];
+                        },
+                        label: function(context) {
+                            if (context.datasetIndex === 0) {
+                                return `Messages: ${formatNumber(context.parsed.y)}`;
+                            } else if (context.datasetIndex === 1) {
+                                return `Sessions: ${formatNumber(context.parsed.y)}`;
+                            } else {
+                                return `Coût: ${formatCurrency(context.parsed.y)}`;
+                            }
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Messages / Sessions'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Coût ($)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
 }
 
 // ==================== USER DISPLAY ====================
