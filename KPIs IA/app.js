@@ -118,6 +118,29 @@ const chatProjetCitaeCostEl = document.getElementById('chat-projet-citae-cost');
 
 // ==================== UTILITY FUNCTIONS ====================
 
+// Extract plain text from HTML string
+const HTML_TAG_RE = /<[^>]+>/g;
+function extractText(html) {
+    if (!html || typeof html !== 'string') return '';
+    const withBreaks = html.replace(/<\/p>/gi, '\n\n');
+    let text = withBreaks.replace(HTML_TAG_RE, '');
+    text = text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/[*_`]/g, '');
+    return text.replace(/\s+/g, ' ').trim();
+}
+
+// Count words in text (only words, not numbers)
+function countWords(text) {
+    if (!text || typeof text !== 'string') return 0;
+    // Match only sequences of letters (including accented characters)
+    const words = text.match(/[a-zA-ZÀ-ÿ]+/g);
+    return words ? words.length : 0;
+}
+
 /**
  * Helper function to parse a CSV line with quoted values
  */
@@ -244,6 +267,8 @@ function parseDescriptifCSV(csvString) {
     let emailIndex = -1;
     let agencyIndex = -1;
     let managementIndex = -1;
+    let descriptionIndex = -1;
+    let aiResultIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -265,6 +290,12 @@ function parseDescriptifCSV(csvString) {
         if (managementIndex === -1 && header.includes('management')) {
             managementIndex = i;
         }
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) {
+            descriptionIndex = i;
+        }
+        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) {
+            aiResultIndex = i;
+        }
     }
     
     if (typeIndex === -1 || contractIndex === -1) {
@@ -283,6 +314,8 @@ function parseDescriptifCSV(csvString) {
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
         const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
+        const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
+        const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
         
         data.push({
             type: (type || '').trim(),
@@ -290,7 +323,9 @@ function parseDescriptifCSV(csvString) {
             createdAt: (diffusedAt || '').trim(),
             email: (email || '').trim(),
             agency: (agency || '').trim(),
-            direction: (direction || '').trim()
+            direction: (direction || '').trim(),
+            description: description,
+            aiResult: aiResult
         });
     }
     
@@ -1017,11 +1052,18 @@ function processDescriptifData(data) {
         }
     });
     
-    // Unique operations (contracts)
+    // Unique operations (contracts) - exclure les RICT avec moins de 100 mots
     const uniqueOperations = new Set();
     descriptifFiltered.forEach(item => {
         if (item.contractNumber && item.contractNumber.trim() !== '') {
-            uniqueOperations.add(item.contractNumber);
+            // Compter les mots dans le résultat de l'IA
+            const processedAI = extractText(item.aiResult || '');
+            const wordCount = countWords(processedAI);
+            
+            // Ne compter que les RICT avec au moins 100 mots
+            if (wordCount >= 100) {
+                uniqueOperations.add(item.contractNumber);
+            }
         }
     });
 

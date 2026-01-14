@@ -453,7 +453,7 @@ function calculateSummary(records, allRecordsForUsers = null) {
     let highQuality = 0;
     let mediumQuality = 0;
     let lowQuality = 0;
-    let lowWordCount = 0; // Count records with less than 500 words
+    let lowWordCount = 0; // Count records with less than 100 words
     
     // Calculate stats from filtered records
     records.forEach(rec => {
@@ -466,8 +466,8 @@ function calculateSummary(records, allRecordsForUsers = null) {
         else if (rec.score >= 0.30) mediumQuality++;
         else lowQuality++;
         
-        // Count records with less than 300 words
-        if (rec.descWordCount < 500) lowWordCount++;
+        // Count records with less than 100 words
+        if (rec.descWordCount < 100) lowWordCount++;
     });
     
     const avgScore = records.length > 0 ? (totalScore / records.length) : 0;
@@ -547,7 +547,7 @@ function updateSummary() {
     
     // Add word count stats
     const lowWordPercentage = summary.totalRecords > 0 ? ((summary.lowWordCount / summary.totalRecords) * 100).toFixed(1) : 0;
-    lowWordCountEl.innerHTML = `Descriptions < 500 mots: <strong class="float-right text-blue-600">${summary.lowWordCount} (${lowWordPercentage}%)</strong>`;
+    lowWordCountEl.innerHTML = `Descriptions < 100 mots: <strong class="float-right text-blue-600">${summary.lowWordCount} (${lowWordPercentage}%)</strong>`;
     
     avgScoreEl.textContent = `Score moyen global: ${(summary.avgScore * 100).toFixed(1)}%`;
     

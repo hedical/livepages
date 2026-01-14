@@ -190,6 +190,29 @@ function formatNumber(num) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(num));
 }
 
+// Extract plain text from HTML string
+const HTML_TAG_RE = /<[^>]+>/g;
+function extractText(html) {
+    if (!html || typeof html !== 'string') return '';
+    const withBreaks = html.replace(/<\/p>/gi, '\n\n');
+    let text = withBreaks.replace(HTML_TAG_RE, '');
+    text = text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/[*_`]/g, '');
+    return text.replace(/\s+/g, ' ').trim();
+}
+
+// Count words in text (only words, not numbers)
+function countWords(text) {
+    if (!text || typeof text !== 'string') return 0;
+    // Match only sequences of letters (including accented characters)
+    const words = text.match(/[a-zA-ZÀ-ÿ]+/g);
+    return words ? words.length : 0;
+}
+
 // Load parameters from localStorage
 function loadParameters() {
     const saved = localStorage.getItem('descriptif_parameters');
@@ -438,6 +461,8 @@ function parseCSVData(csvString) {
     let diffusedAtIndex = -1;
     let emailIndex = -1;
     let agencyIndex = -1;
+    let descriptionIndex = -1;
+    let aiResultIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -455,6 +480,12 @@ function parseCSVData(csvString) {
         }
         if (agencyIndex === -1 && header.includes('productionservice')) {
             agencyIndex = i;
+        }
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) {
+            descriptionIndex = i;
+        }
+        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) {
+            aiResultIndex = i;
         }
     }
     
@@ -483,6 +514,8 @@ function parseCSVData(csvString) {
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
+        const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
         
         // ProductionService already contains the agency code (CT95, LYCT, etc.)
         // Use it directly as agencyCode for mapping with population_cible
@@ -494,7 +527,9 @@ function parseCSVData(csvString) {
             createdAt: (diffusedAt || '').trim(), // Using Report → DiffusedAt as date
             email: (email || '').trim(),
             agency: (agency || '').trim(),
-            agencyCode: agencyCode // Same as agency - ProductionService is the code
+            agencyCode: agencyCode, // Same as agency - ProductionService is the code
+            description: description,
+            aiResult: aiResult
         });
     }
     
@@ -616,8 +651,16 @@ function processData(data, filters, skipMonthFilter = false) {
         if (item.email && item.email.trim() !== '') {
             uniqueUsers.add(item.email);
         }
+        // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
         if (item.contractNumber && item.contractNumber.trim() !== '') {
-            uniqueOperations.add(item.contractNumber);
+            // Compter les mots dans le résultat de l'IA
+            const processedAI = extractText(item.aiResult || '');
+            const wordCount = countWords(processedAI);
+            
+            // Ne compter que les RICT avec au moins 100 mots
+            if (wordCount >= 100) {
+                uniqueOperations.add(item.contractNumber);
+            }
         }
     });
 
@@ -757,8 +800,16 @@ function updateAgencyTable(allRictData, descriptifData) {
             agencyStats[item.agency].users.add(item.email);
         }
         
+        // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
         if (item.contractNumber && item.contractNumber.trim() !== '') {
-            agencyStats[item.agency].operations.add(item.contractNumber);
+            // Compter les mots dans le résultat de l'IA
+            const processedAI = extractText(item.aiResult || '');
+            const wordCount = countWords(processedAI);
+            
+            // Ne compter que les RICT avec au moins 100 mots
+            if (wordCount >= 100) {
+                agencyStats[item.agency].operations.add(item.contractNumber);
+            }
         }
     });
     
@@ -1002,6 +1053,11 @@ function updateChart(data) {
         const date = parseDate(item.createdAt);
         if (!date) return;
         
+        // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
+        const processedAI = extractText(item.aiResult || '');
+        const wordCount = countWords(processedAI);
+        if (wordCount < 100) return;
+        
         // Group by month (YYYY-MM)
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1240,6 +1296,11 @@ function updateRatesChart(data) {
     data.descriptifs.forEach((item) => {
         const date = parseDate(item.createdAt);
         if (!date) return;
+        
+        // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
+        const processedAI = extractText(item.aiResult || '');
+        const wordCount = countWords(processedAI);
+        if (wordCount < 100) return;
         
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
