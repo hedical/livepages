@@ -60,6 +60,14 @@ const topUsersTableEl = document.getElementById('top-users-table');
 const topFlopsTableEl = document.getElementById('top-flops-table');
 let usersChart = null;
 
+// Messages Modal Elements
+const messagesModal = document.getElementById('messages-modal');
+const closeMessagesModalBtn = document.getElementById('close-messages-modal');
+const messagesContainer = document.getElementById('messages-container');
+const messagesLoading = document.getElementById('messages-loading');
+const messagesError = document.getElementById('messages-error');
+const modalSessionTitle = document.getElementById('modal-session-title');
+
 // Utility Functions
 function formatDate(dateString) {
     if (!dateString) return '-';
@@ -591,7 +599,7 @@ function showUser() {
     userSessionsListEl.innerHTML = '';
     userGroup.sessions.forEach((session, index) => {
         const sessionDiv = document.createElement('div');
-        sessionDiv.className = 'p-3 border border-gray-200 rounded-lg hover:bg-gray-50';
+        sessionDiv.className = 'p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors';
         sessionDiv.innerHTML = `
             <div class="flex items-start justify-between">
                 <div class="flex-1">
@@ -607,6 +615,10 @@ function showUser() {
                 </div>
             </div>
         `;
+        // Add click handler to open messages modal
+        sessionDiv.addEventListener('click', () => {
+            openMessagesModal(session);
+        });
         userSessionsListEl.appendChild(sessionDiv);
     });
     
@@ -679,8 +691,461 @@ document.addEventListener('keydown', (e) => {
         prevBtn.click();
     } else if (e.key === 'ArrowRight' && !nextBtn.disabled) {
         nextBtn.click();
+    } else if (e.key === 'Escape' && !messagesModal.classList.contains('hidden')) {
+        closeMessagesModal();
     }
 });
+
+// ==================== MESSAGES MODAL ====================
+
+const MESSAGES_WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/getMessages';
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Format markdown-like text (simple formatting)
+function formatMessageText(text) {
+    if (!text) return '';
+    
+    const placeholders = [];
+    let placeholderIndex = 0;
+    
+    // First, protect HTML tables and links from escaping
+    const htmlTableRegex = /<table[\s\S]*?<\/table>/gi;
+    text = text.replace(htmlTableRegex, (match) => {
+        const placeholder = `__PLACEHOLDER_${placeholderIndex}__`;
+        placeholders[placeholderIndex] = match;
+        placeholderIndex++;
+        return placeholder;
+    });
+    
+    // Protect HTML links
+    const htmlLinkRegex = /<a\s+[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([^<]*)<\/a>/gi;
+    text = text.replace(htmlLinkRegex, (match) => {
+        const placeholder = `__PLACEHOLDER_${placeholderIndex}__`;
+        placeholders[placeholderIndex] = match;
+        placeholderIndex++;
+        return placeholder;
+    });
+    
+    // Process markdown tables BEFORE escaping (format: | col1 | col2 |)
+    // Match multi-line tables with separator row
+    const markdownTableRegex = /(\|[^\n]+\|\s*\n\|[\s\-:|]+\|\s*\n(?:\|[^\n]+\|\s*\n?)+)/g;
+    text = text.replace(markdownTableRegex, (match) => {
+        const placeholder = `__PLACEHOLDER_${placeholderIndex}__`;
+        const lines = match.trim().split('\n').filter(l => l.trim());
+        if (lines.length < 2) return match;
+        
+        let html = '<div class="overflow-x-auto my-4"><table class="min-w-full border border-gray-300 text-sm">';
+        
+        // Process header row (first line)
+        const headerLine = lines[0];
+        if (headerLine.includes('|')) {
+            const headers = headerLine.split('|').map(h => h.trim()).filter(h => h);
+            html += '<thead><tr class="bg-gray-100">';
+            headers.forEach(header => {
+                // Escape HTML in header but preserve markdown
+                let headerContent = escapeHtml(header);
+                headerContent = headerContent.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+                headerContent = headerContent.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+                html += `<th class="border border-gray-300 px-4 py-2 text-left font-semibold">${headerContent}</th>`;
+            });
+            html += '</tr></thead>';
+        }
+        
+        // Process data rows (skip separator row at index 1)
+        html += '<tbody>';
+        for (let i = 2; i < lines.length; i++) {
+            const line = lines[i];
+            // Skip separator rows (like |---|---|)
+            if (line.match(/^\|[\s\-:|]+\|$/)) continue;
+            
+            if (line.includes('|')) {
+                const cells = line.split('|').map(c => c.trim()).filter(c => c);
+                html += '<tr>';
+                cells.forEach(cell => {
+                    // Escape HTML in cell but preserve markdown
+                    let cellContent = escapeHtml(cell);
+                    cellContent = cellContent.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+                    cellContent = cellContent.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+                    // Process links in cells
+                    cellContent = cellContent.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">$1</a>');
+                    html += `<td class="border border-gray-300 px-4 py-2">${cellContent}</td>`;
+                });
+                html += '</tr>';
+            }
+        }
+        html += '</tbody></table></div>';
+        
+        placeholders[placeholderIndex] = html;
+        placeholderIndex++;
+        return placeholder;
+    });
+    
+    // Process markdown links [text](url) BEFORE escaping
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, url) => {
+        const placeholder = `__PLACEHOLDER_${placeholderIndex}__`;
+        const escapedText = escapeHtml(linkText);
+        const escapedUrl = escapeHtml(url);
+        placeholders[placeholderIndex] = `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline">${escapedText}</a>`;
+        placeholderIndex++;
+        return placeholder;
+    });
+    
+    // Now escape HTML for the rest
+    let formatted = escapeHtml(text);
+    
+    // Restore all placeholders
+    placeholders.forEach((html, index) => {
+        formatted = formatted.replace(`__PLACEHOLDER_${index}__`, html);
+    });
+    
+    // Protect HTML blocks (tables, divs) before line-by-line processing
+    const htmlBlockPlaceholders = [];
+    let htmlBlockIndex = 0;
+    const htmlBlockRegex = /(<div[^>]*class="overflow-x-auto"[^>]*>[\s\S]*?<\/div>|<table[\s\S]*?<\/table>)/gi;
+    formatted = formatted.replace(htmlBlockRegex, (match) => {
+        const placeholder = `__HTML_BLOCK_${htmlBlockIndex}__`;
+        htmlBlockPlaceholders[htmlBlockIndex] = match;
+        htmlBlockIndex++;
+        return placeholder;
+    });
+    
+    // Process line by line to handle lists properly
+    const lines = formatted.split('\n');
+    const processedLines = [];
+    let inList = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Skip if it's an HTML block placeholder (will be restored later)
+        if (line.includes('__HTML_BLOCK_')) {
+            processedLines.push(line);
+            continue;
+        }
+        
+        const isListItem = /^[-•*]\s+(.+)$/.test(line);
+        
+        if (isListItem) {
+            if (!inList) {
+                processedLines.push('<ul class="list-disc ml-4 my-2 space-y-1">');
+                inList = true;
+            }
+            const content = line.replace(/^[-•*]\s+/, '');
+            // Process markdown in list items
+            let itemContent = content;
+            itemContent = itemContent.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+            itemContent = itemContent.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+            itemContent = itemContent.replace(/`([^`]+)`/g, '<code class="bg-gray-200 px-1 py-0.5 rounded text-xs font-mono">$1</code>');
+            processedLines.push(`<li>${itemContent}</li>`);
+        } else {
+            if (inList) {
+                processedLines.push('</ul>');
+                inList = false;
+            }
+            processedLines.push(line);
+        }
+    }
+    
+    if (inList) {
+        processedLines.push('</ul>');
+    }
+    
+    formatted = processedLines.join('\n');
+    
+    // Restore HTML blocks
+    htmlBlockPlaceholders.forEach((html, index) => {
+        formatted = formatted.replace(`__HTML_BLOCK_${index}__`, html);
+    });
+    
+    // Headers ###
+    formatted = formatted.replace(/^### (.+)$/gm, '<h3 class="font-bold text-base mt-4 mb-2">$1</h3>');
+    formatted = formatted.replace(/^## (.+)$/gm, '<h2 class="font-bold text-lg mt-4 mb-2">$1</h2>');
+    formatted = formatted.replace(/^# (.+)$/gm, '<h1 class="font-bold text-xl mt-4 mb-2">$1</h1>');
+    
+    // Bold **text** (non-greedy, handle multiple) - do this after lists to avoid breaking HTML
+    formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    
+    // Italic *text* (but not if it's part of **)
+    formatted = formatted.replace(/(?<!\*)\*([^*\n<>]+?)\*(?!\*)/g, '<em>$1</em>');
+
+    // Code `text` (but not inside HTML tags)
+    formatted = formatted.replace(/(?<!`|>|")`([^`]+)`(?!`|<|")/g, '<code class="bg-gray-200 px-1 py-0.5 rounded text-sm font-mono">$1</code>');
+    
+    // Line breaks (but preserve existing <br> from lists and headers, and don't break tables)
+    formatted = formatted.replace(/\n/g, (match, offset, string) => {
+        // Don't add <br> if we're inside a table or other block element
+        const before = string.substring(Math.max(0, offset - 50), offset);
+        const after = string.substring(offset, Math.min(string.length, offset + 50));
+        if (before.includes('<table') && !before.includes('</table>')) return '\n';
+        if (before.includes('<div') && after.includes('</div>')) return '\n';
+        return '<br>';
+    });
+    
+    return formatted;
+}
+
+// Load messages from webhook
+async function loadMessages(chatId, userEmail) {
+    try {
+        messagesLoading.classList.remove('hidden');
+        messagesContainer.classList.add('hidden');
+        messagesError.classList.add('hidden');
+        
+        const response = await fetch(MESSAGES_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id: chatId })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Response received:', data);
+        console.log('Response type:', typeof data);
+        console.log('Is array?', Array.isArray(data));
+        
+        // Handle different response formats
+        let messages;
+        if (Array.isArray(data)) {
+            // Direct array of messages (expected format)
+            messages = data;
+        } else if (data.messages && Array.isArray(data.messages)) {
+            messages = data.messages;
+        } else if (data.data && Array.isArray(data.data)) {
+            messages = data.data;
+        } else if (data.body && Array.isArray(data.body)) {
+            messages = data.body;
+        } else if (data && typeof data === 'object' && data.role) {
+            // Single message object - convert to array
+            console.warn('⚠️ ATTENTION: Le webhook n8n renvoie un seul message au lieu d\'un tableau de tous les messages.');
+            console.warn('Le webhook devrait renvoyer un tableau de messages pour ce chatId.');
+            console.warn('Vérifiez la configuration n8n pour s\'assurer qu\'il renvoie TOUS les messages du chat.');
+            messages = [data];
+        } else {
+            console.error('Unexpected response format:', data);
+            throw new Error('Format de réponse inattendu du webhook');
+        }
+        
+        console.log('Messages extracted:', messages.length);
+        if (messages.length === 1) {
+            console.warn('⚠️ Seul 1 message reçu. Le webhook devrait renvoyer tous les messages du chat.');
+        }
+        console.log('Messages:', messages);
+        
+        displayMessages(messages, userEmail);
+        
+        messagesLoading.classList.add('hidden');
+        messagesContainer.classList.remove('hidden');
+    } catch (error) {
+        console.error('Error loading messages:', error);
+        messagesLoading.classList.add('hidden');
+        messagesError.classList.remove('hidden');
+        messagesError.innerHTML = `<p class="text-red-600">Erreur lors du chargement des messages: ${error.message}</p>`;
+    }
+}
+
+// Display messages in modal
+function displayMessages(messages, userEmail) {
+    messagesContainer.innerHTML = '';
+    
+    if (!messages || messages.length === 0) {
+        messagesContainer.innerHTML = '<p class="text-gray-500 text-center py-8">Aucun message trouvé</p>';
+        return;
+    }
+    
+    // Warn if only one message (should be multiple)
+    if (messages.length === 1) {
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg';
+        warningDiv.innerHTML = `
+            <p class="text-sm text-yellow-800">
+                <strong>⚠️ Attention :</strong> Seul 1 message a été reçu. 
+                Le webhook n8n devrait renvoyer tous les messages de cette conversation.
+                Vérifiez la configuration du workflow n8n.
+            </p>
+        `;
+        messagesContainer.appendChild(warningDiv);
+    }
+    
+    // Ensure messages is an array
+    if (!Array.isArray(messages)) {
+        console.error('Messages is not an array:', messages);
+        messagesContainer.innerHTML = '<p class="text-red-500 text-center py-8">Erreur: Les messages ne sont pas dans un format valide</p>';
+        return;
+    }
+    
+    // Sort messages by createdAt date
+    const sortedMessages = [...messages].sort((a, b) => {
+        const dateA = parseDate(a.createdAt);
+        const dateB = parseDate(b.createdAt);
+        if (!dateA || !dateB) return 0;
+        return dateA - dateB;
+    });
+    
+    console.log('Displaying', sortedMessages.length, 'messages');
+    
+    sortedMessages.forEach((message, index) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'mb-6';
+        
+        const isUser = message.role === 'USER';
+        const isAssistant = message.role === 'ASSISTANT';
+        
+        if (isUser) {
+            // User message - right aligned, blue
+            messageDiv.className += ' flex justify-end';
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'max-w-[80%] bg-blue-600 text-white rounded-lg p-4 shadow-sm';
+            
+            let userContent = '';
+            if (message.parts && Array.isArray(message.parts)) {
+                const textParts = message.parts.filter(p => p.type === 'text');
+                userContent = textParts.map(p => p.text || '').join('') || message.content || '';
+            } else {
+                userContent = message.content || '';
+            }
+            
+            // Use user email if available, otherwise fallback to "Vous"
+            const displayName = userEmail || 'Vous';
+            
+            userMessageDiv.innerHTML = `
+                <div class="text-xs text-blue-100 mb-2 font-medium">${escapeHtml(displayName)}</div>
+                <div class="text-sm leading-relaxed">${formatMessageText(userContent)}</div>
+                <div class="text-xs text-blue-200 mt-2 opacity-75">${formatDate(message.createdAt)}</div>
+            `;
+            messageDiv.appendChild(userMessageDiv);
+        } else if (isAssistant) {
+            // Assistant message - left aligned, gray
+            messageDiv.className += ' flex justify-start';
+            const assistantMessageDiv = document.createElement('div');
+            assistantMessageDiv.className = 'max-w-[80%] bg-gray-100 text-gray-900 rounded-lg p-4 shadow-sm';
+            
+            let contentHtml = '';
+            
+            // Process parts
+            if (message.parts && Array.isArray(message.parts)) {
+                message.parts.forEach((part, partIndex) => {
+                    if (part.type === 'step-start') {
+                        // Skip step-start markers
+                        return;
+                    } else if (part.type === 'reasoning') {
+                        // Reasoning part - collapsible
+                        const reasoningId = `reasoning-${message.id}-${partIndex}`;
+                        const reasoningText = part.text || '';
+                        const isExpanded = false; // Start collapsed
+                        
+                        contentHtml += `
+                            <div class="mt-2 border-t border-gray-300 pt-2">
+                                <button 
+                                    onclick="toggleReasoning('${reasoningId}')" 
+                                    class="w-full text-left text-xs text-gray-600 hover:text-gray-900 flex items-center justify-between py-1"
+                                >
+                                    <span>💭 Raisonnement (cliquez pour développer)</span>
+                                    <svg id="icon-${reasoningId}" class="w-4 h-4 transform transition-transform -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div id="${reasoningId}" class="hidden mt-2 text-xs text-gray-600 bg-gray-50 p-3 rounded border border-gray-200 whitespace-pre-wrap max-h-96 overflow-y-auto reasoning-text">
+                                    ${formatMessageText(reasoningText)}
+                                </div>
+                            </div>
+                        `;
+                    } else if (part.type === 'text') {
+                        // Regular text part
+                        const textContent = part.text || '';
+                        if (textContent.trim()) {
+                            contentHtml += `<div class="text-sm">${formatMessageText(textContent)}</div>`;
+                        }
+                    }
+                });
+            } else {
+                // Fallback to content if no parts
+                const fallbackContent = message.content || '';
+                if (fallbackContent.trim()) {
+                    contentHtml = `<div class="text-sm">${formatMessageText(fallbackContent)}</div>`;
+                } else {
+                    contentHtml = '<div class="text-sm text-gray-500 italic">Message vide</div>';
+                }
+            }
+            
+            assistantMessageDiv.innerHTML = `
+                <div class="text-xs text-gray-600 mb-2 font-medium">Assistant</div>
+                <div class="leading-relaxed">${contentHtml}</div>
+                <div class="text-xs text-gray-500 mt-2 opacity-75">${formatDate(message.createdAt)}</div>
+            `;
+            messageDiv.appendChild(assistantMessageDiv);
+        }
+        
+        messagesContainer.appendChild(messageDiv);
+    });
+}
+
+// Toggle reasoning visibility
+window.toggleReasoning = function(reasoningId) {
+    const reasoningDiv = document.getElementById(reasoningId);
+    const iconDiv = document.getElementById(`icon-${reasoningId}`);
+    const button = iconDiv?.closest('button');
+    
+    if (reasoningDiv && iconDiv && button) {
+        const isHidden = reasoningDiv.classList.contains('hidden');
+        const buttonText = button.querySelector('span');
+        
+        if (isHidden) {
+            reasoningDiv.classList.remove('hidden');
+            iconDiv.classList.remove('-rotate-90');
+            if (buttonText) {
+                buttonText.textContent = '💭 Raisonnement (cliquez pour réduire)';
+            }
+        } else {
+            reasoningDiv.classList.add('hidden');
+            iconDiv.classList.add('-rotate-90');
+            if (buttonText) {
+                buttonText.textContent = '💭 Raisonnement (cliquez pour développer)';
+            }
+        }
+    }
+};
+
+// Open messages modal
+function openMessagesModal(session) {
+    modalSessionTitle.textContent = session.title || 'Conversation';
+    messagesModal.classList.remove('hidden');
+    // Pass user email to loadMessages so it can be used in displayMessages
+    loadMessages(session.id, session.email);
+}
+
+// Close messages modal
+function closeMessagesModal() {
+    messagesModal.classList.add('hidden');
+    messagesContainer.innerHTML = '';
+    messagesLoading.classList.remove('hidden');
+    messagesContainer.classList.add('hidden');
+    messagesError.classList.add('hidden');
+}
+
+// Event listeners for modal
+if (closeMessagesModalBtn) {
+    closeMessagesModalBtn.addEventListener('click', closeMessagesModal);
+}
+
+if (messagesModal) {
+    // Close modal on background click
+    messagesModal.addEventListener('click', (e) => {
+        if (e.target === messagesModal) {
+            closeMessagesModal();
+        }
+    });
+}
 
 // ==================== INITIALIZATION ====================
 

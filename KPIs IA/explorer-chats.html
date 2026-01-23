@@ -44,6 +44,37 @@
             font-weight: 500;
             margin: 0.25rem;
         }
+
+        /* Messages modal styles */
+        #messages-container {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e0 #f7fafc;
+        }
+        
+        #messages-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #messages-container::-webkit-scrollbar-track {
+            background: #f7fafc;
+            border-radius: 4px;
+        }
+        
+        #messages-container::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 4px;
+        }
+        
+        #messages-container::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+
+        /* Reasoning text styling */
+        .reasoning-text {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -285,6 +316,35 @@
                 </svg>
                 <h3 class="mt-4 text-lg font-medium text-gray-900">Aucun utilisateur trouvé</h3>
                 <p class="mt-2 text-sm text-gray-500">Essayez de modifier vos filtres pour voir plus de résultats.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages Modal -->
+    <div id="messages-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-10 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white mb-10">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900" id="modal-session-title">Conversation</h3>
+                    <button id="close-messages-modal" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <div id="messages-loading" class="text-center py-8">
+                    <div class="spinner mx-auto mb-4"></div>
+                    <p class="text-gray-600">Chargement des messages...</p>
+                </div>
+                
+                <div id="messages-container" class="hidden space-y-4 max-h-[70vh] overflow-y-auto">
+                    <!-- Messages will be inserted here -->
+                </div>
+                
+                <div id="messages-error" class="hidden text-center py-8">
+                    <p class="text-red-600">Erreur lors du chargement des messages</p>
+                </div>
             </div>
         </div>
     </div>

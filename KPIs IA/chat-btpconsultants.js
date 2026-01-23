@@ -42,6 +42,43 @@ const totalMessagesEl = document.getElementById('total-messages');
 const totalCostEl = document.getElementById('total-cost');
 const avgMessagesPerSessionEl = document.getElementById('avg-messages-per-session');
 
+// Gains Elements
+const gainTimeEl = document.getElementById('gain-time');
+const gainTimeFormulaEl = document.getElementById('gain-time-formula');
+const gainTimeMaxEl = document.getElementById('gain-time-max');
+const gainTimeProjectionEl = document.getElementById('gain-time-projection');
+const gainTimeMaxProjectionEl = document.getElementById('gain-time-max-projection');
+const gainPercentEl = document.getElementById('gain-percent');
+const gainPercentFormulaEl = document.getElementById('gain-percent-formula');
+const gainPercentMaxEl = document.getElementById('gain-percent-max');
+const gainPercentProjectionEl = document.getElementById('gain-percent-projection');
+const gainPercentMaxProjectionEl = document.getElementById('gain-percent-max-projection');
+const gainEuroEl = document.getElementById('gain-euro');
+const gainEuroFormulaEl = document.getElementById('gain-euro-formula');
+const gainEuroMaxEl = document.getElementById('gain-euro-max');
+const gainEuroProjectionEl = document.getElementById('gain-euro-projection');
+const gainEuroMaxProjectionEl = document.getElementById('gain-euro-max-projection');
+
+// Settings Modal Elements
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeModalBtn = document.getElementById('close-modal');
+const saveSettingsBtn = document.getElementById('save-settings');
+const cancelSettingsBtn = document.getElementById('cancel-settings');
+const inputMinutesPerMessageEl = document.getElementById('input-minutes-per-message');
+const inputAnnualHoursEl = document.getElementById('input-annual-hours');
+const inputPopulationEl = document.getElementById('input-population');
+const inputEuroPerMessageEl = document.getElementById('input-euro-per-message');
+
+// Parameters (stored in localStorage)
+// Conversion: si 8€ = 15min, alors 1,5€ = (1,5/8) * 15 = 2,8125 minutes par message
+let parameters = {
+    minutesPerMessage: 2.8125,
+    annualHours: 1607,
+    population: 191,
+    euroPerMessage: 1.5
+};
+
 // Utility Functions
 function parseDate(dateString) {
     if (!dateString) return null;
@@ -65,6 +102,151 @@ function formatCurrency(amount) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(amount);
+}
+
+// Load parameters from localStorage
+function loadParameters() {
+    const saved = localStorage.getItem('chat_btpconsultants_parameters');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            parameters = { ...parameters, ...parsed };
+        } catch (e) {
+            console.warn('Failed to parse saved parameters');
+        }
+    }
+}
+
+// Save parameters to localStorage
+function saveParameters() {
+    localStorage.setItem('chat_btpconsultants_parameters', JSON.stringify(parameters));
+}
+
+// Format hours nicely
+function formatHours(hours) {
+    if (hours < 1) {
+        const minutes = Math.round(hours * 60);
+        return `${minutes}min`;
+    }
+    return `${formatNumber(hours)}h`;
+}
+
+// Calculate number of months in current period
+function calculatePeriodMonths() {
+    if (!isCumulativeMode) {
+        return 1;
+    }
+    
+    // Find the earliest date in filtered data
+    let firstDate = null;
+    filteredData.forEach(item => {
+        const date = parseDate(item.createdAt);
+        if (date && (!firstDate || date < firstDate)) {
+            firstDate = date;
+        }
+    });
+    
+    if (!firstDate) return 1;
+    
+    const now = new Date();
+    const yearsDiff = now.getFullYear() - firstDate.getFullYear();
+    const monthsDiff = now.getMonth() - firstDate.getMonth();
+    const totalMonths = yearsDiff * 12 + monthsDiff + 1;
+    
+    return Math.max(1, totalMonths);
+}
+
+// Calculate gains based on current data
+function calculateGains(messagesCount) {
+    // 1. Gain en temps (minutes → heures)
+    const timeGainMinutes = messagesCount * parameters.minutesPerMessage;
+    const timeGainHours = timeGainMinutes / 60;
+    
+    // 2. Gain en % volume d'affaire
+    let percentGain = 0;
+    if (parameters.population > 0 && parameters.annualHours > 0) {
+        percentGain = (timeGainHours / (parameters.population * parameters.annualHours)) * 100;
+    }
+    
+    // 3. Gain en € (directement depuis les messages)
+    const euroGain = messagesCount * parameters.euroPerMessage;
+    
+    return {
+        timeGainHours,
+        percentGain,
+        euroGain
+    };
+}
+
+// Update gains display
+function updateGains() {
+    // Calculate total messages
+    const messagesCount = filteredData.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    
+    // Calculate unique users
+    const uniqueUsers = new Set();
+    filteredData.forEach(item => {
+        if (item.email) {
+            uniqueUsers.add(item.email);
+        }
+    });
+    const uniqueUsersCount = uniqueUsers.size;
+    
+    // Calculate max messages: if we have users, estimate max based on adoption rate
+    // Estimate average messages per user, then extrapolate to full population
+    let maxMessages;
+    if (uniqueUsersCount > 0 && messagesCount > 0) {
+        // Estimate: if all population used it at the same rate as current users
+        const messagesPerUser = messagesCount / uniqueUsersCount;
+        maxMessages = Math.max(messagesCount, parameters.population * messagesPerUser);
+    } else {
+        // Fallback: estimate based on average messages per session if available
+        const sessionsCount = filteredData.length;
+        if (sessionsCount > 0) {
+            const avgMessagesPerSession = messagesCount / sessionsCount;
+            const periodMonths = calculatePeriodMonths();
+            // Estimate: population * sessions per month * avg messages per session
+            maxMessages = Math.max(messagesCount, parameters.population * periodMonths * avgMessagesPerSession);
+        } else {
+            const periodMonths = calculatePeriodMonths();
+            // Very conservative: assume 10 messages per person per month
+            maxMessages = Math.max(messagesCount, parameters.population * periodMonths * 10);
+        }
+    }
+    
+    const gains = calculateGains(messagesCount);
+    const maxGains = calculateGains(maxMessages);
+    
+    // Calculate projection for the year
+    const periodMonths = calculatePeriodMonths();
+    const projectionMultiplier = 12 / periodMonths;
+    const projectedMessages = messagesCount * projectionMultiplier;
+    const projectionGains = calculateGains(projectedMessages);
+    
+    // Calculate max projection for the year
+    const projectedMaxMessages = maxMessages * projectionMultiplier;
+    const maxProjectionGains = calculateGains(projectedMaxMessages);
+    
+    // Update time gain
+    if (gainTimeEl) gainTimeEl.textContent = formatHours(gains.timeGainHours);
+    if (gainTimeFormulaEl) gainTimeFormulaEl.textContent = `${formatNumber(messagesCount)} messages × ${parameters.minutesPerMessage.toFixed(2)}min`;
+    if (gainTimeMaxEl) gainTimeMaxEl.textContent = `Max atteignable: ${formatHours(maxGains.timeGainHours)}`;
+    if (gainTimeProjectionEl) gainTimeProjectionEl.textContent = `Projection année: ${formatHours(projectionGains.timeGainHours)} (${periodMonths} mois)`;
+    if (gainTimeMaxProjectionEl) gainTimeMaxProjectionEl.textContent = `Projection max année: ${formatHours(maxProjectionGains.timeGainHours)}`;
+    
+    // Update percent gain
+    if (gainPercentEl) gainPercentEl.textContent = `${gains.percentGain.toFixed(4)}%`;
+    if (gainPercentFormulaEl) gainPercentFormulaEl.textContent = `${formatHours(gains.timeGainHours)} / (${parameters.population} × ${parameters.annualHours}h)`;
+    if (gainPercentMaxEl) gainPercentMaxEl.textContent = `Max atteignable: ${maxGains.percentGain.toFixed(4)}%`;
+    if (gainPercentProjectionEl) gainPercentProjectionEl.textContent = `Projection année: ${projectionGains.percentGain.toFixed(4)}%`;
+    if (gainPercentMaxProjectionEl) gainPercentMaxProjectionEl.textContent = `Projection max année: ${maxProjectionGains.percentGain.toFixed(4)}%`;
+    
+    // Update euro gain
+    if (gainEuroEl) gainEuroEl.textContent = `${formatNumber(gains.euroGain)} €`;
+    if (gainEuroFormulaEl) gainEuroFormulaEl.textContent = `${formatNumber(messagesCount)} messages × ${parameters.euroPerMessage.toFixed(2)}€`;
+    if (gainEuroMaxEl) gainEuroMaxEl.textContent = `Max atteignable: ${formatNumber(maxGains.euroGain)} €`;
+    if (gainEuroProjectionEl) gainEuroProjectionEl.textContent = `Projection année: ${formatNumber(projectionGains.euroGain)} €`;
+    if (gainEuroMaxProjectionEl) gainEuroMaxProjectionEl.textContent = `Projection max année: ${formatNumber(maxProjectionGains.euroGain)} €`;
 }
 
 // Fix encoding issues in text (convert from Latin-1/Windows-1252 to UTF-8)
@@ -305,6 +487,9 @@ function updateKPIs() {
     if (avgMessagesPerSessionEl) {
         avgMessagesPerSessionEl.textContent = `Moyenne: ${avgMessagesPerSession} msg/session`;
     }
+    
+    // Update gains
+    updateGains();
 }
 
 // Sort table function (called from HTML onclick)
@@ -935,9 +1120,64 @@ resetFiltersBtn.addEventListener('click', () => {
     applyFilters();
 });
 
+// Settings Modal Event Listeners
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+        // Populate current values
+        inputMinutesPerMessageEl.value = parameters.minutesPerMessage;
+        inputAnnualHoursEl.value = parameters.annualHours;
+        inputPopulationEl.value = parameters.population;
+        inputEuroPerMessageEl.value = parameters.euroPerMessage;
+        settingsModal.classList.remove('hidden');
+    });
+}
+
+if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
+
+if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', () => {
+        // Update parameters
+        parameters.minutesPerMessage = parseFloat(inputMinutesPerMessageEl.value) || 2.8125;
+        parameters.annualHours = parseFloat(inputAnnualHoursEl.value) || 1607;
+        parameters.population = parseFloat(inputPopulationEl.value) || 191;
+        parameters.euroPerMessage = parseFloat(inputEuroPerMessageEl.value) || 1.5;
+        
+        // Save to localStorage
+        saveParameters();
+        
+        // Close modal
+        settingsModal.classList.add('hidden');
+        
+        // Recalculate gains
+        updateGains();
+    });
+}
+
+if (cancelSettingsBtn) {
+    cancelSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
+
+if (settingsModal) {
+    // Close modal on background click
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) {
+            settingsModal.classList.add('hidden');
+        }
+    });
+}
+
 // Initialize
 async function init() {
     try {
+        // Load parameters from localStorage
+        loadParameters();
+        
         loadingEl.classList.remove('hidden');
         errorEl.classList.add('hidden');
         mainContentEl.classList.add('hidden');
