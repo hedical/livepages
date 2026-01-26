@@ -19,6 +19,7 @@ let tableSortState = {
     ascending: false
 };
 let isCumulativeMode = false;
+let agencyViewMode = 'general'; // 'general' or 'sup100'
 
 // Parameters (stored in localStorage)
 let parameters = {
@@ -44,6 +45,7 @@ const agencyFilterEl = document.getElementById('agency-filter');
 const resetFiltersBtn = document.getElementById('reset-filters');
 const agencyTableBodyEl = document.getElementById('agency-table-body');
 const firstDateTextEl = document.getElementById('first-date-text');
+const agencyViewToggleEl = document.getElementById('agency-view-toggle');
 
 // KPI Elements
 const totalUsersEl = document.getElementById('total-users');
@@ -463,6 +465,7 @@ function parseCSVData(csvString) {
     let agencyIndex = -1;
     let descriptionIndex = -1;
     let aiResultIndex = -1;
+    let directionIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -487,13 +490,18 @@ function parseCSVData(csvString) {
         if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) {
             aiResultIndex = i;
         }
+        if (directionIndex === -1 && (header.includes('management') || header.includes('direction'))) {
+            directionIndex = i;
+        }
     }
     
     console.log('Column indices:', {
         type: typeIndex,
         contract: contractIndex,
         diffusedAt: diffusedAtIndex,
-        email: emailIndex
+        email: emailIndex,
+        agency: agencyIndex,
+        direction: directionIndex
     });
     
     if (typeIndex === -1 || contractIndex === -1) {
@@ -514,6 +522,7 @@ function parseCSVData(csvString) {
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const direction = (directionIndex >= 0 ? values[directionIndex] : '') || '';
         const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
         
@@ -527,6 +536,7 @@ function parseCSVData(csvString) {
             createdAt: (diffusedAt || '').trim(), // Using Report → DiffusedAt as date
             email: (email || '').trim(),
             agency: (agency || '').trim(),
+            direction: (direction || '').trim(),
             agencyCode: agencyCode, // Same as agency - ProductionService is the code
             description: description,
             aiResult: aiResult
@@ -754,8 +764,111 @@ function updateSortIcons() {
     });
 }
 
+/**
+ * Calculate statistics for "Sup 100 mots" view
+ * Basé sur la logique de explorer-descriptifs.js
+ */
+function calculateAgencyStatisticsSup100(allRictData, descriptifData) {
+    const statsMap = {};
+    
+    // D'abord, initialiser avec toutes les affaires (pour calculer le nombre total de RICT)
+    allRictData.forEach(item => {
+        const direction = item.direction || 'Non spécifiée';
+        const agency = item.agency || 'Non spécifiée';
+        const key = `${direction}|${agency}`;
+        
+        if (!statsMap[key]) {
+            statsMap[key] = {
+                direction: direction,
+                agency: agency,
+                uniqueContracts: new Set(), // Colonne 3 : Nombre d'affaires uniques (TOUTES les affaires)
+                contractsWithRICT100Plus: new Set(), // Colonne 4 : RICT > 100 mots (toutes les données)
+                contractsWithAIOrRICT100Plus: new Set() // Colonne 5 : Parmi colonne 4, celles qui ont utilisé l'IA
+            };
+        }
+        
+        const stats = statsMap[key];
+        
+        // Colonne 3 : Nombre d'affaires uniques (toutes les affaires, pas seulement descriptifs)
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            stats.uniqueContracts.add(item.contractNumber);
+            
+            // Colonne 4 : Nombre d'affaires uniques avec un RICT de plus de 100 mots
+            // Calculer le nombre de mots dans la description originale pour TOUTES les données
+            const processedDesc = extractText(item.description || '');
+            const descWordCount = countWords(processedDesc);
+            
+            if (descWordCount > 100) {
+                stats.contractsWithRICT100Plus.add(item.contractNumber);
+            }
+        }
+    });
+    
+    // Ensuite, traiter les descriptifs pour la colonne 5
+    // Colonne 5 : Parmi les affaires avec RICT > 100 mots (colonne 4), compter celles qui ont utilisé l'IA
+    descriptifData.forEach(item => {
+        const direction = item.direction || 'Non spécifiée';
+        const agency = item.agency || 'Non spécifiée';
+        const key = `${direction}|${agency}`;
+        
+        // S'assurer que la clé existe (devrait déjà exister)
+        if (!statsMap[key]) {
+            statsMap[key] = {
+                direction: direction,
+                agency: agency,
+                uniqueContracts: new Set(),
+                contractsWithRICT100Plus: new Set(),
+                contractsWithAIOrRICT100Plus: new Set()
+            };
+        }
+        
+        const stats = statsMap[key];
+        
+        // Colonne 5 : Nombre d'affaires uniques qui ont utilisé l'IA parmi celles avec RICT > 100 mots
+        // Calculer le nombre de mots dans la description originale
+        const processedDesc = extractText(item.description || '');
+        const descWordCount = countWords(processedDesc);
+        
+        if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount > 100) {
+            stats.contractsWithAIOrRICT100Plus.add(item.contractNumber);
+        }
+    });
+    
+    // Convert to array and calculate rates
+    const statsArray = Object.values(statsMap).map(stats => ({
+        direction: stats.direction,
+        agency: stats.agency,
+        uniqueContracts: stats.uniqueContracts.size, // Colonne 3
+        contractsWithRICT100Plus: stats.contractsWithRICT100Plus.size, // Colonne 4
+        contractsWithAIOrRICT100Plus: stats.contractsWithAIOrRICT100Plus.size, // Colonne 5
+        aiRelevanceRate: stats.contractsWithRICT100Plus.size > 0 
+            ? (stats.contractsWithAIOrRICT100Plus.size / stats.contractsWithRICT100Plus.size) * 100 // Colonne 6 : colonne 5 / colonne 4
+            : 0
+    }));
+    
+    // Sort by direction, then by agency
+    statsArray.sort((a, b) => {
+        if (a.direction !== b.direction) {
+            return a.direction.localeCompare(b.direction);
+        }
+        return a.agency.localeCompare(b.agency);
+    });
+    
+    return statsArray;
+}
+
 // Update agency stats table
 function updateAgencyTable(allRictData, descriptifData) {
+    console.log('updateAgencyTable appelée, mode:', agencyViewMode);
+    // Check if we're in "Sup 100 mots" mode
+    if (agencyViewMode === 'sup100') {
+        console.log('Mode Sup 100 mots détecté, appel de updateAgencyTableSup100');
+        updateAgencyTableSup100(allRictData, descriptifData);
+        return;
+    }
+    
+    console.log('Mode Général, affichage du tableau standard');
+    // Original "Général" mode
     // Calculate stats by agency
     const agencyStats = {};
     
@@ -948,6 +1061,68 @@ function updateAgencyTable(allRictData, descriptifData) {
     });
 }
 
+/**
+ * Update agency table for "Sup 100 mots" view
+ */
+function updateAgencyTableSup100(allRictData, descriptifData) {
+    console.log('updateAgencyTableSup100 appelée');
+    const stats = calculateAgencyStatisticsSup100(allRictData, descriptifData);
+    console.log('Statistiques calculées:', stats.length, 'agences');
+    
+    // Update table headers
+    updateAgencyTableHeaders();
+    
+    // Render table
+    agencyTableBodyEl.innerHTML = '';
+    
+    if (stats.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                Aucune donnée disponible pour cette période
+            </td>
+        `;
+        agencyTableBodyEl.appendChild(row);
+        return;
+    }
+    
+    stats.forEach((stat, index) => {
+        const row = document.createElement('tr');
+        row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        
+        // Color coding for taux de pertinence
+        let tauxClass = 'text-gray-500';
+        let tauxBg = '';
+        if (stat.contractsWithRICT100Plus > 0) {
+            const rate = stat.aiRelevanceRate;
+            if (rate >= 50) {
+                tauxClass = 'text-white font-bold';
+                tauxBg = 'bg-green-500';
+            } else if (rate >= 30) {
+                tauxClass = 'text-white font-bold';
+                tauxBg = 'bg-yellow-500';
+            } else {
+                tauxClass = 'text-white font-bold';
+                tauxBg = 'bg-red-500';
+            }
+        }
+        
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${escapeHtml(stat.direction)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(stat.agency)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${stat.uniqueContracts}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${stat.contractsWithRICT100Plus}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${stat.contractsWithAIOrRICT100Plus}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm ${tauxClass}">
+                ${stat.contractsWithRICT100Plus > 0 ? `<span class="px-3 py-1 rounded-full ${tauxBg}">${stat.aiRelevanceRate.toFixed(1)}%</span>` : '-'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" style="display: none;">-</td>
+        `;
+        
+        agencyTableBodyEl.appendChild(row);
+    });
+}
+
 // Update KPIs
 function updateKPIs() {
     // Get data for KPIs (respects cumulative mode)
@@ -990,6 +1165,8 @@ function updateKPIs() {
         filters.dr
     ), filters.agence);
     
+    // Update table headers if needed
+    updateAgencyTableHeaders();
     updateAgencyTable(allRictWithFilters, kpis.filteredData);
     updateSortIcons();
     
@@ -1527,6 +1704,109 @@ function updateRatesChart(data) {
 }
 
 // Event Listeners
+// Agency view toggle event listener
+let toggleSetupDone = false;
+function setupAgencyViewToggle() {
+    if (toggleSetupDone) {
+        console.log('Toggle déjà configuré, ignoré');
+        return;
+    }
+    
+    const toggleEl = document.getElementById('agency-view-toggle');
+    if (!toggleEl) {
+        console.warn('Toggle agency-view-toggle non trouvé, réessai dans 100ms...');
+        setTimeout(setupAgencyViewToggle, 100);
+        return;
+    }
+    
+    console.log('Toggle trouvé, ajout de l\'event listener');
+    toggleSetupDone = true;
+    
+    toggleEl.addEventListener('change', (e) => {
+        console.log('Toggle changé:', e.target.checked);
+        agencyViewMode = e.target.checked ? 'sup100' : 'general';
+        console.log('Mode changé à:', agencyViewMode);
+        
+        // Update table headers
+        updateAgencyTableHeaders();
+        
+        // Refresh table
+        const allRictFiltered = filterYieldAffairs(allData);
+        const allRictWithFilters = filterByAgence(filterByDR(
+            isCumulativeMode ? allRictFiltered : filterByMonth(allRictFiltered, filters.month),
+            filters.dr
+        ), filters.agence);
+        const kpis = processData(allData, filters, isCumulativeMode);
+        updateAgencyTable(allRictWithFilters, kpis.filteredData);
+        updateSortIcons();
+    });
+}
+
+/**
+ * Update table headers based on current view mode
+ */
+function updateAgencyTableHeaders() {
+    console.log('updateAgencyTableHeaders appelée, mode:', agencyViewMode);
+    const tableBody = document.getElementById('agency-table-body');
+    if (!tableBody) {
+        console.warn('Table body non trouvé');
+        return;
+    }
+    
+    const table = tableBody.closest('table');
+    if (!table) {
+        console.warn('Table non trouvée');
+        return;
+    }
+    
+    const tableHeaders = table.querySelectorAll('thead th');
+    console.log('Nombre d\'en-têtes trouvés:', tableHeaders.length);
+    if (tableHeaders.length >= 7) {
+        if (agencyViewMode === 'sup100') {
+            console.log('Mise à jour des en-têtes pour mode Sup 100 mots');
+            // Colonne 3 : Nombre d'affaires uniques
+            const div3 = tableHeaders[2].querySelector('div');
+            if (div3) div3.innerHTML = 'Nombre d\'affaires uniques <span id="sort-icon-rict" class="ml-1 text-gray-400">↕</span>';
+            // Colonne 4 : Nombre d'affaires uniques avec un RICT de plus de 100 mots
+            const div4 = tableHeaders[3].querySelector('div');
+            if (div4) div4.innerHTML = 'Nombre d\'affaires uniques avec un RICT de plus de 100 mots <span id="sort-icon-operations" class="ml-1 text-gray-400">↕</span>';
+            // Colonne 5 : Nombre d'affaires uniques avec Descriptif sommaire travaux et/ou RICT > 100 mots
+            const div5 = tableHeaders[4].querySelector('div');
+            if (div5) div5.innerHTML = 'Nombre d\'affaires uniques avec Descriptif sommaire travaux et/ou RICT > 100 mots <span id="sort-icon-users" class="ml-1 text-gray-400">↕</span>';
+            // Colonne 6 : Taux de pertinence d'utilisation de l'IA (%)
+            const div6 = tableHeaders[5].querySelector('div');
+            if (div6) div6.innerHTML = 'Taux de pertinence d\'utilisation de l\'IA (%) <span id="sort-icon-rateDescriptifs" class="ml-1 text-gray-400">↕</span>';
+            // Masquer la dernière colonne (Taux d'adoption)
+            tableHeaders[6].style.display = 'none';
+        } else {
+            console.log('Mise à jour des en-têtes pour mode Général');
+            // Mode Général - restaurer les en-têtes originaux
+            const div3 = tableHeaders[2].querySelector('div');
+            if (div3) div3.innerHTML = 'Nombre total de RICT <span id="sort-icon-rict" class="ml-1 text-gray-400">↕</span>';
+            const div4 = tableHeaders[3].querySelector('div');
+            if (div4) div4.innerHTML = 'Descriptifs effectifs générés <span id="sort-icon-operations" class="ml-1 text-gray-400">↕</span>';
+            const div5 = tableHeaders[4].querySelector('div');
+            if (div5) div5.innerHTML = 'Nombre d\'utilisateurs <span id="sort-icon-users" class="ml-1 text-gray-400">↕</span>';
+            const div6 = tableHeaders[5].querySelector('div');
+            if (div6) div6.innerHTML = 'Taux utilisation descriptifs <span id="sort-icon-rateDescriptifs" class="ml-1 text-gray-400">↕</span>';
+            // Afficher la dernière colonne
+            tableHeaders[6].style.display = '';
+        }
+    } else {
+        console.warn('Pas assez d\'en-têtes trouvés:', tableHeaders.length);
+    }
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 monthFilterEl.addEventListener('change', (e) => {
     filters.month = e.target.value;
     updateKPIs();
@@ -1888,6 +2168,9 @@ async function init() {
 
         // Update KPIs
         updateKPIs();
+        
+        // Setup agency view toggle after content is loaded
+        setupAgencyViewToggle();
 
         // Show main content
         loadingEl.classList.add('hidden');

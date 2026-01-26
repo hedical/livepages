@@ -270,7 +270,17 @@
 
                 <!-- Agency Stats Table -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Utilisation par agence de l'IA</h2>
+                    <div class="flex items-center justify-between mb-5">
+                        <h2 class="text-xl font-semibold text-gray-700">Utilisation par agence de l'IA</h2>
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm text-gray-600">Général</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="agency-view-toggle" class="sr-only peer">
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                            <span class="text-sm text-gray-600">Sup 100 mots</span>
+                        </div>
+                    </div>
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                         <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200">

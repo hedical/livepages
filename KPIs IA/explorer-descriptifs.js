@@ -11,7 +11,8 @@ const NUM_TESTS = 50;
 const SUBSTRING_LENGTH = 30;
 
 // Global state
-let allRecords = [];
+let allRecords = []; // Records de type DESCRIPTIF_SOMMAIRE_DES_TRAVAUX seulement
+let allData = []; // Toutes les données (tous types) pour calculer le nombre total de RICT
 let filteredRecords = [];
 let currentIndex = 0;
 
@@ -49,6 +50,7 @@ const searchContractInput = document.getElementById('search-contract');
 const searchButton = document.getElementById('search-button');
 const searchEmailInput = document.getElementById('search-email');
 const searchEmailButton = document.getElementById('search-email-button');
+
 
 const recContractEl = document.getElementById('rec-contract');
 const recAgencyEl = document.getElementById('rec-agency');
@@ -314,6 +316,7 @@ function parseCSVData(csvString) {
     let descriptionIndex = -1;
     let aiResultIndex = -1;
     let agencyIndex = -1;
+    let directionIndex = -1;
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
@@ -338,6 +341,9 @@ function parseCSVData(csvString) {
         if (agencyIndex === -1 && header.includes('productionservice')) {
             agencyIndex = i;
         }
+        if (directionIndex === -1 && (header.includes('management') || header.includes('direction'))) {
+            directionIndex = i;
+        }
     }
     
     console.log('Column indices:', {
@@ -354,8 +360,10 @@ function parseCSVData(csvString) {
         return [];
     }
     
-    // Parse data rows
-    const data = [];
+    // Parse data rows - charger TOUTES les données
+    const allDataRows = [];
+    const descriptifDataRows = [];
+    
     for (let i = 1; i < lines.length; i++) {
         const values = parseCSVLine(lines[i]);
         if (values.length < headers.length / 2) {
@@ -369,28 +377,40 @@ function parseCSVData(csvString) {
         const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const direction = (directionIndex >= 0 ? values[directionIndex] : '') || '';
         
         // Extract agency code from contract number using the global function
         const agencyCode = extractAgency(contractNumber);
         
-        // Only keep DESCRIPTIF_SOMMAIRE_DES_TRAVAUX
+        const rowData = {
+            type: (type || '').trim(),
+            contractNumber: (contractNumber || '').trim(),
+            createdAt: (diffusedAt || '').trim(),
+            email: (email || '').trim(),
+            agency: (agency || '').trim(),
+            direction: (direction || '').trim(),
+            agencyCode: agencyCode,
+            description: description,
+            aiResult: aiResult
+        };
+        
+        // Ajouter à toutes les données
+        allDataRows.push(rowData);
+        
+        // Ajouter aux descriptifs si c'est le bon type
         if ((type || '').trim() === DESCRIPTIF_TYPE) {
-            data.push({
-                type: (type || '').trim(),
-                contractNumber: (contractNumber || '').trim(),
-                createdAt: (diffusedAt || '').trim(),
-                email: (email || '').trim(),
-                agency: (agency || '').trim(),
-                agencyCode: agencyCode,
-                description: description,
-                aiResult: aiResult
-            });
+            descriptifDataRows.push(rowData);
         }
     }
     
-    console.log('Parsed', data.length, 'descriptif rows from CSV');
+    console.log('Parsed', allDataRows.length, 'total rows from CSV');
+    console.log('Parsed', descriptifDataRows.length, 'descriptif rows from CSV');
     
-    return data;
+    // Retourner les descriptifs pour le traitement normal, mais stocker aussi toutes les données
+    return {
+        all: allDataRows,
+        descriptifs: descriptifDataRows
+    };
 }
 
 /**
@@ -421,6 +441,7 @@ function processRecords(rawData) {
             contractNumber: item.contractNumber,
             email: item.email,
             agency: item.agency,
+            direction: item.direction,
             createdAt: item.createdAt,
             processedDesc,
             processedAI,
@@ -841,14 +862,20 @@ async function init() {
             csvData = rawText;
         }
         
-        const rawData = parseCSVData(csvData);
+        const parsedData = parseCSVData(csvData);
         
-        if (rawData.length === 0) {
+        if (!parsedData.descriptifs || parsedData.descriptifs.length === 0) {
             throw new Error('No descriptif data found in file');
         }
         
+        // Stocker toutes les données pour calculer le nombre total de RICT
+        allData = parsedData.all || [];
+        
+        console.log(`Chargé ${allData.length} lignes au total (tous types)`);
+        console.log(`Chargé ${parsedData.descriptifs.length} lignes de type DESCRIPTIF_SOMMAIRE_DES_TRAVAUX`);
+        
         console.log('Starting similarity analysis...');
-        allRecords = processRecords(rawData);
+        allRecords = processRecords(parsedData.descriptifs);
         
         if (allRecords.length === 0) {
             throw new Error('No valid records after processing');
