@@ -2,8 +2,8 @@
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
 
-// Data URL will be fetched from webhook after authentication
-let DATA_URL = '';
+// Data files will be fetched from webhook after authentication
+let descriptifData = null;
 
 // Constants for similarity tests
 const HTML_TAG_RE = /<[^>]+>/g;
@@ -774,8 +774,8 @@ searchEmailInput.addEventListener('keydown', (e) => e.key === 'Enter' && search(
 
 // ==================== INITIALIZATION ====================
 
-// Authenticate and get data URL
-async function authenticateAndGetURL() {
+// Authenticate and get data files from webhook
+async function authenticateAndGetFiles() {
     const storedPassword = localStorage.getItem('roi_password');
     
     if (!storedPassword) {
@@ -799,14 +799,49 @@ async function authenticateAndGetURL() {
         }
         
         const result = await response.text();
-        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
         
-        if (descriptifMatch) {
-            return descriptifMatch[1];
+        // Parse the body to extract file URLs from the JavaScript constants
+        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
+        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
+        const comparateurMatch = result.match(/COMPARATEUR_URL = '([^']+)'/);
+        const chatBTPMatch = result.match(/CHAT_BTP_URL = "([^"]+)"/);
+        const chatCitaeMatch = result.match(/CHAT_CITAE_URL = "([^"]+)"/);
+        const expertBTPMatch = result.match(/EXPERT_BTP_URL = "([^"]+)"/);
+        const expertCitaeMatch = result.match(/EXPERT_CITAE_URL = "([^"]+)"/);
+        const populationCibleMatch = result.match(/POPULATION_CIBLE_URL = "([^"]+)"/);
+        
+        if (!descriptifMatch) {
+            console.error('DESCRIPTIF_URL not found in webhook response');
+            window.location.href = 'index.html';
+            return null;
         }
         
-        window.location.href = 'index.html';
-        return null;
+        // Fetch all files in parallel
+        const filePromises = [];
+        
+        if (descriptifMatch) {
+            filePromises.push(
+                fetch(descriptifMatch[1])
+                    .then(r => r.ok ? r.text() : Promise.reject(new Error(`Failed to fetch descriptif: ${r.status}`)))
+                    .then(data => ({ name: 'descriptif', data }))
+                    .catch(err => {
+                        console.error('Error fetching descriptif:', err);
+                        return { name: 'descriptif', data: null, error: err };
+                    })
+            );
+        }
+        
+        // Wait for descriptif file (required)
+        const results = await Promise.all(filePromises);
+        const descriptifResult = results.find(r => r.name === 'descriptif');
+        
+        if (!descriptifResult || !descriptifResult.data) {
+            throw new Error('Failed to load descriptif file');
+        }
+        
+        return {
+            descriptif: descriptifResult.data
+        };
     } catch (error) {
         console.error('Authentication error:', error);
         window.location.href = 'index.html';
@@ -816,20 +851,15 @@ async function authenticateAndGetURL() {
 
 async function init() {
     try {
-        // Authenticate and get data URL
-        DATA_URL = await authenticateAndGetURL();
-        if (!DATA_URL) {
+        // Authenticate and get data files from webhook
+        const files = await authenticateAndGetFiles();
+        if (!files || !files.descriptif) {
             return;
         }
         
-        console.log('Loading data from:', DATA_URL);
+        console.log('Loading data from webhook response');
         
-        const response = await fetch(DATA_URL);
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        
-        const rawText = await response.text();
+        const rawText = files.descriptif;
         console.log('Response received, length:', rawText.length);
         
         let csvData = null;

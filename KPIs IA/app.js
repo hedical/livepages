@@ -586,12 +586,65 @@ function fixEncoding(text) {
  * Parse Population Data CSV (using same logic as descriptif.js)
  * Format: DR;Agence;Effectif
  */
+// Helper function to parse CSV line with quoted values (handles commas inside quotes)
+function parseCSVLineWithCommas(line) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            values.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    values.push(current.trim());
+    return values;
+}
+
+// Extract CSV content from "data" field if present
+function extractCSVFromDataField(csvText) {
+    // Check if first line is "data"
+    const lines = csvText.split('\n');
+    if (lines.length > 0 && lines[0].trim() === 'data') {
+        // Extract everything after "data" line
+        const csvLines = lines.slice(1);
+        
+        // Remove leading quote from first line if present
+        if (csvLines.length > 0 && csvLines[0].startsWith('"')) {
+            csvLines[0] = csvLines[0].substring(1);
+        }
+        
+        // Remove trailing quote from last line if present
+        if (csvLines.length > 0 && csvLines[csvLines.length - 1].trim() === '"') {
+            csvLines.pop(); // Remove the line that is just a quote
+        } else if (csvLines.length > 0 && csvLines[csvLines.length - 1].endsWith('"')) {
+            csvLines[csvLines.length - 1] = csvLines[csvLines.length - 1].slice(0, -1);
+        }
+        
+        return csvLines.join('\n').trim();
+    }
+    return csvText;
+}
+
 function parsePopulationData(csvString) {
     if (!csvString || typeof csvString !== 'string') return;
     
     console.log('=== Parsing Population Data ===');
     
     let csvText = fixEncoding(csvString);
+    
+    // Extract CSV from "data" field if present
+    csvText = extractCSVFromDataField(csvText);
+    
+    console.log('After extraction, first 200 chars:', csvText.substring(0, 200));
+    
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     
     if (lines.length < 2) {
@@ -600,24 +653,29 @@ function parsePopulationData(csvString) {
     }
     
     console.log('First line (header):', lines[0]);
+    console.log('Second line (sample):', lines[1]);
     console.log('Total lines:', lines.length);
     
     // Reset population map
     agencyPopulation = {};
     let total = 0;
     
-    // Skip header (line 0: DR;Agence;Effectif)
+    // Skip header (line 0: DR,Agence,Effectif) - now using commas
     for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(';');
+        const parts = parseCSVLineWithCommas(lines[i]);
         if (parts.length >= 3) {
             const dr = parts[0].trim();
-            const agencyCode = parts[1].trim();
+            const agencyCode = parts[1].trim().toUpperCase(); // Normalize to uppercase
             const effectif = parseInt(parts[2].trim());
             
             if (agencyCode && !isNaN(effectif)) {
                 agencyPopulation[agencyCode] = effectif;
                 total += effectif;
+            } else {
+                console.warn(`Skipping line ${i}: agencyCode="${agencyCode}", effectif="${parts[2]}"`);
             }
+        } else {
+            console.warn(`Line ${i} has ${parts.length} parts instead of 3:`, lines[i]);
         }
     }
     
@@ -787,6 +845,17 @@ function updateAgencyTable() {
         };
     });
     
+    // Helper to get agency code from item (try agencyCode first, then extract from contractNumber, then use agency)
+    const getAgencyCode = (item) => {
+        if (item.agencyCode) return item.agencyCode.trim().toUpperCase();
+        if (item.contractNumber) {
+            const extracted = extractAgency(item.contractNumber);
+            if (extracted) return extracted.trim().toUpperCase();
+        }
+        // Fallback: use agency field (should be productionService code)
+        return (item.agency || '').trim().toUpperCase();
+    };
+    
     // Helper to aggregate stats
     const aggregate = (data, type) => {
         const filtered = getFilteredData(data);
@@ -844,25 +913,41 @@ function updateAgencyTable() {
     
     // Calculate final metrics
     let rows = Object.values(agencyStats).map(stat => {
-        // Try to get effectif directly
-        let effectif = agencyPopulation[stat.agency] || 0;
+        // Get agency code from the first item with this agency name
+        // We need to find a sample item to extract the code
+        let agencyCode = null;
+        
+        // Try to find agency code from data
+        const sampleDescriptif = descriptifData.find(item => item.agency === stat.agency);
+        const sampleAutocontact = autocontactData.find(item => item.agency === stat.agency);
+        const sampleComparateur = comparateurData.find(item => item.agency === stat.agency);
+        
+        const sampleItem = sampleDescriptif || sampleAutocontact || sampleComparateur;
+        if (sampleItem) {
+            agencyCode = getAgencyCode(sampleItem);
+        } else {
+            // Fallback: use agency name as code (should already be the code)
+            agencyCode = (stat.agency || '').trim().toUpperCase();
+        }
+        
+        // Try to get effectif using agency code
+        let effectif = agencyCode ? (agencyPopulation[agencyCode] || 0) : 0;
         
         // Debug: show what we're trying to match
-        if (effectif === 0) {
-            console.log(`Looking for agency "${stat.agency}" in population map...`);
+        if (effectif === 0 && agencyCode) {
+            console.log(`Looking for agency code "${agencyCode}" (from agency "${stat.agency}") in population map...`);
             console.log('Available keys in population:', Object.keys(agencyPopulation));
             
-            // Fallback: try to find matching key (case-insensitive, trim whitespace)
-            const cleanAgency = stat.agency.trim().toUpperCase();
+            // Try case-insensitive match
             const matchingKey = Object.keys(agencyPopulation).find(k => 
-                k.trim().toUpperCase() === cleanAgency
+                k.trim().toUpperCase() === agencyCode
             );
             
             if (matchingKey) {
                 effectif = agencyPopulation[matchingKey];
-                console.log(`✓ Matched agency "${stat.agency}" to population key "${matchingKey}" (effectif: ${effectif})`);
+                console.log(`✓ Matched agency code "${agencyCode}" to population key "${matchingKey}" (effectif: ${effectif})`);
             } else {
-                console.warn(`✗ No match found for agency "${stat.agency}"`);
+                console.warn(`✗ No match found for agency code "${agencyCode}" (from agency "${stat.agency}")`);
             }
         }
         
@@ -910,15 +995,42 @@ function updateAgencyTable() {
         };
     });
     
+    // Map column names from HTML to object property names
+    const columnMapping = {
+        'agency': 'agency',
+        'shortfall': 'shortfall',
+        'descriptif': 'adoptionDescriptif',
+        'autocontact': 'adoptionAutocontact',
+        'comparateur': 'adoptionComparateur',
+        'expert-btp': 'adoptionExpertBTP',
+        'chat-btp': 'adoptionChatBTP',
+        'total': 'total'
+    };
+    
     // Sort
     rows.sort((a, b) => {
-        const valA = a[tableSortState.column];
-        const valB = b[tableSortState.column];
+        const propertyName = columnMapping[tableSortState.column] || tableSortState.column;
+        let valA = a[propertyName];
+        let valB = b[propertyName];
         
-        if (typeof valA === 'string') {
+        // Handle undefined, null, NaN, Infinity values
+        if (valA === undefined || valA === null || isNaN(valA) || !isFinite(valA)) {
+            valA = typeof valA === 'string' ? '' : 0;
+        }
+        if (valB === undefined || valB === null || isNaN(valB) || !isFinite(valB)) {
+            valB = typeof valB === 'string' ? '' : 0;
+        }
+        
+        // If both are strings, compare as strings
+        if (typeof valA === 'string' && typeof valB === 'string') {
             return tableSortState.ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
-        return tableSortState.ascending ? valA - valB : valB - valA;
+        
+        // Convert to numbers for comparison
+        const numA = typeof valA === 'number' ? valA : parseFloat(valA) || 0;
+        const numB = typeof valB === 'number' ? valB : parseFloat(valB) || 0;
+        
+        return tableSortState.ascending ? numA - numB : numB - numA;
     });
     
     // Render

@@ -384,6 +384,42 @@ function fixEncoding(text) {
     return fixed;
 }
 
+// Helper function to parse CSV line with quoted values (handles commas inside quotes)
+function parseCSVLineWithCommas(line) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            values.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    values.push(current.trim());
+    return values;
+}
+
+// Extract CSV content from "data" field if present
+function extractCSVFromDataField(csvText) {
+    // Check if first line is "data"
+    const lines = csvText.split('\n');
+    if (lines.length > 0 && lines[0].trim() === 'data') {
+        // Extract everything after "data" line
+        // Remove the first line and join back
+        const csvContent = lines.slice(1).join('\n');
+        // Remove surrounding quotes if present
+        return csvContent.replace(/^["']|["']$/g, '').trim();
+    }
+    return csvText;
+}
+
 // Parse population CSV file
 async function loadAgencyPopulation() {
     try {
@@ -395,14 +431,18 @@ async function loadAgencyPopulation() {
         
         let csvText = await response.text();
         csvText = fixEncoding(csvText);
+        
+        // Extract CSV from "data" field if present
+        csvText = extractCSVFromDataField(csvText);
+        
         const lines = csvText.split('\n').filter(line => line.trim() !== '');
         
         const population = {};
         const drMapping = {};
         
-        // Skip header (line 0: DR;Agence;Effectif)
+        // Skip header (line 0: DR,Agence,Effectif) - now using commas
         for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(';');
+            const parts = parseCSVLineWithCommas(lines[i]);
             if (parts.length >= 3) {
                 const dr = parts[0].trim();
                 const agencyCode = parts[1].trim();
