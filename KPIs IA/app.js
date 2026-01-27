@@ -24,6 +24,8 @@ const AUTOCONTACT_TYPE = 'AUTOCONTACT';
 const MINUTES_PER_DESCRIPTIF = 30;
 const SECONDS_PER_CONTACT = 90; // Default value from autocontact.js
 const SECONDS_PER_PAGE = 20; // Default value for comparateur
+const MINUTES_PER_MESSAGE = 2.8125; // For chat and expert tools (BTP and Citae)
+const EURO_PER_MESSAGE = 1.5; // For chat and expert tools (BTP and Citae)
 const ANNUAL_HOURS = 1607;
 const TOTAL_REVENUE = 44000000;
 let TOTAL_EFFECTIF = 192; // Will be updated from population_cible.csv
@@ -1276,9 +1278,9 @@ function processComparateurData(data) {
 }
 
 /**
- * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, and comparateur.js
+ * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
@@ -1291,8 +1293,25 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages) {
     const timeGainSecondsComparateur = totalPages * SECONDS_PER_PAGE;
     const timeGainHoursComparateur = timeGainSecondsComparateur / 3600;
     
+    // Gain en temps pour chat BTP (minutes → heures)
+    const timeGainMinutesChatBTP = (chatBTPMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursChatBTP = timeGainMinutesChatBTP / 60;
+    
+    // Gain en temps pour expert BTP (minutes → heures)
+    const timeGainMinutesExpertBTP = (expertBTPMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursExpertBTP = timeGainMinutesExpertBTP / 60;
+    
+    // Gain en temps pour chat Citae (minutes → heures)
+    const timeGainMinutesChatCitae = (chatCitaeMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursChatCitae = timeGainMinutesChatCitae / 60;
+    
+    // Gain en temps pour expert Citae (minutes → heures)
+    const timeGainMinutesExpertCitae = (expertCitaeMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursExpertCitae = timeGainMinutesExpertCitae / 60;
+    
     // Total time gain
-    const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur;
+    const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur 
+        + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae;
     
     // Gain en % volume d'affaire
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
@@ -1305,6 +1324,10 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages) {
         timeGainHoursDescriptif,
         timeGainHoursAutocontact,
         timeGainHoursComparateur,
+        timeGainHoursChatBTP,
+        timeGainHoursExpertBTP,
+        timeGainHoursChatCitae,
+        timeGainHoursExpertCitae,
         percentGain,
         euroGain
     };
@@ -1560,12 +1583,21 @@ function updateKPIs() {
     // Descriptif page uses: totalOperations (unique operations)
     // Autocontact page uses: aiContacts (total AI contacts, not operations)
     // Comparateur page uses: totalPages
-    const gains = calculateGains(descriptifStats.uniqueOperations, autocontactStats.aiContacts, comparateurStats.totalPages);
+    // Chat and Expert pages use: totalMessages
+    const gains = calculateGains(
+        descriptifStats.uniqueOperations, 
+        autocontactStats.aiContacts, 
+        comparateurStats.totalPages,
+        chatBTPStats.totalMessages,
+        expertBTPStats.totalMessages,
+        chatCitaeStats.totalMessages,
+        expertCitaeStats.totalMessages
+    );
     
     gainHeuresEl.textContent = formatNumber(gains.timeGainHours);
     gainSubtitleEl.innerHTML = `
         <div class="space-y-1">
-            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h)</div>
+            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h)</div>
             <div class="text-xs">≈ ${gains.percentGain.toFixed(4)}% du volume d'affaires</div>
             <div class="text-xs">≈ ${formatNumber(gains.euroGain)} €</div>
         </div>
