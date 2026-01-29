@@ -66,25 +66,26 @@
             border-color: #667eea;
         }
 
-        .radio-group {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background-color: white;
+            cursor: pointer;
+            transition: border-color 0.3s ease;
             margin-bottom: 20px;
         }
 
-        input[type="radio"] {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            accent-color: #667eea;
+        select:focus {
+            outline: none;
+            border-color: #667eea;
         }
 
-        .radio-label {
-            font-size: 14px;
-            color: #555;
-            cursor: pointer;
-            user-select: none;
+        select:hover {
+            border-color: #667eea;
         }
 
         textarea {
@@ -184,10 +185,10 @@
             </div>
 
             <div class="form-group">
-                <div class="radio-group">
-                    <input type="radio" id="missionL" name="mission" value="Mission L">
-                    <label for="missionL" class="radio-label">Mission L</label>
-                </div>
+                <label for="missionSelect">Mission</label>
+                <select id="missionSelect" name="mission">
+                    <option value="">-- Sélectionnez une mission --</option>
+                </select>
                 <textarea id="missionText" name="missionText" placeholder="Le texte de la mission apparaîtra ici..."></textarea>
             </div>
 
@@ -197,9 +198,30 @@
     </div>
 
     <script>
-        const missionLText = "Mission L, relative à la solidité des voiries et réseaux divers privatifs, fondations, ossatures, ouvrages assurant le clos et le couvert ainsi que pour les bâtiments des éléments d'équipement indissociables, ceux qui ne peuvent être retirés sans mettre en cause l'intégrité des ouvrages ( lots généralement concernés : façades, menuiseries ext, étanchéité, GO, couverture, charpente)";
+        // Définition de toutes les missions avec leurs descriptions
+        const missions = {
+            'L': "Mission L, relative à la solidité des voiries et réseaux divers privatifs, fondations, ossatures, ouvrages assurant le clos et le couvert ainsi que pour les bâtiments des éléments d'équipement indissociables, ceux qui ne peuvent être retirés sans mettre en cause l'intégrité des ouvrages ( lots généralement concernés : façades, menuiseries ext, étanchéité, GO, couverture, charpente)",
+            'LP': "Mission LP, intègre la mission « L » ; en outre elle s'étend à la solidité relative aux éléments d'équipement dissociables, ceux qui peuvent être retirés sans porter atteinte aux ouvrages ci-dessus (les cloisons, par exemple).",
+            'LE': "Mission LE, vise la solidité des constructions existantes et concerne les opérations de rénovation, réhabilitation ou transformation. Après l'examen de l'état apparent ou l'analyse d'un diagnostic fourni, le contrôleur vérifie que les travaux neufs ne compromettent pas la solidité des parties anciennes",
+            'AV': "Mission AV, vise la stabilité des constructions avoisinantes. Le contrôleur vérifie que la réalisation de fondations et d'infrastructures de l'ouvrage neuf ne compromet pas la stabilité des constructions avoisinantes impactées par les travaux",
+            'PH': "Mission PH, relative à l'isolation acoustique des bâtiments",
+            'TH': "Mission TH, TH HAB et I3C (impact sur le Changement Climatique dans la Construction), relative à l'isolation thermique, aux économies d'énergie et à la performance environnementale réglementaire de l'ouvrage",
+            'HAND': "Mission HAND et Brd, relatives au respect des prescriptions réglementaires pour l'accès des personnes handicapées et des brancards",
+            'GTB': "Mission GTB, complète les missions sécurité et fonctionnement et porte sur le système de gestion technique du bâtiment",
+            'F': "Mission F, relative au fonctionnement des installations",
+            'ENV': "Mission ENV, complète les missions sécurité dans les installations classées pour la protection de l'environnement (risques d'incendie ou d'explosion)",
+            'HYSh': "Mission HYSh ou HYSa, missions complémentaires relatives à l'hygiène et à la santé, dans les bâtiments d'habitation (h) et autres constructions (a) : aération, eau, sanitaires, effluents, déchets…",
+            'HYSa': "Mission HYSh ou HYSa, missions complémentaires relatives à l'hygiène et à la santé, dans les bâtiments d'habitation (h) et autres constructions (a) : aération, eau, sanitaires, effluents, déchets…",
+            'CABL': "Mission CABL, concerne la vérification des précâblages informatiques et téléphoniques par rapport aux spécifications contractuelles",
+            'CD': "Mission CD, relative au comportement dynamique des supports de machines, notamment lorsque leurs déplacements successifs sont susceptibles d'affecter le fonctionnement des machines ou la résistance des structures supports",
+            'SH': "Mission SH, SEI ou STI, relatives à la sécurité des personnes dans les habitations, les ERP et IGH, les bâtiments tertiaires et industriels",
+            'SEI': "Mission SH, SEI ou STI, relatives à la sécurité des personnes dans les habitations, les ERP et IGH, les bâtiments tertiaires et industriels",
+            'STI': "Mission SH, SEI ou STI, relatives à la sécurité des personnes dans les habitations, les ERP et IGH, les bâtiments tertiaires et industriels",
+            'PV': "Mission PV, relative au récolement des procès-verbaux",
+            'PS': "Mission PS, relative la sécurité des personnes dans les constructions en cas de séisme"
+        };
 
-        const missionLRadio = document.getElementById('missionL');
+        const missionSelect = document.getElementById('missionSelect');
         const missionTextArea = document.getElementById('missionText');
         const btnAnalyze = document.getElementById('btnAnalyze');
         const chatIdInput = document.getElementById('chatId');
@@ -210,6 +232,14 @@
         // Proxy CORS public gratuit (fonctionne pour GitHub Pages)
         const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
         const webhookUrl = CORS_PROXY + encodeURIComponent(WEBHOOK_TARGET);
+
+        // Remplir le dropdown avec les missions
+        Object.keys(missions).forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = `Mission ${key}`;
+            missionSelect.appendChild(option);
+        });
 
         // Fonction pour afficher un message
         function showMessage(text, isSuccess, isInfo = false) {
@@ -229,10 +259,13 @@
             }
         }
 
-        // Quand on clique sur le bouton radio Mission L
-        missionLRadio.addEventListener('change', function() {
-            if (this.checked) {
-                missionTextArea.value = missionLText;
+        // Quand on sélectionne une mission dans le dropdown
+        missionSelect.addEventListener('change', function() {
+            const selectedMission = this.value;
+            if (selectedMission && missions[selectedMission]) {
+                missionTextArea.value = missions[selectedMission];
+            } else {
+                missionTextArea.value = '';
             }
         });
 
