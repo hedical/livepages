@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Détail par Agence - KPIs IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+        .axis {
+            font-size: 12px;
+        }
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #000;
+            shape-rendering: crispEdges;
+        }
+        .line {
+            fill: none;
+            stroke-width: 2px;
+        }
+        .legend {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Header -->
+            <div class="mb-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                            Détail par Agence - Adoption des Outils IA
+                        </h1>
+                        <p class="text-gray-500 text-sm">Tableau de bord d'adoption des fonctionnalités IA par agence</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button
+                            id="logout-btn"
+                            class="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg shadow-sm transition-all duration-200 flex items-center gap-2"
+                            title="Se déconnecter"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            Déconnexion
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Modal -->
+            <div id="login-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+                <div class="relative p-8 bg-white w-full max-w-md m-auto rounded-lg shadow-lg">
+                    <div class="text-center">
+                        <h3 class="text-2xl font-bold text-gray-900 mb-2">Accès sécurisé</h3>
+                        <p class="text-gray-600 mb-6">Veuillez entrer le mot de passe pour accéder aux données</p>
+                        
+                        <form id="login-form" class="space-y-4">
+                            <div>
+                                <input
+                                    type="password"
+                                    id="password-input"
+                                    placeholder="Mot de passe"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    required
+                                />
+                            </div>
+                            
+                            <div id="login-error" class="hidden text-red-600 text-sm">
+                                Mot de passe incorrect
+                            </div>
+                            
+                            <button
+                                type="submit"
+                                id="login-button"
+                                class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <span id="login-text">Se connecter</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="error" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="text-center">
+                    <p class="text-red-600 text-lg">Erreur lors du chargement des données</p>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div id="main-content" class="hidden">
+                <!-- Filters -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Period Filter -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Période</label>
+                            <div class="flex gap-2">
+                                <input
+                                    type="date"
+                                    id="start-date"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                    type="date"
+                                    id="end-date"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Direction Filter -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Direction</label>
+                            <select
+                                id="direction-filter"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="">Toutes les directions</option>
+                            </select>
+                        </div>
+
+                        <!-- Agency Filter -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Agence</label>
+                            <select
+                                id="agency-filter"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="">Toutes les agences</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button
+                            id="reset-filters"
+                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md transition-all duration-200"
+                        >
+                            Réinitialiser les filtres
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Évolution des taux d'adoption dans le temps</h3>
+                    <div id="adoption-chart" style="width: 100%; min-height: 400px; height: 400px;"></div>
+                </div>
+
+                <!-- Agency Table -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                        <h3 class="text-lg font-semibold text-gray-900">Détail par Agence</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('direction')">
+                                        <div class="flex items-center">
+                                            Direction
+                                            <span id="sort-icon-direction" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
+                                        <div class="flex items-center">
+                                            Agence
+                                            <span id="sort-icon-agency" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('descriptif')">
+                                        <div class="flex items-center justify-center">
+                                            Taux Descriptif
+                                            <span id="sort-icon-descriptif" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('autocontact')">
+                                        <div class="flex items-center justify-center">
+                                            Taux Auto Contact
+                                            <span id="sort-icon-autocontact" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('comparateur')">
+                                        <div class="flex items-center justify-center">
+                                            Taux Comparateur
+                                            <span id="sort-icon-comparateur" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('expert-btp')">
+                                        <div class="flex items-center justify-center">
+                                            Taux Expert BTP
+                                            <span id="sort-icon-expert-btp" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('chat-btp')">
+                                        <div class="flex items-center justify-center">
+                                            Taux Chat BTP
+                                            <span id="sort-icon-chat-btp" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('total')">
+                                        <div class="flex items-center justify-center">
+                                            Total Utilisations
+                                            <span id="sort-icon-total" class="ml-1 text-blue-600">↓</span>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="agency-table-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Rows will be populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="agencesCT.js"></script>
+</body>
+</html>
