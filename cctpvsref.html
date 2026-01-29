@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse CCTP vs Référentiel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .radio-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .radio-label {
+            font-size: 14px;
+            color: #555;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-analyze {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .btn-analyze:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-analyze:active {
+            transform: translateY(0);
+        }
+
+        .btn-analyze:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .message {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            text-align: left;
+            line-height: 1.6;
+        }
+
+        .message.info strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Analyse CCTP vs Référentiel</h1>
+        
+        <form id="analysisForm">
+            <div class="form-group">
+                <label for="chatId">chatId</label>
+                <input type="text" id="chatId" name="chatId" placeholder="Entrez le chatId">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="Entrez votre adresse email">
+            </div>
+
+            <div class="form-group">
+                <div class="radio-group">
+                    <input type="radio" id="missionL" name="mission" value="Mission L">
+                    <label for="missionL" class="radio-label">Mission L</label>
+                </div>
+                <textarea id="missionText" name="missionText" placeholder="Le texte de la mission apparaîtra ici..."></textarea>
+            </div>
+
+            <button type="button" class="btn-analyze" id="btnAnalyze">Lancer analyse</button>
+            <div id="message" class="message" style="display: none;"></div>
+        </form>
+    </div>
+
+    <script>
+        const missionLText = "Mission L, relative à la solidité des voiries et réseaux divers privatifs, fondations, ossatures, ouvrages assurant le clos et le couvert ainsi que pour les bâtiments des éléments d'équipement indissociables, ceux qui ne peuvent être retirés sans mettre en cause l'intégrité des ouvrages ( lots généralement concernés : façades, menuiseries ext, étanchéité, GO, couverture, charpente)";
+
+        const missionLRadio = document.getElementById('missionL');
+        const missionTextArea = document.getElementById('missionText');
+        const btnAnalyze = document.getElementById('btnAnalyze');
+        const chatIdInput = document.getElementById('chatId');
+        const emailInput = document.getElementById('email');
+        const messageDiv = document.getElementById('message');
+        // URL du webhook n8n (avec proxy CORS public pour GitHub Pages)
+        const WEBHOOK_TARGET = 'https://databuildr.app.n8n.cloud/webhook/postMessage';
+        // Proxy CORS public gratuit (fonctionne pour GitHub Pages)
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+        const webhookUrl = CORS_PROXY + encodeURIComponent(WEBHOOK_TARGET);
+
+        // Fonction pour afficher un message
+        function showMessage(text, isSuccess, isInfo = false) {
+            if (isInfo) {
+                messageDiv.innerHTML = text;
+                messageDiv.className = 'message info';
+            } else {
+                messageDiv.textContent = text;
+                messageDiv.className = 'message ' + (isSuccess ? 'success' : 'error');
+            }
+            messageDiv.style.display = 'block';
+            // Ne pas masquer automatiquement les messages info (ils contiennent des instructions importantes)
+            if (!isInfo) {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Quand on clique sur le bouton radio Mission L
+        missionLRadio.addEventListener('change', function() {
+            if (this.checked) {
+                missionTextArea.value = missionLText;
+            }
+        });
+
+        // Gestion du bouton "Lancer analyse"
+        btnAnalyze.addEventListener('click', async function() {
+            const chatId = chatIdInput.value;
+            const email = emailInput.value;
+            const missionText = missionTextArea.value;
+
+            // Validation basique
+            if (!chatId.trim()) {
+                showMessage('Veuillez saisir un chatId', false);
+                return;
+            }
+
+            if (!email.trim()) {
+                showMessage('Veuillez saisir une adresse email', false);
+                return;
+            }
+
+            // Validation de l'email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showMessage('Veuillez saisir une adresse email valide', false);
+                return;
+            }
+
+            if (!missionText.trim()) {
+                showMessage('Veuillez saisir ou sélectionner un texte de mission', false);
+                return;
+            }
+
+            // Désactiver le bouton pendant l'envoi
+            btnAnalyze.disabled = true;
+            btnAnalyze.textContent = 'Envoi en cours...';
+
+            try {
+                // Préparer les données à envoyer
+                const requestBody = {
+                    chatId: chatId,
+                    email: email,
+                    missionText: missionText
+                };
+
+                // Envoyer la requête POST
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    const infoMessage = '<strong>Analyse lancée avec succès !</strong>' +
+                        '<br><br>⏱️ Le temps de traitement pour cette fonctionnalité en test est de <strong>15 minutes</strong>.' +
+                        '<br><br>📧 Un email sera envoyé à <strong>' + email + '</strong> avec les résultats.' +
+                        '<br><br>⚠️ Si vous ne recevez pas de réponse au-delà de ce délai, veuillez contacter l\'administrateur.';
+                    showMessage(infoMessage, true, true);
+                    console.log('Réponse du webhook:', data);
+                } else {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Erreur lors de l\'envoi:', error);
+                showMessage('Erreur lors de l\'envoi: ' + error.message, false);
+            } finally {
+                // Réactiver le bouton
+                btnAnalyze.disabled = false;
+                btnAnalyze.textContent = 'Lancer analyse';
+            }
+        });
+    </script>
+</body>
+</html>
