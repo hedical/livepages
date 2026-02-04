@@ -169,11 +169,11 @@
                 </div>
 
                 <!-- Agency Table -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible">
                     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
                         <h3 class="text-lg font-semibold text-gray-900">Détail par Agence</h3>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto overflow-y-visible relative">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
@@ -192,36 +192,72 @@
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('descriptif')">
                                         <div class="flex items-center justify-center">
                                             Taux Descriptif
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Taux de pertinence : (Affaires avec RICT > 100 mots utilisant l'IA) / (Affaires avec RICT > 100 mots) × 100
+                                                </div>
+                                            </div>
                                             <span id="sort-icon-descriptif" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('autocontact')">
                                         <div class="flex items-center justify-center">
                                             Taux Auto Contact
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
+                                                </div>
+                                            </div>
                                             <span id="sort-icon-autocontact" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('comparateur')">
                                         <div class="flex items-center justify-center">
                                             Taux Comparateur
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
+                                                </div>
+                                            </div>
                                             <span id="sort-icon-comparateur" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('expert-btp')">
                                         <div class="flex items-center justify-center">
                                             Taux Expert BTP
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
+                                                </div>
+                                            </div>
                                             <span id="sort-icon-expert-btp" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('chat-btp')">
                                         <div class="flex items-center justify-center">
                                             Taux Chat BTP
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
+                                                </div>
+                                            </div>
                                             <span id="sort-icon-chat-btp" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('total')">
                                         <div class="flex items-center justify-center">
                                             Total Utilisations
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Somme de toutes les utilisations : Descriptif + Auto Contact + Comparateur + Expert BTP + Chat BTP
+                                                </div>
+                                            </div>
                                             <span id="sort-icon-total" class="ml-1 text-blue-600">↓</span>
                                         </div>
                                     </th>

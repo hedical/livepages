@@ -1166,6 +1166,188 @@ function updateChart() {
             .style('cursor', 'pointer');
     };
     
+    // Create tooltip element (without background)
+    const tooltip = g.append('g')
+        .attr('class', 'tooltip')
+        .style('opacity', 0)
+        .style('pointer-events', 'none');
+    
+    const tooltipText = tooltip.append('text')
+        .attr('x', 0)
+        .attr('y', 0)
+        .style('font-size', '13px')
+        .style('font-weight', 'bold')
+        .style('font-family', 'system-ui, -apple-system, sans-serif')
+        .style('text-anchor', 'middle')
+        .style('pointer-events', 'none');
+    
+    // Helper function to find closest point on a line
+    const findClosestPointOnLine = (mouseX, mouseY, tool) => {
+        if (visibility[tool] === false) return null;
+        
+        let closestPoint = null;
+        let minDistance = Infinity;
+        
+        // Check each segment of the line
+        for (let i = 0; i < chartData.length - 1; i++) {
+            const p1 = chartData[i];
+            const p2 = chartData[i + 1];
+            
+            const x1 = x(p1.date);
+            const y1 = y(p1[tool] || 0);
+            const x2 = x(p2.date);
+            const y2 = y(p2[tool] || 0);
+            
+            // Calculate distance from point to line segment
+            const A = mouseX - x1;
+            const B = mouseY - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+            
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            
+            if (lenSq !== 0) param = dot / lenSq;
+            
+            let xx, yy;
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+            
+            const dx = mouseX - xx;
+            const dy = mouseY - yy;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+                // Use the point that's closer to the mouse
+                closestPoint = (param < 0.5) ? p1 : p2;
+            }
+        }
+        
+        return { point: closestPoint, distance: minDistance };
+    };
+    
+    // Helper function to find which tool's line is closest
+    const findClosestTool = (mouseX, mouseY) => {
+        let closestTool = null;
+        let minDistance = Infinity;
+        
+        tools.forEach(tool => {
+            if (visibility[tool] === false) return;
+            
+            const result = findClosestPointOnLine(mouseX, mouseY, tool);
+            if (result && result.distance < minDistance) {
+                minDistance = result.distance;
+                closestTool = { tool: tool, point: result.point, distance: result.distance };
+            }
+        });
+        
+        // Only show tooltip if we're close enough (within 30 pixels)
+        if (closestTool && closestTool.distance < 30) {
+            return closestTool;
+        }
+        
+        return null;
+    };
+    
+    // Highlight circle for the hovered point
+    const highlightCircle = g.append('circle')
+        .attr('r', 6)
+        .attr('fill', 'none')
+        .attr('stroke-width', 2)
+        .style('opacity', 0)
+        .style('pointer-events', 'none');
+    
+    // Helper function to show tooltip
+    const showTooltip = (event, closestTool) => {
+        if (!closestTool) {
+            hideTooltip();
+            return;
+        }
+        
+        const { tool, point } = closestTool;
+        
+        const value = point[tool] || 0;
+        const color = colors[tool];
+        const dateStr = d3.timeFormat('%m/%Y')(point.date);
+        
+        // Get the point position on the chart
+        const pointX = x(point.date);
+        const pointY = y(point[tool] || 0);
+        
+        // Update tooltip text
+        tooltipText.selectAll('tspan').remove();
+        
+        // Date line (smaller, lighter)
+        tooltipText.append('tspan')
+            .attr('x', 0)
+            .attr('dy', '-1.2em')
+            .style('font-size', '11px')
+            .style('font-weight', 'normal')
+            .style('fill', '#6b7280')
+            .text(dateStr);
+        
+        // Value line with color (bold, larger)
+        tooltipText.append('tspan')
+            .attr('x', 0)
+            .attr('dy', '1.2em')
+            .style('fill', color)
+            .style('font-weight', 'bold')
+            .style('font-size', '13px')
+            .text(`${toolLabels[tool]}: ${value.toFixed(2)}%`);
+        
+        // Position tooltip above the point
+        let tooltipX = pointX;
+        let tooltipY = pointY - 25;
+        
+        // If tooltip would go above chart, show it below instead
+        if (tooltipY < 20) {
+            tooltipY = pointY + 25;
+        }
+        
+        // Keep tooltip within chart bounds
+        tooltipX = Math.max(50, Math.min(tooltipX, width - 50));
+        
+        tooltip
+            .attr('transform', `translate(${tooltipX}, ${tooltipY})`)
+            .style('opacity', 1);
+        
+        // Show highlight circle on the point
+        highlightCircle
+            .attr('cx', pointX)
+            .attr('cy', pointY)
+            .attr('stroke', color)
+            .style('opacity', 1);
+    };
+    
+    // Helper function to hide tooltip
+    const hideTooltip = () => {
+        tooltip.style('opacity', 0);
+        highlightCircle.style('opacity', 0);
+    };
+    
+    // Create invisible overlay for mouse tracking
+    const overlay = g.append('rect')
+        .attr('width', width)
+        .attr('height', height)
+        .attr('fill', 'transparent')
+        .style('cursor', 'crosshair')
+        .on('mousemove', function(event) {
+            const [mouseX, mouseY] = d3.pointer(event, g.node());
+            const closestTool = findClosestTool(mouseX, mouseY);
+            showTooltip(event, closestTool);
+        })
+        .on('mouseleave', hideTooltip);
+    
     // Create line generator for each tool
     tools.forEach(tool => {
         const line = d3.line()
@@ -1179,9 +1361,10 @@ function updateChart() {
             .attr('d', line)
             .attr('stroke', colors[tool])
             .attr('stroke-width', 2)
-            .attr('fill', 'none');
+            .attr('fill', 'none')
+            .style('pointer-events', 'none'); // Let overlay handle events
         
-        // Add dots
+        // Add dots with hover effects
         g.selectAll(`.dot-${tool}`)
             .data(chartData)
             .enter()
@@ -1190,10 +1373,39 @@ function updateChart() {
             .attr('cx', d => x(d.date))
             .attr('cy', d => y(d[tool] || 0))
             .attr('r', 4)
-            .attr('fill', colors[tool]);
+            .attr('fill', colors[tool])
+            .style('pointer-events', 'none'); // Let overlay handle events
     });
     
-    // Add axes
+    // Add grid lines (before axes so they appear behind)
+    // Horizontal grid lines
+    g.append('g')
+        .attr('class', 'grid')
+        .call(d3.axisLeft(y)
+            .ticks(10)
+            .tickSize(-width)
+            .tickFormat('')
+        )
+        .selectAll('line')
+        .style('stroke', '#e5e7eb')
+        .style('stroke-width', 1)
+        .style('stroke-dasharray', '3,3');
+    
+    // Vertical grid lines
+    g.append('g')
+        .attr('class', 'grid')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x)
+            .ticks(6)
+            .tickSize(-height)
+            .tickFormat('')
+        )
+        .selectAll('line')
+        .style('stroke', '#e5e7eb')
+        .style('stroke-width', 1)
+        .style('stroke-dasharray', '3,3');
+    
+    // Add axes (after grid so they appear on top)
     g.append('g')
         .attr('class', 'axis')
         .attr('transform', `translate(0,${height})`)
