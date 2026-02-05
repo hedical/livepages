@@ -1,5 +1,5 @@
 // Configuration
-const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
+const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordadoption';
 
 // URLs will be fetched from webhook after authentication
 let DESCRIPTIF_URL = '';
