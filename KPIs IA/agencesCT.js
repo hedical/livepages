@@ -898,8 +898,21 @@ function updateChart() {
     // Calculate adoption rates over time (monthly)
     // We need to calculate rates for each month based on cumulative data
     
-    // Collect all data with dates and group by month
-    const monthlyStats = {};
+    // Helper function to get direction for an item (same as in calculateAgencyStatistics)
+    const getDirectionForItem = (item) => {
+        if (item.direction && item.direction.trim() !== '') {
+            return item.direction.trim();
+        }
+        // Try to get from agency code mapping
+        const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
+        if (agencyCode && agencyToDR[agencyCode]) {
+            return agencyToDR[agencyCode];
+        }
+        if (agencyCode && agencyToDirection[agencyCode]) {
+            return agencyToDirection[agencyCode];
+        }
+        return 'Non spécifiée';
+    };
     
     // Helper to get agency code
     const getAgencyCode = (item) => {
@@ -934,10 +947,17 @@ function updateChart() {
         });
     });
     
-    if (allDates.length === 0) return;
+    if (allDates.length === 0) {
+        // Clear chart if no data
+        d3.select(adoptionChartEl).selectAll('*').remove();
+        return;
+    }
     
-    // Group by month
+    // Group by month and find min/max dates
     const monthlyGroups = {};
+    let minDate = null;
+    let maxDate = null;
+    
     allDates.forEach(date => {
         const year = date.getFullYear();
         const month = date.getMonth();
@@ -945,18 +965,39 @@ function updateChart() {
         if (!monthlyGroups[key]) {
             monthlyGroups[key] = new Date(year, month, 1);
         }
+        if (!minDate || date < minDate) minDate = date;
+        if (!maxDate || date > maxDate) maxDate = date;
     });
+    
+    // Create entries for ALL months between min and max (even if no data)
+    if (minDate && maxDate) {
+        const current = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+        const end = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+        
+        while (current <= end) {
+            const year = current.getFullYear();
+            const month = current.getMonth();
+            const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+            if (!monthlyGroups[key]) {
+                monthlyGroups[key] = new Date(year, month, 1);
+            }
+            current.setMonth(current.getMonth() + 1);
+        }
+    }
     
     // Calculate cumulative adoption rates month by month
     const sortedMonths = Object.keys(monthlyGroups).sort();
     const chartData = [];
     const cumulativeUsers = {
-        descriptif: new Set(),
         autocontact: new Set(),
         comparateur: new Set(),
         expertBTP: new Set(),
         chatBTP: new Set()
     };
+    
+    // For descriptif, we need to track contracts with RICT > 100 mots (relevance rate)
+    const cumulativeContractsWithRICT100Plus = new Set();
+    const cumulativeContractsWithAIOrRICT100Plus = new Set();
     
     // Calculate filtered effectif based on current filters
     let filteredEffectif = 0;
@@ -1001,12 +1042,119 @@ function updateChart() {
     
     const tools = ['descriptif', 'autocontact', 'comparateur', 'expertBTP', 'chatBTP'];
     
+    // Helper function to check if item matches current filters (for descriptif calculation)
+    const matchesFilters = (item) => {
+        // Check date filter
+        if (dateFilter.startDate || dateFilter.endDate) {
+            const itemDate = parseFrenchDate(item.createdAt);
+            if (!itemDate) return false;
+            if (dateFilter.startDate) {
+                const start = new Date(dateFilter.startDate);
+                start.setHours(0, 0, 0, 0);
+                if (itemDate < start) return false;
+            }
+            if (dateFilter.endDate) {
+                const end = new Date(dateFilter.endDate);
+                end.setHours(23, 59, 59, 999);
+                if (itemDate > end) return false;
+            }
+        }
+        
+        // Check direction filter
+        if (selectedDirection) {
+            const itemDirection = getDirectionForItem(item);
+            if (itemDirection !== selectedDirection) return false;
+        }
+        
+        // Check agency filter
+        if (selectedAgency) {
+            const itemAgency = item.agency || 'Non spécifiée';
+            if (itemAgency !== selectedAgency) return false;
+        }
+        
+        return true;
+    };
+    
+    // For descriptif calculation, we need ALL RICT data (not filtered by date) to calculate cumulative rates correctly
+    // But we still filter by direction/agency if selected
+    let allRictForCalculation = allRictData;
+    if (selectedDirection || selectedAgency) {
+        allRictForCalculation = allRictData.filter(item => {
+            if (selectedDirection) {
+                const itemDirection = getDirectionForItem(item);
+                if (itemDirection !== selectedDirection) return false;
+            }
+            if (selectedAgency) {
+                const itemAgency = item.agency || 'Non spécifiée';
+                if (itemAgency !== selectedAgency) return false;
+            }
+            return true;
+        });
+    }
+    
     sortedMonths.forEach(monthKey => {
         const monthDate = monthlyGroups[monthKey];
         const [year, month] = monthKey.split('-').map(Number);
         
-        // Add users from this month
+        // For monthly calculation (not cumulative): count only contracts from THIS month
+        const monthContractsWithRICT100Plus = new Set();
+        const monthContractsWithAIOrRICT100Plus = new Set();
+        
+        // Process RICT data for descriptif relevance rate (THIS MONTH ONLY)
+        allRictForCalculation.forEach(item => {
+            if (!item.createdAt) return;
+            const date = parseFrenchDate(item.createdAt);
+            if (!date) return;
+            
+            // Count contracts from this specific month only
+            if (date.getFullYear() === year && date.getMonth() === month - 1) {
+                if (item.contractNumber && item.contractNumber.trim() !== '') {
+                    const processedDesc = extractText(item.description || '');
+                    const descWordCount = countWords(processedDesc);
+                    if (descWordCount > 100) {
+                        monthContractsWithRICT100Plus.add(item.contractNumber);
+                    }
+                }
+            }
+        });
+        
+        // Process descriptif data for relevance rate (THIS MONTH ONLY)
+        let descriptifForCalculation = descriptifData;
+        if (selectedDirection || selectedAgency) {
+            descriptifForCalculation = descriptifData.filter(item => {
+                if (selectedDirection) {
+                    const itemDirection = getDirectionForItem(item);
+                    if (itemDirection !== selectedDirection) return false;
+                }
+                if (selectedAgency) {
+                    const itemAgency = item.agency || 'Non spécifiée';
+                    if (itemAgency !== selectedAgency) return false;
+                }
+                return true;
+            });
+        }
+        
+        descriptifForCalculation.forEach(item => {
+            if (!item.createdAt) return;
+            const date = parseFrenchDate(item.createdAt);
+            if (!date) return;
+            
+            // Count contracts from this specific month only
+            if (date.getFullYear() === year && date.getMonth() === month - 1) {
+                if (item.type === DESCRIPTIF_TYPE && item.contractNumber && item.contractNumber.trim() !== '') {
+                    const processedDesc = extractText(item.description || '');
+                    const descWordCount = countWords(processedDesc);
+                    if (descWordCount > 100) {
+                        monthContractsWithAIOrRICT100Plus.add(item.contractNumber);
+                    }
+                }
+            }
+        });
+        
+        // Add users from this month for other tools
         allSources.forEach(source => {
+            if (source.tool === 'descriptif') return; // Skip descriptif, handled separately
+            
             const filtered = getFilteredData(source.data);
             filtered.forEach(item => {
                 if (!source.filter(item)) return;
@@ -1020,10 +1168,26 @@ function updateChart() {
             });
         });
         
-        // Calculate rates for this month (cumulative) using filtered effectif
-        const rates = {};
+        // Calculate rates for this month (cumulative)
+        // Initialize all rates to 0 first
+        const rates = {
+            descriptif: 0,
+            autocontact: 0,
+            comparateur: 0,
+            expertBTP: 0,
+            chatBTP: 0
+        };
+        
+        // Descriptif: relevance rate (calculated for THIS MONTH ONLY)
+        rates.descriptif = monthContractsWithRICT100Plus.size > 0
+            ? (monthContractsWithAIOrRICT100Plus.size / monthContractsWithRICT100Plus.size) * 100
+            : 0;
+        
+        // Other tools: adoption rates
         tools.forEach(tool => {
-            rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0;
+            if (tool !== 'descriptif') {
+                rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0;
+            }
         });
         
         chartData.push({
@@ -1032,10 +1196,24 @@ function updateChart() {
         });
     });
     
-    if (chartData.length === 0) return;
-    
-    // Clear previous chart
+    // Always clear previous chart first
     d3.select(adoptionChartEl).selectAll('*').remove();
+    
+    if (chartData.length === 0) {
+        // Show message if no data
+        const svg = d3.select(adoptionChartEl)
+            .append('svg')
+            .attr('width', 400)
+            .attr('height', 200);
+        svg.append('text')
+            .attr('x', 200)
+            .attr('y', 100)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '14px')
+            .style('fill', '#6b7280')
+            .text('Aucune donnée disponible pour les filtres sélectionnés');
+        return;
+    }
     
     // Ensure container has dimensions - use the actual container width
     // Force a reflow to get accurate dimensions
