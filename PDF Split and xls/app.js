@@ -6,12 +6,38 @@ let uploadedFile = null;
 let csvData = [];
 let parsedResults = [];
 let pdfDoc = null;
+let keepAliveInterval = null;
+
+// Fonction pour empêcher la mise en veille de l'onglet
+function startKeepAlive() {
+    if (keepAliveInterval) return;
+    
+    // Créer un petit "ping" invisible qui empêche le navigateur de ralentir l'onglet
+    keepAliveInterval = setInterval(() => {
+        // Mise à jour invisible de l'interface pour garder l'onglet actif
+        document.title = document.title;
+    }, 100);
+}
+
+function stopKeepAlive() {
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+    }
+}
 
 // Initialisation au chargement de la page
 document.addEventListener('DOMContentLoaded', function() {
     loadCSVData();
     setupDragAndDrop();
     setupFileInput();
+    
+    // Avertir l'utilisateur si il change d'onglet pendant un traitement
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden && keepAliveInterval) {
+            console.warn('⚠️ Onglet mis en arrière-plan pendant le traitement. Le processus continue...');
+        }
+    });
 });
 
 // Données CSV intégrées directement (évite les problèmes CORS)
@@ -561,6 +587,7 @@ function removeFile() {
 // Traitement du fichier PDF
 async function processFile(file) {
     showProgress();
+    startKeepAlive(); // Empêcher la mise en veille de l'onglet
     
     try {
         updateProgress(10, 'Chargement du PDF...');
@@ -607,14 +634,14 @@ async function processFile(file) {
         
         updateProgress(100, 'Traitement terminé !');
         
-        // Affichage des résultats
-        setTimeout(() => {
-            displayResults();
-        }, 500);
+        // Affichage des résultats immédiatement
+        displayResults();
         
     } catch (error) {
         console.error('Erreur lors du traitement:', error);
         showError('Erreur lors du traitement du PDF: ' + error.message);
+    } finally {
+        stopKeepAlive(); // Arrêter le keep alive
     }
 }
 
@@ -976,6 +1003,8 @@ async function downloadAllPDFs() {
         return;
     }
     
+    startKeepAlive(); // Empêcher la mise en veille de l'onglet
+    
     try {
         // Afficher la progression
         showProgress();
@@ -1067,6 +1096,8 @@ async function downloadAllPDFs() {
     } catch (error) {
         console.error('Erreur lors de la création du ZIP:', error);
         showError('Erreur lors de la génération des PDFs: ' + error.message);
+    } finally {
+        stopKeepAlive(); // Arrêter le keep alive
     }
 }
 
@@ -1080,6 +1111,17 @@ function showProgress() {
 function updateProgress(percent, text) {
     document.getElementById('progressBar').style.width = percent + '%';
     document.getElementById('progressText').textContent = text;
+    
+    // Mettre à jour le titre de la page pour montrer la progression même dans les onglets inactifs
+    if (percent < 100) {
+        document.title = `[${Math.round(percent)}%] NF Habitat - Traitement...`;
+    } else {
+        document.title = '✅ NF Habitat - Terminé !';
+        // Restaurer le titre après 3 secondes
+        setTimeout(() => {
+            document.title = 'NF Habitat - Séparateur de PDF';
+        }, 3000);
+    }
 }
 
 // Affichage des erreurs
@@ -1105,6 +1147,8 @@ async function sendAllToWebhook() {
     const btn = document.getElementById('sendToWebhookBtn');
     btn.disabled = true;
     const originalText = btn.textContent;
+    
+    startKeepAlive(); // Empêcher la mise en veille de l'onglet pendant l'envoi
     
     try {
         // Afficher la progression
@@ -1195,9 +1239,6 @@ async function sendAllToWebhook() {
                 }
                 succeeded++;
                 
-                // Petit délai avant le prochain envoi (optionnel, pour laisser le temps au webhook)
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
             } catch (err) {
                 console.error(`❌ Erreur pour ${codeItem.code}:`, err);
                 failed++;
@@ -1225,6 +1266,8 @@ async function sendAllToWebhook() {
         // Réactiver le bouton
         btn.disabled = false;
         btn.textContent = originalText;
+    } finally {
+        stopKeepAlive(); // Arrêter le keep alive
     }
 }
 
