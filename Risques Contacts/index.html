@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analyse des avis défavorables - Contacts & Entreprises</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <h1>Analyse des avis défavorables</h1>
+    <p class="subtitle">Compilation par contact et par entreprise</p>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="contacts">Contacts</button>
+    <button class="tab" data-view="entreprises">Entreprises</button>
+    <span class="score-legend" title="Score risque (0-100)&#10;&#10;1. Valeur de base = moyenne d'éléments défavorables par affaire (col. Moy/aff.)&#10;2. Transformation log = log(1 + moyenne) pour compresser les écarts&#10;3. Normalisation = (ma_valeur_log / max_log) × 100&#10;&#10;Ex. : 41,8 moy/aff. → ~57 | 738 moy/aff. → 100&#10;&#10;Couleurs : Vert &lt;40 | Jaune 40-69 | Rouge ≥70">ℹ Score risque</span>
+  </nav>
+
+  <!-- Chargement des données -->
+  <section class="data-loader">
+    <h2>Données</h2>
+    <p class="loader-hint">Les données sont chargées automatiquement depuis le serveur. Pour les gros fichiers (jusqu'à 67 Mo), le chargement peut prendre 30-60 secondes.</p>
+    <div class="file-statuses">
+      <span><strong>Avis :</strong> <span class="file-status" id="statusAvis">En attente...</span></span>
+      <span><strong>Observations :</strong> <span class="file-status" id="statusObservations">En attente...</span></span>
+      <span><strong>Statements :</strong> <span class="file-status" id="statusStatements">En attente...</span></span>
+    </div>
+    <button type="button" id="reloadData" class="reload-btn">Recharger les données</button>
+    <div class="load-progress" id="loadProgress" style="display: none;">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <span id="progressText">Chargement...</span>
+    </div>
+  </section>
+
+  <!-- Vue Contacts -->
+  <section id="viewContacts" class="view active">
+    <div class="search-bar">
+      <input type="text" id="searchContact" placeholder="Rechercher par nom, prénom, email ou société...">
+      <span class="result-count" id="contactCount"></span>
+    </div>
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Score</th>
+            <th>Nom</th>
+            <th>Prénom</th>
+            <th>Email</th>
+            <th>Société</th>
+            <th>Position</th>
+            <th>Rôle</th>
+            <th>Avis</th>
+            <th>Obs.</th>
+            <th>Stmt.</th>
+            <th>Total</th>
+            <th>Affaires</th>
+            <th>Moy/aff.</th>
+          </tr>
+        </thead>
+        <tbody id="contactsTableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="contactPagination"></div>
+
+    <!-- Détail contact (modal) -->
+    <div class="modal" id="contactModal">
+      <div class="modal-content">
+        <button class="modal-close" id="closeContactModal">&times;</button>
+        <h3 id="modalContactTitle">Détail du contact</h3>
+        <div id="modalContactBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vue Entreprises -->
+  <section id="viewEntreprises" class="view">
+    <div class="search-bar">
+      <input type="text" id="searchEntreprise" placeholder="Rechercher une entreprise...">
+      <label class="exclude-checkbox">
+        <input type="checkbox" id="excludeSansSociete">
+        <span>Exclure «&nbsp;Sans société&nbsp;»</span>
+      </label>
+      <span class="result-count" id="entrepriseCount"></span>
+    </div>
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Score</th>
+            <th>Entreprise</th>
+            <th>Avis</th>
+            <th>Obs.</th>
+            <th>Stmt.</th>
+            <th>Total</th>
+            <th>Affaires</th>
+            <th>Moy/aff.</th>
+            <th>Contacts</th>
+          </tr>
+        </thead>
+        <tbody id="entreprisesTableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="entreprisePagination"></div>
+
+    <!-- Détail entreprise (modal) -->
+    <div class="modal" id="entrepriseModal">
+      <div class="modal-content modal-wide">
+        <button class="modal-close" id="closeEntrepriseModal">&times;</button>
+        <h3 id="modalEntrepriseTitle">Détail de l'entreprise</h3>
+        <div id="modalEntrepriseBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+    <div class="loading-spinner"></div>
+    <p id="loadingOverlayText">Chargement du fichier en cours... Les gros fichiers (67 Mo) peuvent prendre 30-60 secondes.</p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
