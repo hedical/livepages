@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remplissage auto plateforme CERQUAL - Utilitaires Citae</title>
+    <link rel="stylesheet" href="../Retour examinateur vers Excel/style.css">
+    <style>
+        .extension-hero {
+            text-align: center;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-radius: 16px;
+            margin-bottom: 2rem;
+        }
+        .extension-hero .tool-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        .download-section {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-lg);
+        }
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--primary-color);
+            color: white !important;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .download-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+        .steps-list {
+            list-style: none;
+            counter-reset: step;
+        }
+        .steps-list li {
+            counter-increment: step;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            background: var(--card-background);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding-left: 4rem;
+            position: relative;
+        }
+        .steps-list li::before {
+            content: counter(step);
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 32px;
+            height: 32px;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+        .steps-list li strong {
+            display: block;
+            margin-bottom: 0.35rem;
+        }
+        .steps-list li p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+        .info-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 1rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1.5rem 0;
+        }
+        .info-box code, .steps-list code {
+            background: rgba(0,0,0,0.06);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="margin-bottom: 1rem;">
+                <a href="../index.html" class="back-link">← Retour aux outils</a>
+            </div>
+            
+            <div class="extension-hero">
+                <div class="tool-icon">🤖</div>
+                <h1>Remplissage auto plateforme CERQUAL</h1>
+                <p class="subtitle">Connectez-vous sur votre projet CERQUAL et importez votre analyse des pièces écrites. L'extension Chrome automatise le remplissage des rubriques.</p>
+            </div>
+
+            <section class="download-section">
+                <h2>📥 Télécharger l'extension</h2>
+                <p style="margin: 1rem 0; color: var(--text-secondary);">Téléchargez l'extension Chrome AutoCerqual pour automatiser le remplissage des rubriques sur la plateforme CERQUAL.</p>
+                <a href="AutoCerqual-extension.zip" class="download-btn" download>
+                    📦 Télécharger AutoCerqual (ZIP)
+                </a>
+            </section>
+
+            <section class="download-section">
+                <h2>📋 Comment installer l'extension</h2>
+                <ol class="steps-list">
+                    <li>
+                        <strong>Téléchargez l'extension</strong>
+                        <p>Cliquez sur le bouton ci-dessus pour télécharger le fichier ZIP.</p>
+                    </li>
+                    <li>
+                        <strong>Extrayez le fichier ZIP</strong>
+                        <p>Faites un clic droit sur le fichier téléchargé → « Extraire tout » et choisissez un emplacement (par ex. Bureau ou Documents).</p>
+                    </li>
+                    <li>
+                        <strong>Ouvrez Chrome en mode développeur</strong>
+                        <p>Dans la barre d'adresse de Chrome, tapez <code>chrome://extensions</code> et appuyez sur Entrée.</p>
+                    </li>
+                    <li>
+                        <strong>Activez le mode développeur</strong>
+                        <p>En haut à droite, activez le commutateur « Mode développeur ».</p>
+                    </li>
+                    <li>
+                        <strong>Chargez l'extension</strong>
+                        <p>Cliquez sur « Charger l'extension non empaquetée » et sélectionnez le dossier extrait (celui qui contient <code>manifest.json</code>).</p>
+                    </li>
+                    <li>
+                        <strong>C'est prêt !</strong>
+                        <p>L'extension apparaît dans votre barre d'outils. Connectez-vous sur <a href="https://outil-eval.cerqual-pro.net" target="_blank">outil-eval.cerqual-pro.net</a>, ouvrez la page des rubriques de votre projet, puis cliquez sur l'icône de l'extension pour importer votre fichier NormX.</p>
+                    </li>
+                </ol>
+
+                <div class="info-box">
+                    <strong>💡 Astuce :</strong> L'extension ne fonctionne que sur les pages de rubriques de la plateforme CERQUAL (<code>https://outil-eval.cerqual-pro.net/detail/*</code>). Assurez-vous d'être sur la bonne page avant de l'utiliser.
+                </div>
+            </section>
+        </header>
+    </div>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utilitaires Citae</title>
+    <link rel="stylesheet" href="hub-style.css">
+</head>
+<body>
+    <div class="hub-container">
+        <header class="hub-header">
+            <a href="https://citae.fr" target="_blank" class="hub-logo-link">
+                <img src="https://citae.fr/wp-content/themes/citae/images/logo_black.svg" alt="Citae" class="hub-logo">
+            </a>
+            <h1 class="hub-title">Utilitaires</h1>
+            <div class="search-box">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM18 18l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <input type="text" placeholder="Rechercher un outil..." class="search-input" id="searchInput">
+            </div>
+        </header>
+
+        <main class="tools-grid">
+            <!-- Retour examinateur vers Excel -->
+            <a href="Retour examinateur vers Excel/retour-examinateur.html" class="tool-card">
+                <span class="time-badge">⏱️ ~10 min</span>
+                <div class="tool-icon">📄</div>
+                <h3 class="tool-title">Retour examinateur vers Excel</h3>
+                <p class="tool-description">Transformez votre synthèse de non-conformités NF Habitat en un rapport XLS exploitable. Uploadez votre PDF, le système génère automatiquement les documents par code d'exigence et analyse les données.</p>
+            </a>
+
+            <!-- Remplissage auto plateforme CERQUAL -->
+            <a href="Remplissage auto plateforme Cerqual/remplissage-cerqual.html" class="tool-card">
+                <div class="tool-icon">🤖</div>
+                <h3 class="tool-title">Remplissage auto plateforme CERQUAL</h3>
+                <p class="tool-description">Connectez-vous sur votre projet CERQUAL et importez votre analyse des pièces écrites. Téléchargez l'extension Chrome pour automatiser le remplissage des rubriques.</p>
+            </a>
+
+            <!-- Ajouter un nouvel outil -->
+            <div class="tool-card tool-add">
+                <div class="add-icon">+</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Recherche en temps réel
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const cards = document.querySelectorAll('.tool-card');
+            
+            cards.forEach(card => {
+                if (card.classList.contains('tool-add')) return;
+                
+                const title = card.querySelector('.tool-title')?.textContent.toLowerCase() || '';
+                const description = card.querySelector('.tool-description')?.textContent.toLowerCase() || '';
+                
+                if (title.includes(searchTerm) || description.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+
+    </script>
+</body>
+</html>

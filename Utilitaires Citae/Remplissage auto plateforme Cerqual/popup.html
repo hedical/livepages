@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="wrong-page-message">
+    <p>Veuillez vous mettre sur la page des rubriques de vos exigences de votre projet.</p>
+  </div>
+
+  <div id="correct-page-content">
+    
+    <div class="validation-animation">
+      <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+        <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+        <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+      </svg>
+    </div>
+    <p class="success-text">Page correcte !</p>
+    
+    <label for="file-upload" class="custom-file-upload" id="upload-button">
+      Importer le fichier NormX
+    </label>
+    <input id="file-upload" type="file" accept=".xlsx,.xls" />
+    
+    <!-- Section après upload -->
+    <div id="file-loaded-section" style="display: none;">
+      <p class="file-info" id="file-info-text"></p>
+      <button id="start-job-button" class="start-button">
+        🚀 Lancer le remplissage
+      </button>
+    </div>
+  </div>
+
+  <!-- Zone de statut du job -->
+  <div id="job-status-container" style="display: none;">
+    <div class="status-header">
+      <div class="spinner"></div>
+      <h3 id="status-title">Traitement en cours...</h3>
+    </div>
+    <p id="status-progress">Ligne 0 / 0</p>
+    <p class="code-info">Code : <strong id="current-code">...</strong></p>
+    
+    <!-- Alerte pour scroll manuel -->
+    <div id="manual-scroll-alert" class="manual-scroll-alert" style="display: none;">
+      <p class="alert-icon">🔔</p>
+      <p class="alert-text">Élément difficile à trouver</p>
+      <p class="alert-subtext">Essayez de scroller manuellement pour aider la détection</p>
+    </div>
+    
+    <p class="warning-text">⚠️ Ne pas fermer la page</p>
+    <p class="info-text">Vous pouvez masquer cette popup en cliquant ailleurs et continuer votre navigation</p>
+    <button id="stop-job-button" class="stop-button">
+      🛑 Arrêter le traitement
+    </button>
+  </div>
+
+  <!-- Message de fin -->
+  <div id="job-completed-container" style="display: none;">
+    <div class="completion-animation">
+      <svg class="checkmark-big" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+        <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+        <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+      </svg>
+    </div>
+    <h3 class="success-text" id="completion-title">✅ Traitement terminé !</h3>
+    
+    <!-- Synthèse des résultats -->
+    <div id="results-summary"></div>
+    
+    <!-- Bouton Recommencer -->
+    <button id="restart-button" class="restart-button">
+      🔄 Recommencer
+    </button>
+  </div>
+
+  <script src="xlsx.full.min.js"></script>
+  <script src="popup.js"></script>
+
+</body>
+</html>
