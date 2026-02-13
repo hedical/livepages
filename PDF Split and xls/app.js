@@ -8,22 +8,16 @@ let parsedResults = [];
 let pdfDoc = null;
 let keepAliveInterval = null;
 
-// Fonction pour empêcher la mise en veille de l'onglet
+// Marqueur de traitement en cours (pour le logging)
 function startKeepAlive() {
     if (keepAliveInterval) return;
-    
-    // Créer un petit "ping" invisible qui empêche le navigateur de ralentir l'onglet
-    keepAliveInterval = setInterval(() => {
-        // Mise à jour invisible de l'interface pour garder l'onglet actif
-        document.title = document.title;
-    }, 100);
+    keepAliveInterval = true; // Simple flag
+    console.log('🚀 Démarrage du traitement...');
 }
 
 function stopKeepAlive() {
-    if (keepAliveInterval) {
-        clearInterval(keepAliveInterval);
-        keepAliveInterval = null;
-    }
+    keepAliveInterval = null;
+    console.log('✅ Traitement terminé');
 }
 
 // Initialisation au chargement de la page
@@ -32,10 +26,12 @@ document.addEventListener('DOMContentLoaded', function() {
     setupDragAndDrop();
     setupFileInput();
     
-    // Avertir l'utilisateur si il change d'onglet pendant un traitement
+    // Logger les changements de visibilité pour le debug
     document.addEventListener('visibilitychange', function() {
         if (document.hidden && keepAliveInterval) {
-            console.warn('⚠️ Onglet mis en arrière-plan pendant le traitement. Le processus continue...');
+            console.log('ℹ️ Onglet mis en arrière-plan. Les envois continuent...');
+        } else if (!document.hidden && keepAliveInterval) {
+            console.log('✅ Onglet de nouveau actif.');
         }
     });
 });
@@ -565,9 +561,6 @@ function displayFileInfo(file) {
     
     document.getElementById('fileName').textContent = file.name;
     document.getElementById('fileSize').textContent = formatFileSize(file.size);
-    
-    // Replier automatiquement la section description
-    collapseDescription();
 }
 
 function formatFileSize(bytes) {
@@ -1134,77 +1127,120 @@ function showError(message) {
 }
 
 // Envoi de tous les PDFs vers le webhook (un par un)
+// Pré-générer tous les PDFs (pour éviter le throttling Canvas dans onglets inactifs)
+async function prepareAllPDFsForWebhook() {
+    if (!pdfDoc) {
+        showError('Document PDF non disponible');
+        return null;
+    }
+    
+    const { jsPDF } = window.jspdf;
+    const preparedPDFs = [];
+    const total = parsedResults.filter(c => c.pages && c.pages.length > 0).length;
+    let current = 0;
+    
+    updateProgress(`Préparation des PDFs (${current}/${total})...`, 0);
+    
+    for (const codeItem of parsedResults) {
+        if (!codeItem.pages || codeItem.pages.length === 0) {
+            continue;
+        }
+        
+        current++;
+        updateProgress(`Préparation des PDFs (${current}/${total})...`, (current / total) * 100);
+        
+        try {
+            // Créer un PDF pour ce code
+            const firstPage = await pdfDoc.getPage(codeItem.pages[0]);
+            const viewport = firstPage.getViewport({ scale: 1 });
+            const pdfWidth = viewport.width * 0.264583;
+            const pdfHeight = viewport.height * 0.264583;
+            
+            const pdf = new jsPDF({
+                orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+            
+            let isFirstPage = true;
+            for (const pageNum of codeItem.pages) {
+                const page = await pdfDoc.getPage(pageNum);
+                const canvas = await renderPageToCanvas(page, 2);
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                
+                if (!isFirstPage) {
+                    pdf.addPage();
+                }
+                
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                
+                pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
+                isFirstPage = false;
+            }
+            
+            // Convertir le PDF en Blob et le stocker
+            const pdfBlob = pdf.output('blob');
+            
+            preparedPDFs.push({
+                codeItem: codeItem,
+                pdfBlob: pdfBlob
+            });
+            
+        } catch (err) {
+            console.error(`❌ Erreur lors de la préparation du PDF pour ${codeItem.code}:`, err);
+        }
+    }
+    
+    return preparedPDFs;
+}
+
 async function sendAllToWebhook() {
     if (!pdfDoc) {
         showError('Document PDF non disponible');
         return;
     }
     
-    // Afficher le bouton "Voir les résultats"
-    document.getElementById('viewResultsBtn').style.display = 'inline-block';
-    
     // Désactiver le bouton
     const btn = document.getElementById('sendToWebhookBtn');
     btn.disabled = true;
     const originalText = btn.textContent;
     
-    startKeepAlive(); // Empêcher la mise en veille de l'onglet pendant l'envoi
+    startKeepAlive();
     
     try {
-        // Afficher la progression
-        showProgress();
-        updateProgress(5, 'Préparation de l\'envoi...');
-        
         const projectName = document.getElementById('projectName').value.trim();
+        
+        // PRÉ-GÉNÉRATION : Créer tous les PDFs AVANT d'ouvrir la modale
+        // Cela évite les opérations Canvas dans un onglet potentiellement inactif
+        console.log('🔄 Pré-génération de tous les PDFs...');
+        const preparedPDFs = await prepareAllPDFsForWebhook();
+        
+        if (!preparedPDFs || preparedPDFs.length === 0) {
+            throw new Error('Aucun PDF à envoyer');
+        }
+        
+        console.log(`✅ ${preparedPDFs.length} PDFs pré-générés avec succès`);
+        
+        // Maintenant ouvrir la modale pour l'envoi
+        openModal();
+        
         const webhookUrl = 'https://databuildr.app.n8n.cloud/webhook/evaltojson';
-        const { jsPDF } = window.jspdf;
         
         let completed = 0;
         let succeeded = 0;
         let failed = 0;
-        const total = parsedResults.filter(c => c.pages && c.pages.length > 0).length;
+        const total = preparedPDFs.length;
         
-        // Envoyer chaque PDF un par un
-        for (const codeItem of parsedResults) {
-            if (!codeItem.pages || codeItem.pages.length === 0) {
-                continue;
-            }
-            
-            updateProgress(5 + (completed / total) * 90, `Envoi ${completed + 1}/${total}: ${codeItem.code}...`);
+        // Mettre à jour la modale
+        updateModalProgress(0, total, 'Envoi au serveur...');
+        
+        // Envoyer chaque PDF pré-généré un par un
+        for (const { codeItem, pdfBlob } of preparedPDFs) {
+            updateModalProgress(completed, total, `Envoi de ${codeItem.code}...`);
             console.log(`🚀 Envoi ${completed + 1}/${total}: ${codeItem.code}...`);
             
             try {
-                // Créer un PDF pour ce code
-                const firstPage = await pdfDoc.getPage(codeItem.pages[0]);
-                const viewport = firstPage.getViewport({ scale: 1 });
-                const pdfWidth = viewport.width * 0.264583;
-                const pdfHeight = viewport.height * 0.264583;
-                
-                const pdf = new jsPDF({
-                    orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
-                    unit: 'mm',
-                    format: 'a4'
-                });
-                
-                let isFirstPage = true;
-                for (const pageNum of codeItem.pages) {
-                    const page = await pdfDoc.getPage(pageNum);
-                    const canvas = await renderPageToCanvas(page, 2);
-                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-                    
-                    if (!isFirstPage) {
-                        pdf.addPage();
-                    }
-                    
-                    const pageWidth = pdf.internal.pageSize.getWidth();
-                    const pageHeight = pdf.internal.pageSize.getHeight();
-                    
-                    pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
-                    isFirstPage = false;
-                }
-                
-                // Convertir le PDF en Blob
-                const pdfBlob = pdf.output('blob');
                 
                 // Préparer le FormData
                 const formData = new FormData();
@@ -1234,6 +1270,11 @@ async function sendAllToWebhook() {
                 try {
                     const responseData = JSON.parse(responseText);
                     console.log(`✅ ${codeItem.code} envoyé avec succès. Réponse reçue:`, responseData);
+                    
+                    // Ajouter les résultats au tableau de la modale
+                    if (responseData) {
+                        addResultToTable(responseData);
+                    }
                 } catch (parseError) {
                     console.log(`✅ ${codeItem.code} envoyé avec succès. Réponse reçue:`, responseText);
                 }
@@ -1248,20 +1289,15 @@ async function sendAllToWebhook() {
             console.log(`📊 Progression: ${completed}/${total} (${succeeded} réussis, ${failed} échoués)`);
         }
         
-        updateProgress(100, `Terminé ! ${succeeded} réussis, ${failed} échoués`);
+        updateModalProgress(total, total, `✅ Terminé ! ${succeeded} réussis, ${failed} échoués`);
         
         // Réactiver le bouton
         btn.disabled = false;
         btn.textContent = originalText;
         
-        // Masquer la progression après 3 secondes
-        setTimeout(() => {
-            document.getElementById('progressSection').style.display = 'none';
-        }, 3000);
-        
     } catch (error) {
         console.error('Erreur lors de l\'envoi vers le webhook:', error);
-        showError('Erreur lors de l\'envoi vers l\'API: ' + error.message);
+        updateModalProgress(completed, total, `❌ Erreur: ${error.message}`);
         
         // Réactiver le bouton
         btn.disabled = false;
@@ -1272,26 +1308,170 @@ async function sendAllToWebhook() {
 }
 
 // Toggle de la section description
-function toggleDescription() {
-    const content = document.getElementById('descriptionContent');
-    const icon = document.getElementById('collapseIcon');
+// Variable globale pour stocker les résultats du webhook
+let webhookResults = [];
+
+// Ouvrir la modale
+function openModal() {
+    const modal = document.getElementById('resultsModal');
+    modal.style.display = 'block';
     
-    content.classList.toggle('collapsed');
-    icon.classList.toggle('collapsed');
+    // Réinitialiser le tableau
+    webhookResults = [];
+    document.getElementById('resultsTableBody').innerHTML = '';
+    
+    // Fermer avec Escape
+    document.addEventListener('keydown', handleEscapeKey);
+    
+    // Fermer en cliquant en dehors
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeModal();
+        }
+    };
 }
 
-// Replier automatiquement la description
-function collapseDescription() {
-    const content = document.getElementById('descriptionContent');
-    const icon = document.getElementById('collapseIcon');
-    
-    content.classList.add('collapsed');
-    icon.classList.add('collapsed');
+// Fermer la modale
+function closeModal() {
+    document.getElementById('resultsModal').style.display = 'none';
+    document.removeEventListener('keydown', handleEscapeKey);
 }
 
-// Ouvrir les résultats dans Google Sheets
-function openResults() {
-    window.open('https://docs.google.com/spreadsheets/d/1qIRzsYVhGxfhkaTIS-VY9QTW2ZI7Hi_J5rPsyZMEHiQ/edit?gid=0#gid=0', '_blank');
+// Gestion de la touche Escape
+function handleEscapeKey(event) {
+    if (event.key === 'Escape') {
+        closeModal();
+    }
+}
+
+// Ajouter une ligne au tableau des résultats
+function addResultToTable(results) {
+    const tbody = document.getElementById('resultsTableBody');
+    
+    // Les résultats peuvent être un tableau
+    const resultsArray = Array.isArray(results) ? results : [results];
+    
+    resultsArray.forEach(result => {
+        webhookResults.push(result);
+        
+        const row = document.createElement('tr');
+        
+        // Déterminer la classe du badge de résultat
+        let resultClass = 'result-partiel';
+        const resultText = (result.Résultat || '').toLowerCase();
+        if (resultText.includes('conforme') && !resultText.includes('non')) {
+            resultClass = 'result-conforme';
+        } else if (resultText.includes('non conforme')) {
+            resultClass = 'result-non-conforme';
+        }
+        
+        row.innerHTML = `
+            <td>${result.Exigence || ''}</td>
+            <td>${result.Thème || ''}</td>
+            <td>${result.Catégorie || ''}</td>
+            <td>${result['num page'] || ''}</td>
+            <td>${result.Typ || ''}</td>
+            <td><span class="result-badge ${resultClass}">${result.Résultat || ''}</span></td>
+            <td style="max-width: 300px; white-space: pre-wrap;">${(result.Description || '').substring(0, 200)}${(result.Description || '').length > 200 ? '...' : ''}</td>
+            <td style="max-width: 300px; white-space: pre-wrap;">${(result['Mode de preuve'] || '').substring(0, 200)}${(result['Mode de preuve'] || '').length > 200 ? '...' : ''}</td>
+            <td style="max-width: 200px; white-space: pre-wrap;">${result.Commentaire || ''}</td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// Mettre à jour la progression dans la modale
+function updateModalProgress(current, total, status) {
+    document.getElementById('modalProgressText').textContent = status;
+    document.getElementById('modalProgressCount').textContent = `${current}/${total}`;
+    const percent = (current / total) * 100;
+    document.getElementById('modalProgressBar').style.width = percent + '%';
+}
+
+// Export en CSV
+function exportToCSV() {
+    if (webhookResults.length === 0) {
+        alert('Aucun résultat à exporter');
+        return;
+    }
+    
+    const projectName = document.getElementById('projectName').value.trim();
+    
+    // Créer le CSV
+    const headers = ['Exigence', 'Thème', 'Catégorie', 'Pages', 'Type', 'Résultat', 'Description', 'Mode de preuve', 'Commentaire', 'Nom du projet'];
+    const rows = webhookResults.map(r => [
+        r.Exigence || '',
+        r.Thème || '',
+        r.Catégorie || '',
+        r['num page'] || '',
+        r.Typ || '',
+        r.Résultat || '',
+        r.Description || '',
+        r['Mode de preuve'] || '',
+        r.Commentaire || '',
+        r['Nom du projet'] || projectName
+    ]);
+    
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+    
+    // Télécharger
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${sanitizeFilename(projectName)}_Resultats.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Export en Excel
+function exportToExcel() {
+    if (webhookResults.length === 0) {
+        alert('Aucun résultat à exporter');
+        return;
+    }
+    
+    const projectName = document.getElementById('projectName').value.trim();
+    
+    // Préparer les données pour Excel
+    const data = webhookResults.map(r => ({
+        'Exigence': r.Exigence || '',
+        'Thème': r.Thème || '',
+        'Catégorie': r.Catégorie || '',
+        'Pages': r['num page'] || '',
+        'Type': r.Typ || '',
+        'Résultat': r.Résultat || '',
+        'Description': r.Description || '',
+        'Mode de preuve': r['Mode de preuve'] || '',
+        'Commentaire': r.Commentaire || '',
+        'Nom du projet': r['Nom du projet'] || projectName
+    }));
+    
+    // Créer le workbook
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Résultats');
+    
+    // Ajuster la largeur des colonnes
+    const colWidths = [
+        { wch: 15 },  // Exigence
+        { wch: 30 },  // Thème
+        { wch: 30 },  // Catégorie
+        { wch: 10 },  // Pages
+        { wch: 12 },  // Type
+        { wch: 15 },  // Résultat
+        { wch: 50 },  // Description
+        { wch: 50 },  // Mode de preuve
+        { wch: 30 },  // Commentaire
+        { wch: 20 }   // Nom du projet
+    ];
+    ws['!cols'] = colWidths;
+    
+    // Télécharger
+    XLSX.writeFile(wb, `${sanitizeFilename(projectName)}_Resultats.xlsx`);
 }
 
 // Réinitialisation de l'application

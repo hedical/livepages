@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retour examinateur vers Excel - Utilitaires Citae</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="margin-bottom: 1rem;">
+                <a href="index.html" class="back-link">← Retour aux outils</a>
+            </div>
+            <h1>📄 Retour examinateur vers Excel</h1>
+            <p class="subtitle">Transformez votre synthèse de non-conformités NF Habitat en un rapport XLS exploitable</p>
+            
+            <div id="sendToApiSection" style="display: none; margin-top: 2rem;">
+                <div class="header-buttons">
+                    <button class="btn-primary btn-large" id="sendToWebhookBtn" onclick="sendAllToWebhook()">
+                        📊 Transformer en XLS
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Modale des résultats -->
+            <div id="resultsModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>📊 Résultats de l'analyse</h2>
+                        <span class="modal-close" onclick="closeModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-progress">
+                        <div class="progress-info">
+                            <span id="modalProgressText">Traitement en cours...</span>
+                            <span id="modalProgressCount">0/0</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="modalProgressBar"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="table-container">
+                            <table id="resultsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Exigence</th>
+                                        <th>Thème</th>
+                                        <th>Catégorie</th>
+                                        <th>Pages</th>
+                                        <th>Type</th>
+                                        <th>Résultat</th>
+                                        <th>Description</th>
+                                        <th>Mode de preuve</th>
+                                        <th>Commentaire</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="resultsTableBody">
+                                    <!-- Les lignes seront ajoutées dynamiquement -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="btn-primary" onclick="exportToCSV()">
+                            📥 Télécharger en CSV
+                        </button>
+                        <button class="btn-primary" onclick="exportToExcel()">
+                            📥 Télécharger en Excel
+                        </button>
+                        <button class="btn-secondary" onclick="closeModal()">
+                            Fermer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="upload-section">
+                <div class="project-name-section">
+                    <label for="projectName">Nom du projet *</label>
+                    <input 
+                        type="text" 
+                        id="projectName" 
+                        placeholder="Ex: Résidence Les Jardins" 
+                        required
+                    >
+                </div>
+
+                <div class="upload-box" id="uploadBox">
+                    <div class="upload-icon">📤</div>
+                    <h2>Glissez-déposez votre PDF ici</h2>
+                    <p>ou</p>
+                    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                        Choisir un fichier
+                    </button>
+                    <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                    <p class="file-info">Format accepté : PDF uniquement</p>
+                </div>
+
+                <div id="fileInfo" class="file-info-display" style="display: none;">
+                    <div class="file-card">
+                        <span class="file-icon">📄</span>
+                        <div class="file-details">
+                            <h3 id="fileName">Document.pdf</h3>
+                            <p id="fileSize">0 MB</p>
+                        </div>
+                        <button class="btn-remove" onclick="removeFile()">✕</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-card">
+                    <h3>⚙️ Traitement en cours...</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressBar"></div>
+                    </div>
+                    <p id="progressText">Initialisation...</p>
+                </div>
+            </section>
+
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <h2>✅ Résultats</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalCodes">0</div>
+                        <div class="stat-label">Codes d'exigences</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalThemes">0</div>
+                        <div class="stat-label">Thèmes identifiés</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalPages">0</div>
+                        <div class="stat-label">Pages totales</div>
+                    </div>
+                </div>
+
+                <div class="themes-container" id="themesContainer">
+                    <!-- Les cartes de codes seront ajoutées ici dynamiquement -->
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn-primary btn-large" id="downloadAllBtn" onclick="downloadAllPDFs()">
+                        📥 Télécharger tous les PDFs
+                    </button>
+                    <button class="btn-secondary" onclick="resetApp()">
+                        🔄 Nouveau document
+                    </button>
+                </div>
+            </section>
+
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-card">
+                    <div class="error-icon">⚠️</div>
+                    <h3>Erreur de traitement</h3>
+                    <p id="errorMessage">Une erreur est survenue</p>
+                    <button class="btn-secondary" onclick="resetApp()">Réessayer</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>NF Habitat - Système de séparation automatique par thèmes • Version 1.0</p>
+        </footer>
+    </div>
+
+    <!-- Bibliothèques externes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script src="app.js"></script>
+</body>
+</html>
