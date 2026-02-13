@@ -33,6 +33,13 @@
                 <p class="tool-description">Transformez votre synthèse de non-conformités NF Habitat en un rapport XLS exploitable. Uploadez votre PDF, le système génère automatiquement les documents par code d'exigence et analyse les données.</p>
             </a>
 
+            <!-- Remplissage auto plateforme CERQUAL -->
+            <div class="tool-card" onclick="showConstructionMessage()">
+                <div class="tool-icon">🤖</div>
+                <h3 class="tool-title">Remplissage auto plateforme CERQUAL</h3>
+                <p class="tool-description">Connectez vous sur votre projet CERQUAL et importez votre analyse des pièces écrites. Un automate va alors remplir l'ensemble des éléments.</p>
+            </div>
+
             <!-- Ajouter un nouvel outil -->
             <div class="tool-card tool-add">
                 <div class="add-icon">+</div>
@@ -59,6 +66,11 @@
                 }
             });
         });
+
+        // Message pour les outils en construction
+        function showConstructionMessage() {
+            alert('🚧 Contenu en cours de construction\n\nContactez Claire Meunier ou Hédi Calabrese');
+        }
     </script>
 </body>
 </html>
