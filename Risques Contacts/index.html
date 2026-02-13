@@ -7,6 +7,20 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Écran mot de passe (visible tant que non authentifié) -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>Accès sécurisé</h2>
+      <p class="login-hint">Entrez le mot de passe pour accéder aux données.</p>
+      <form id="loginForm">
+        <input type="password" id="loginPassword" placeholder="Mot de passe" autocomplete="current-password" required>
+        <button type="submit" id="loginSubmit">Accéder</button>
+      </form>
+      <p class="login-error" id="loginError"></p>
+    </div>
+  </div>
+
+  <div id="mainContent" style="display: none;">
   <header class="header">
     <h1>Analyse des avis défavorables</h1>
     <p class="subtitle">Compilation par contact et par entreprise</p>
@@ -117,6 +131,7 @@
   <div class="loading-overlay" id="loadingOverlay" style="display: none;">
     <div class="loading-spinner"></div>
     <p id="loadingOverlayText">Chargement du fichier en cours... Les gros fichiers (67 Mo) peuvent prendre 30-60 secondes.</p>
+  </div>
   </div>
 
   <script src="app.js"></script>

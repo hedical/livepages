@@ -42,7 +42,10 @@ function parseCount(val) {
   return isNaN(n) ? 0 : n;
 }
 
-// URLs des données
+// Webhook de vérification du mot de passe (retourne les URLs si OK)
+const WEBHOOK_AUTH = 'https://databuildr.app.n8n.cloud/webhook/risk-data';
+
+// URLs des données (utilisées si webhook non appelé ou en secours)
 const DATA_URLS = {
   avis: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/avis__notices__defavorables_par_contact_2026-02-13T11_37_32.8744Z.json',
   observations: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/observations_defavorables_par_affaire_2026-02-13T11_36_04.991586Z.json',
@@ -623,7 +626,67 @@ function showEntrepriseDetail(name) {
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
-  loadAllDataFromUrls();
+  const loginOverlay = document.getElementById('loginOverlay');
+  const mainContent = document.getElementById('mainContent');
+  const loginForm = document.getElementById('loginForm');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginError = document.getElementById('loginError');
+  const loginSubmit = document.getElementById('loginSubmit');
+
+  const AUTH_KEY = 'risques_auth';
+
+  function checkAuth() {
+    return sessionStorage.getItem(AUTH_KEY) === '1';
+  }
+  function setAuth() {
+    sessionStorage.setItem(AUTH_KEY, '1');
+  }
+  function showApp(urls) {
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (mainContent) mainContent.style.display = 'block';
+    loadAllDataFromUrls(urls);
+  }
+
+  if (checkAuth()) {
+    let urls;
+    const stored = sessionStorage.getItem('risques_urls');
+    if (stored) {
+      try {
+        urls = JSON.parse(stored);
+        if (!urls.avis || !urls.observations || !urls.statements) urls = null;
+      } catch (_) {
+        urls = null;
+      }
+    }
+    showApp(urls || undefined);
+  } else {
+    loginForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pwd = loginPassword?.value?.trim();
+      if (!pwd) return;
+      loginError.textContent = '';
+      loginSubmit.disabled = true;
+      try {
+        const res = await fetch(WEBHOOK_AUTH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        });
+        const text = await res.text();
+        if (!res.ok) throw new Error('Mot de passe incorrect');
+        const urls = parseUrlsFromResponse(text);
+        if (!urls) throw new Error('Réponse invalide');
+        sessionStorage.setItem('risques_urls', JSON.stringify(urls));
+        setAuth();
+        showApp(urls);
+      } catch (err) {
+        loginError.textContent = err.message || 'Mot de passe incorrect';
+      } finally {
+        loginSubmit.disabled = false;
+      }
+    });
+  }
+
   document.getElementById('reloadData')?.addEventListener('click', async () => {
     const btn = document.getElementById('reloadData');
     const overlay = document.getElementById('loadingOverlay');
