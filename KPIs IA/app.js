@@ -13,6 +13,10 @@ const CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object
 const EXPERT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json';
 // Chat Citae URL (public)
 const CHAT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json';
+// Expert BTP Diagnostics URL (public)
+const EXPERT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpdiagnostics.json';
+// Chat BTP Diagnostics URL (public)
+const CHAT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
 // Default Population URL (public)
 const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
@@ -44,6 +48,8 @@ let expertBTPData = [];
 let chatBTPData = [];
 let expertCitaeData = [];
 let chatCitaeData = [];
+let expertBTPDiagData = [];
+let chatBTPDiagData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let availableAgencies = [];
 let availableDirections = [];
@@ -117,6 +123,18 @@ const chatProjetCitaeCountEl = document.getElementById('chat-projet-citae-count'
 const chatProjetCitaeUsersEl = document.getElementById('chat-projet-citae-users');
 const chatProjetCitaeMessagesEl = document.getElementById('chat-projet-citae-messages');
 const chatProjetCitaeCostEl = document.getElementById('chat-projet-citae-cost');
+
+// Expert BTP Diagnostics elements
+const expertTechBTPDiagCountEl = document.getElementById('expert-tech-btpdiag-count');
+const expertTechBTPDiagUsersEl = document.getElementById('expert-tech-btpdiag-users');
+const expertTechBTPDiagMessagesEl = document.getElementById('expert-tech-btpdiag-messages');
+const expertTechBTPDiagCostEl = document.getElementById('expert-tech-btpdiag-cost');
+
+// Chat BTP Diagnostics elements
+const chatProjetBTPDiagCountEl = document.getElementById('chat-projet-btpdiag-count');
+const chatProjetBTPDiagUsersEl = document.getElementById('chat-projet-btpdiag-users');
+const chatProjetBTPDiagMessagesEl = document.getElementById('chat-projet-btpdiag-messages');
+const chatProjetBTPDiagCostEl = document.getElementById('chat-projet-btpdiag-cost');
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -724,6 +742,8 @@ function extractDirectionsAndAgencies() {
     processItems(chatBTPData);
     processItems(expertCitaeData);
     processItems(chatCitaeData);
+    processItems(expertBTPDiagData);
+    processItems(chatBTPDiagData);
     
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
@@ -1280,7 +1300,7 @@ function processComparateurData(data) {
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
@@ -1309,9 +1329,18 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainMinutesExpertCitae = (expertCitaeMessages || 0) * MINUTES_PER_MESSAGE;
     const timeGainHoursExpertCitae = timeGainMinutesExpertCitae / 60;
     
+    // Gain en temps pour chat BTP Diagnostics (minutes → heures)
+    const timeGainMinutesChatBTPDiag = (chatBTPDiagMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursChatBTPDiag = timeGainMinutesChatBTPDiag / 60;
+    
+    // Gain en temps pour expert BTP Diagnostics (minutes → heures)
+    const timeGainMinutesExpertBTPDiag = (expertBTPDiagMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursExpertBTPDiag = timeGainMinutesExpertBTPDiag / 60;
+    
     // Total time gain
     const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur 
-        + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae;
+        + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae
+        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag;
     
     // Gain en % volume d'affaire
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
@@ -1328,6 +1357,8 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
         timeGainHoursExpertBTP,
         timeGainHoursChatCitae,
         timeGainHoursExpertCitae,
+        timeGainHoursChatBTPDiag,
+        timeGainHoursExpertBTPDiag,
         percentGain,
         euroGain
     };
@@ -1458,6 +1489,34 @@ function processChatCitaeData(data) {
     };
 }
 
+function processExpertBTPDiagData(data) {
+    const filtered = getFilteredData(data).filter(item =>
+        item.email && item.email.includes('@btp-diagnostics.fr')
+    );
+    const totalSessions = filtered.length;
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') uniqueUsers.add(item.email);
+    });
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    return { totalSessions, uniqueUsers: uniqueUsers.size, totalMessages, totalCost };
+}
+
+function processChatBTPDiagData(data) {
+    const filtered = getFilteredData(data).filter(item =>
+        item.email && item.email.includes('@btp-diagnostics.fr')
+    );
+    const totalSessions = filtered.length;
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') uniqueUsers.add(item.email);
+    });
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    return { totalSessions, uniqueUsers: uniqueUsers.size, totalMessages, totalCost };
+}
+
 function updateKPIs() {
     const descriptifStats = processDescriptifData(descriptifData);
     const autocontactStats = processAutocontactData(autocontactData);
@@ -1466,10 +1525,12 @@ function updateKPIs() {
     const chatBTPStats = processChatBTPData(chatBTPData);
     const expertCitaeStats = processExpertCitaeData(expertCitaeData);
     const chatCitaeStats = processChatCitaeData(chatCitaeData);
+    const expertBTPDiagStats = processExpertBTPDiagData(expertBTPDiagData);
+    const chatBTPDiagStats = processChatBTPDiagData(chatBTPDiagData);
     
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
@@ -1510,6 +1571,18 @@ function updateKPIs() {
     
     getFilteredData(chatCitaeData).forEach(item => {
         if (item.email && item.email.includes('@citae.fr')) {
+            allUsers.add(item.email);
+        }
+    });
+    
+    getFilteredData(expertBTPDiagData).forEach(item => {
+        if (item.email && item.email.includes('@btp-diagnostics.fr')) {
+            allUsers.add(item.email);
+        }
+    });
+    
+    getFilteredData(chatBTPDiagData).forEach(item => {
+        if (item.email && item.email.includes('@btp-diagnostics.fr')) {
             allUsers.add(item.email);
         }
     });
@@ -1578,6 +1651,28 @@ function updateKPIs() {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(chatCitaeStats.totalCost);
+
+    // Expert BTP Diagnostics stats
+    if (expertTechBTPDiagCountEl) expertTechBTPDiagCountEl.textContent = formatNumber(expertBTPDiagStats.totalSessions);
+    if (expertTechBTPDiagUsersEl) expertTechBTPDiagUsersEl.textContent = formatNumber(expertBTPDiagStats.uniqueUsers);
+    if (expertTechBTPDiagMessagesEl) expertTechBTPDiagMessagesEl.textContent = formatNumber(expertBTPDiagStats.totalMessages);
+    if (expertTechBTPDiagCostEl) expertTechBTPDiagCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(expertBTPDiagStats.totalCost);
+
+    // Chat BTP Diagnostics stats
+    if (chatProjetBTPDiagCountEl) chatProjetBTPDiagCountEl.textContent = formatNumber(chatBTPDiagStats.totalSessions);
+    if (chatProjetBTPDiagUsersEl) chatProjetBTPDiagUsersEl.textContent = formatNumber(chatBTPDiagStats.uniqueUsers);
+    if (chatProjetBTPDiagMessagesEl) chatProjetBTPDiagMessagesEl.textContent = formatNumber(chatBTPDiagStats.totalMessages);
+    if (chatProjetBTPDiagCostEl) chatProjetBTPDiagCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(chatBTPDiagStats.totalCost);
     
     // Calculate and display gains - USE SAME VALUES AS IN DETAIL PAGES
     // Descriptif page uses: totalOperations (unique operations)
@@ -1591,13 +1686,15 @@ function updateKPIs() {
         chatBTPStats.totalMessages,
         expertBTPStats.totalMessages,
         chatCitaeStats.totalMessages,
-        expertCitaeStats.totalMessages
+        expertCitaeStats.totalMessages,
+        chatBTPDiagStats.totalMessages,
+        expertBTPDiagStats.totalMessages
     );
     
     gainHeuresEl.textContent = formatNumber(gains.timeGainHours);
     gainSubtitleEl.innerHTML = `
         <div class="space-y-1">
-            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h)</div>
+            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h)</div>
             <div class="text-xs">≈ ${gains.percentGain.toFixed(4)}% du volume d'affaires</div>
             <div class="text-xs">≈ ${formatNumber(gains.euroGain)} €</div>
         </div>
@@ -1952,6 +2049,74 @@ async function loadData() {
             console.warn('Error loading Chat Citae data:', e);
         }
 
+        // Load Expert BTP Diagnostics data
+        console.log('Loading Expert BTP Diagnostics data...');
+        try {
+            const expertBTPDiagResponse = await fetch(EXPERT_BTPDIAG_URL);
+            if (expertBTPDiagResponse.ok) {
+                const expertBTPDiagJson = await expertBTPDiagResponse.json();
+                expertBTPDiagData = expertBTPDiagJson
+                    .filter(item => (item.email || '').includes('@btp-diagnostics.fr'))
+                    .map(item => {
+                        const metadata = item.metadata || {};
+                        const productionService = metadata.productionService || '';
+                        const management = metadata.management || '';
+                        return {
+                            id: item.id,
+                            title: item.title || '',
+                            email: item.email || '',
+                            createdAt: item.createdAt || '',
+                            updatedAt: item.updatedAt || '',
+                            messagesLength: item.messagesLength || item._count?.messages || 0,
+                            totalCostInDollars: item.totalCostInDollars || 0,
+                            agency: productionService || 'Non spécifié',
+                            agencyCode: productionService || '',
+                            direction: management || '',
+                            metadata: metadata
+                        };
+                    });
+                console.log('Loaded', expertBTPDiagData.length, 'Expert BTP Diagnostics records');
+            } else {
+                console.warn('Failed to load Expert BTP Diagnostics data:', expertBTPDiagResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Expert BTP Diagnostics data:', e);
+        }
+
+        // Load Chat BTP Diagnostics data
+        console.log('Loading Chat BTP Diagnostics data...');
+        try {
+            const chatBTPDiagResponse = await fetch(CHAT_BTPDIAG_URL);
+            if (chatBTPDiagResponse.ok) {
+                const chatBTPDiagJson = await chatBTPDiagResponse.json();
+                chatBTPDiagData = chatBTPDiagJson
+                    .filter(item => (item.email || '').includes('@btp-diagnostics.fr'))
+                    .map(item => {
+                        const metadata = item.metadata || {};
+                        const productionService = metadata.productionService || '';
+                        const management = metadata.management || '';
+                        return {
+                            id: item.id,
+                            title: item.title || '',
+                            email: item.email || '',
+                            createdAt: item.createdAt || '',
+                            updatedAt: item.updatedAt || '',
+                            messagesLength: item.messagesLength || item._count?.messages || 0,
+                            totalCostInDollars: item.totalCostInDollars || 0,
+                            agency: productionService || 'Non spécifié',
+                            agencyCode: productionService || '',
+                            direction: management || '',
+                            metadata: metadata
+                        };
+                    });
+                console.log('Loaded', chatBTPDiagData.length, 'Chat BTP Diagnostics records');
+            } else {
+                console.warn('Failed to load Chat BTP Diagnostics data:', chatBTPDiagResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Chat BTP Diagnostics data:', e);
+        }
+
         // Initialize filters and table
         extractDirectionsAndAgencies();
         populateFilters();
@@ -1984,7 +2149,9 @@ const featureCards = [
     { id: 'analyse-geo', filiale: 'BTP Consultants', element: null },
     { id: 'chat-projet-citae', filiale: 'Citae', element: null },
     { id: 'expert-tech-citae', filiale: 'Citae', element: null },
-    { id: 'nf-habitat', filiale: 'Citae', element: null }
+    { id: 'nf-habitat', filiale: 'Citae', element: null },
+    { id: 'chat-projet-btpdiag', filiale: 'BTP Diagnostics', element: null },
+    { id: 'expert-tech-btpdiag', filiale: 'BTP Diagnostics', element: null }
 ];
 
 /**
@@ -2086,6 +2253,378 @@ applyDateFilterBtn.addEventListener('click', () => {
     updateDashboard();
     updateResetButtonVisibility();
 });
+
+// ==================== GAIN EVOLUTION MODAL ====================
+
+let gainEvolutionChart = null;
+
+/**
+ * Helper: extract YYYY-MM key from a date string.
+ * Uses parseFrenchDate to handle both ISO and French date formats (CSV data).
+ */
+function getMonthKey(dateString) {
+    const date = parseFrenchDate(dateString);
+    if (!date || isNaN(date.getTime())) return null;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+}
+
+/**
+ * Calculate monthly gains from all data sources using the exact same logic
+ * as updateKPIs (full history, no active filters applied).
+ */
+function calculateMonthlyGains() {
+    const monthlyData = {};
+
+    const ensureMonth = (key) => {
+        if (!monthlyData[key]) {
+            monthlyData[key] = {
+                descriptifCount: 0,   // unique contracts (first occurrence only)
+                aiContacts: 0,
+                totalPages: 0,
+                chatBTPMessages: 0,
+                expertBTPMessages: 0,
+                chatCitaeMessages: 0,
+                expertCitaeMessages: 0,
+                chatBTPDiagMessages: 0,
+                expertBTPDiagMessages: 0,
+            };
+        }
+    };
+
+    // ── Descriptif ─────────────────────────────────────────────────────────────
+    // Mirror processDescriptifData: exclude YIELD, type=DESCRIPTIF_TYPE, ≥100 words.
+    // Each contract is attributed to the FIRST month it generated a qualifying
+    // descriptif → sum-of-months == all-time unique total (matches the index page).
+    const descriptifFirstMonth = new Map(); // contractNumber → earliest valid month key
+    descriptifData
+        .filter(item =>
+            item.type === DESCRIPTIF_TYPE &&
+            item.contractNumber &&
+            item.contractNumber.trim() !== '' &&
+            !item.contractNumber.toUpperCase().includes('YIELD')
+        )
+        .forEach(item => {
+            const key = getMonthKey(item.createdAt);
+            if (!key) return;
+            const wordCount = countWords(extractText(item.aiResult || ''));
+            if (wordCount < 100) return;
+            const prev = descriptifFirstMonth.get(item.contractNumber);
+            if (!prev || key < prev) {
+                descriptifFirstMonth.set(item.contractNumber, key);
+            }
+        });
+
+    descriptifFirstMonth.forEach((key) => {
+        ensureMonth(key);
+        monthlyData[key].descriptifCount += 1;
+    });
+
+    // ── Autocontact ─────────────────────────────────────────────────────────────
+    // Mirror processAutocontactData: exclude YIELD, fromAI=true, count each item.
+    autocontactData
+        .filter(item =>
+            !item.contractNumber.toUpperCase().includes('YIELD') &&
+            item.fromAI
+        )
+        .forEach(item => {
+            const key = getMonthKey(item.createdAt);
+            if (!key) return;
+            ensureMonth(key);
+            monthlyData[key].aiContacts += 1;
+        });
+
+    // ── Comparateur ─────────────────────────────────────────────────────────────
+    comparateurData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].totalPages += (item.maxPage || 0);
+    });
+
+    // ── Chat / Expert BTP Consultants ───────────────────────────────────────────
+    chatBTPData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].chatBTPMessages += (item.messagesLength || 0);
+    });
+
+    expertBTPData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].expertBTPMessages += (item.messagesLength || 0);
+    });
+
+    // ── Chat / Expert Citae ──────────────────────────────────────────────────────
+    chatCitaeData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].chatCitaeMessages += (item.messagesLength || 0);
+    });
+
+    expertCitaeData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].expertCitaeMessages += (item.messagesLength || 0);
+    });
+
+    // ── Chat / Expert BTP Diagnostics ────────────────────────────────────────────
+    chatBTPDiagData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].chatBTPDiagMessages += (item.messagesLength || 0);
+    });
+
+    expertBTPDiagData.forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].expertBTPDiagMessages += (item.messagesLength || 0);
+    });
+
+    // ── Build sorted result ──────────────────────────────────────────────────────
+    const sortedMonths = Object.keys(monthlyData).sort();
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+    return sortedMonths.map(key => {
+        const d = monthlyData[key];
+        const gains = calculateGains(
+            d.descriptifCount,   // unique contracts (first occurrence) — matches index page
+            d.aiContacts,
+            d.totalPages,
+            d.chatBTPMessages,
+            d.expertBTPMessages,
+            d.chatCitaeMessages,
+            d.expertCitaeMessages,
+            d.chatBTPDiagMessages,
+            d.expertBTPDiagMessages
+        );
+        const [year, month] = key.split('-');
+        return {
+            key,
+            label: `${monthNames[parseInt(month) - 1]} ${year}`,
+            hours: gains.timeGainHours,
+            euros: gains.euroGain,
+        };
+    });
+}
+
+let gainModalIsCumulative = false;
+let gainModalData = null; // cached monthly gains
+
+function buildGainChart() {
+    const canvas = document.getElementById('gainEvolutionChart');
+    if (!canvas || !gainModalData) return;
+
+    const isCumul = gainModalIsCumulative;
+
+    // Build display data (monthly or cumulative)
+    let hoursData, eurosData;
+    if (isCumul) {
+        let cumH = 0, cumE = 0;
+        hoursData = gainModalData.map(d => { cumH += d.hours; return Math.round(cumH * 100) / 100; });
+        eurosData = gainModalData.map(d => { cumE += d.euros; return Math.round(cumE); });
+    } else {
+        hoursData = gainModalData.map(d => Math.round(d.hours * 100) / 100);
+        eurosData = gainModalData.map(d => Math.round(d.euros));
+    }
+    const labels = gainModalData.map(d => d.label);
+
+    if (gainEvolutionChart) {
+        gainEvolutionChart.destroy();
+        gainEvolutionChart = null;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const modeLabel = isCumul ? ' (cumulé)' : ' (mensuel)';
+
+    gainEvolutionChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: `Gain en heures${modeLabel}`,
+                    data: hoursData,
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    borderWidth: 2,
+                    borderRadius: 5,
+                    yAxisID: 'yHours',
+                    order: 2,
+                },
+                {
+                    label: `Gain en €${modeLabel}`,
+                    data: eurosData,
+                    type: 'line',
+                    borderColor: 'rgba(139, 92, 246, 1)',
+                    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+                    borderWidth: 2.5,
+                    fill: isCumul,
+                    tension: 0.35,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: 'rgba(139, 92, 246, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    yAxisID: 'yEuros',
+                    order: 1,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: { font: { size: 13, weight: '500' }, color: '#1F2937', padding: 16, usePointStyle: true }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleColor: '#F9FAFB',
+                    bodyColor: '#E5E7EB',
+                    borderColor: 'rgba(75, 85, 99, 0.4)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y;
+                            if (context.dataset.yAxisID === 'yHours') {
+                                return ` ${label} : ${new Intl.NumberFormat('fr-FR').format(Math.round(value))} h`;
+                            }
+                            return ` ${label} : ${new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 11 }, color: '#6B7280' }
+                },
+                yHours: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    grid: { color: 'rgba(229, 231, 235, 0.8)' },
+                    title: { display: true, text: 'Heures (h)', font: { size: 12, weight: 'bold' }, color: '#3B82F6' },
+                    ticks: {
+                        font: { size: 11 }, color: '#3B82F6',
+                        callback: v => `${new Intl.NumberFormat('fr-FR').format(Math.round(v))} h`
+                    }
+                },
+                yEuros: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'Euros (€)', font: { size: 12, weight: 'bold' }, color: '#8B5CF6' },
+                    ticks: {
+                        font: { size: 11 }, color: '#8B5CF6',
+                        callback: v => `${new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(v)} €`
+                    }
+                }
+            }
+        }
+    });
+}
+
+function openGainEvolutionModal() {
+    const modal = document.getElementById('gain-evolution-modal');
+    modal.classList.remove('hidden');
+
+    // (Re)compute monthly data
+    gainModalData = calculateMonthlyGains();
+
+    // Update summary KPIs (always all-time totals)
+    const totalHours = gainModalData.reduce((a, d) => a + d.hours, 0);
+    const totalEuros = gainModalData.reduce((a, d) => a + d.euros, 0);
+    document.getElementById('gain-modal-total-heures').textContent =
+        `${new Intl.NumberFormat('fr-FR').format(Math.round(totalHours))} h`;
+    document.getElementById('gain-modal-total-euros').textContent =
+        new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalEuros);
+
+    // Reset toggle to monthly view when opening
+    gainModalIsCumulative = false;
+    const toggleBtn = document.getElementById('gain-cumul-toggle');
+    if (toggleBtn) {
+        toggleBtn.setAttribute('data-active', 'monthly');
+        updateGainToggleUI();
+    }
+
+    buildGainChart();
+}
+
+function closeGainEvolutionModal() {
+    document.getElementById('gain-evolution-modal').classList.add('hidden');
+    if (gainEvolutionChart) {
+        gainEvolutionChart.destroy();
+        gainEvolutionChart = null;
+    }
+}
+
+function updateGainToggleUI() {
+    const btn = document.getElementById('gain-cumul-toggle');
+    if (!btn) return;
+    const isMonthly = !gainModalIsCumulative;
+    // Monthly pill
+    const monthlyPill = btn.querySelector('[data-view="monthly"]');
+    const cumulPill   = btn.querySelector('[data-view="cumul"]');
+    if (monthlyPill && cumulPill) {
+        if (isMonthly) {
+            monthlyPill.className = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-blue-700 shadow-sm transition-all';
+            cumulPill.className   = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+        } else {
+            cumulPill.className   = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-blue-700 shadow-sm transition-all';
+            monthlyPill.className = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+        }
+    }
+}
+
+// Wire up the gain card click (DOM already loaded since script is at bottom of body)
+(function initGainModal() {
+    const gainCard = document.getElementById('gain-heures-card');
+    if (gainCard) gainCard.addEventListener('click', openGainEvolutionModal);
+
+    const closeBtn = document.getElementById('close-gain-modal');
+    if (closeBtn) closeBtn.addEventListener('click', closeGainEvolutionModal);
+
+    const modal = document.getElementById('gain-evolution-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeGainEvolutionModal();
+        });
+    }
+
+    // Toggle mensuel/cumulé
+    const toggleBtn = document.getElementById('gain-cumul-toggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', (e) => {
+            const pill = e.target.closest('[data-view]');
+            if (!pill) return;
+            const view = pill.getAttribute('data-view');
+            gainModalIsCumulative = (view === 'cumul');
+            updateGainToggleUI();
+            buildGainChart();
+        });
+    }
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeGainEvolutionModal();
+    });
+})();
 
 // ==================== REFRESH DATA BUTTON ====================
 

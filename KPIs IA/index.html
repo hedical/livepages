@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AnalyzTech - KPIs IA Groupe BTP Consultants</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -148,6 +149,7 @@
                                 <option value="">Toutes les filiales</option>
                                 <option value="BTP Consultants">BTP Consultants</option>
                                 <option value="Citae">Citae</option>
+                                <option value="BTP Diagnostics">BTP Diagnostics</option>
                             </select>
                         </div>
 
@@ -202,10 +204,15 @@
                         </div>
 
                         <!-- Gain Total Heures -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                        <div id="gain-heures-card" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer group" title="Cliquer pour voir l'évolution temporelle">
                             <div class="flex items-start justify-between">
                                 <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Gain total estimé en heures</p>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <p class="text-sm font-medium text-gray-500">Gain total estimé en heures</p>
+                                        <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
+                                    </div>
                                     <p class="text-3xl font-bold text-gray-900 mb-1" id="gain-heures">0</p>
                                     <p class="text-xs text-gray-400 mt-1" id="gain-subtitle">Heures économisées</p>
                                 </div>
@@ -381,6 +388,40 @@
                                 <p>&nbsp;</p>
                             </div>
                         </div>
+
+                        <!-- Chat Projet (BTP Diagnostics) -->
+                        <a href="chat-btpdiagnostics.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">BTP Diagnostics</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-orange-600" id="chat-projet-btpdiag-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="chat-projet-btpdiag-users">0</strong> utilisateurs uniques</p>
+                                <p><strong id="chat-projet-btpdiag-messages">0</strong> messages</p>
+                                <p>Coût: <strong id="chat-projet-btpdiag-cost">0 $</strong></p>
+                            </div>
+                        </a>
+
+                        <!-- Expert Technique (BTP Diagnostics) -->
+                        <a href="expert-btpdiagnostics.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">BTP Diagnostics</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-orange-600" id="expert-tech-btpdiag-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p>Avec <strong id="expert-tech-btpdiag-users">0</strong> utilisateurs uniques</p>
+                                <p><strong id="expert-tech-btpdiag-messages">0</strong> messages</p>
+                                <p>Coût: <strong id="expert-tech-btpdiag-cost">0 $</strong></p>
+                            </div>
+                        </a>
                     </div>
                 </div>
 
@@ -450,6 +491,51 @@
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gain Evolution Modal -->
+    <div id="gain-evolution-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative bg-white w-full max-w-4xl rounded-xl shadow-2xl">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Évolution temporelle des gains</h3>
+                    <p class="text-sm text-gray-500 mt-0.5">Gains sur toutes les fonctionnalités — historique complet</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- Toggle mensuel / cumulé -->
+                    <div id="gain-cumul-toggle" class="flex items-center bg-gray-100 rounded-lg p-1 cursor-pointer select-none gap-1">
+                        <span data-view="monthly" class="px-3 py-1 rounded-md text-sm font-medium bg-white text-blue-700 shadow-sm transition-all">Mensuel</span>
+                        <span data-view="cumul"   class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
+                    </div>
+                    <button id="close-gain-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Modal Body -->
+            <div class="p-6">
+                <!-- Summary KPIs -->
+                <div id="gain-modal-kpis" class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                        <p class="text-xs font-medium text-blue-700 mb-1">Gain total (toutes périodes)</p>
+                        <p class="text-2xl font-bold text-blue-900" id="gain-modal-total-heures">—</p>
+                        <p class="text-xs text-blue-600 mt-1">heures économisées</p>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                        <p class="text-xs font-medium text-purple-700 mb-1">Gain total en euros</p>
+                        <p class="text-2xl font-bold text-purple-900" id="gain-modal-total-euros">—</p>
+                        <p class="text-xs text-purple-600 mt-1">économisés</p>
+                    </div>
+                </div>
+                <!-- Chart -->
+                <div style="height: 380px;">
+                    <canvas id="gainEvolutionChart"></canvas>
                 </div>
             </div>
         </div>
