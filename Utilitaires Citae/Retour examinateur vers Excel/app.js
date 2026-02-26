@@ -41,6 +41,9 @@ const csvDataRaw = `Type,Code,Thème,Catégorie
 vérification,SMR.8.1.1.1,Système de Management Responsable,Analyse de site
 vérification,SMR.8.1.1.2,Système de Management Responsable,Diffusion de l'analyse de site
 vérification,SMR.8.2.1.2,Système de Management Responsable,Définition du niveau de performance HQE
+vérification,SMR.8.2.1.3,Système de Management Responsable,Prise en compte du chantier HQE dans le programme
+vérification,SMR.8.5.1.2,Système de Management Responsable,Compétence HQE du maître d'ouvrage
+vérification,SMR.8.5.3.4,Système de Management Responsable,Chantier propre
 vérification,SMR.8.5.3.6,Système de Management Responsable,Chantier propre
 identification,SMR.8.6.3.3,Système de Management Responsable,Responsable environnemental
 vérification,SMR.8.6.3.6,Système de Management Responsable,Bilan environnemental de chantier
@@ -178,6 +181,7 @@ vérification,FL.2.3.48,Fonctionnalités des lieux,Verouillage local Trappe pass
 vérification,FL.2.3.51,Fonctionnalités des lieux,Collecte pneumatique des déchets
 identification,FL.2.4.1,Fonctionnalités des lieux,Accessibilité PMR
 vérification,FL.2.4.4,Fonctionnalités des lieux,Signalétique
+vérification,CH.1.3,Confort hygrothermique,Facteur solaire (RT2012)
 cohérence,CH.1.18,Confort hygrothermique,Facteur solaire (RE2020)
 vérification,CH.2.1,Confort hygrothermique,Degrés-heures (RE2020)
 vérification,CH.2.2,Confort hygrothermique,Occultations extérieures
@@ -289,11 +293,13 @@ vérification,BC.2.5.2.2,Bâtiment connecté,Mise en place d'un SMSI
 vérification,BC.2.5.3.1,Bâtiment connecté,Fonctionnement des équipements sans connexion
 vérification,BC.2.6.1.1,Bâtiment connecté,Attestations de formation type objectif fibre
 vérification,BC.2.6.1.3,Bâtiment connecté,Management AMO smart
+vérification,PE.1.1.2,Performance énergétique,Respect des indicateurs énergie réglementaire (RT2012)
 vérification,PE.1.1.66,Performance énergétique,Respect des indicateurs énergie réglementaire
 vérification,PE.1.1.68,Performance énergétique,Renforcement du Bbio
 vérification,PE.1.1.69,Performance énergétique,Production d'électricité
 vérification,PE.1.1.5.1,Performance énergétique,Intégrité thermique
 identification,PE.1.1.27,Performance énergétique,Niveaux de performance énergétique en rénovation lourde
+vérification,PE.1.4.1,Performance énergétique,Indicateur de Performance Energétique Construction (RT2012)
 vérification,PE.1.4.4,Performance énergétique,"Indicateur ""Energie Primaire non renouvelable"""
 vérification,PE.2.1.1,Performance énergétique,Calcul de déperditions pièce par pièce
 vérification,PE.2.1.4,Performance énergétique,Emetteur de chaleur par pièce
