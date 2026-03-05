@@ -14,7 +14,8 @@ let isCumulativeMode = false;
 
 // Filters
 const filters = {
-    month: null,
+    startDate: null, // Format: YYYY-MM-DD
+    endDate: null,   // Format: YYYY-MM-DD
     dr: null,
     agence: null,
 };
@@ -23,7 +24,8 @@ const filters = {
 const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 const mainContentEl = document.getElementById('main-content');
-const monthFilterEl = document.getElementById('month-filter');
+const startDateFilterEl = document.getElementById('start-date-filter');
+const endDateFilterEl = document.getElementById('end-date-filter');
 const cumulToggleEl = document.getElementById('cumul-toggle');
 const drFilterEl = document.getElementById('dr-filter');
 const agencyFilterEl = document.getElementById('agency-filter');
@@ -127,26 +129,25 @@ function formatHours(hours) {
 
 // Calculate number of months in current period
 function calculatePeriodMonths() {
-    if (!isCumulativeMode) {
-        return 1;
+    if (isCumulativeMode) {
+        let firstDate = null;
+        filteredData.forEach(item => {
+            const date = parseDate(item.createdAt);
+            if (date && (!firstDate || date < firstDate)) firstDate = date;
+        });
+        if (!firstDate) return 1;
+        const now = new Date();
+        const yearsDiff = now.getFullYear() - firstDate.getFullYear();
+        const monthsDiff = now.getMonth() - firstDate.getMonth();
+        return Math.max(1, yearsDiff * 12 + monthsDiff + 1);
     }
-    
-    let firstDate = null;
-    filteredData.forEach(item => {
-        const date = parseDate(item.createdAt);
-        if (date && (!firstDate || date < firstDate)) {
-            firstDate = date;
-        }
-    });
-    
-    if (!firstDate) return 1;
-    
-    const now = new Date();
-    const yearsDiff = now.getFullYear() - firstDate.getFullYear();
-    const monthsDiff = now.getMonth() - firstDate.getMonth();
-    const totalMonths = yearsDiff * 12 + monthsDiff + 1;
-    
-    return Math.max(1, totalMonths);
+    if (filters.startDate && filters.endDate) {
+        const s = new Date(filters.startDate);
+        const e = new Date(filters.endDate);
+        const months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
+        return Math.max(1, months);
+    }
+    return 1;
 }
 
 // Calculate gains based on current data
@@ -254,27 +255,30 @@ function transformData(jsonArray) {
         });
 }
 
-// Get current month in YYYY-MM format
-function getCurrentMonth() {
+// Returns {startDate, endDate} for the current month (YYYY-MM-DD)
+function getCurrentMonthRange() {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
+    const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+    return {
+        startDate: `${year}-${month}-01`,
+        endDate: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
+    };
 }
 
 // Filter functions
-function filterByMonth(data, month) {
-    if (!month) return data;
-    
+function filterByDateRange(data, startDate, endDate) {
+    if (!startDate && !endDate) return data;
+    const start = startDate ? new Date(startDate) : null;
+    const end   = endDate   ? new Date(endDate)   : null;
+    if (end) end.setHours(23, 59, 59, 999);
     return data.filter((item) => {
         const date = parseDate(item.createdAt);
         if (!date) return false;
-        
-        const year = date.getFullYear();
-        const itemMonth = String(date.getMonth() + 1).padStart(2, '0');
-        const dateMonth = `${year}-${itemMonth}`;
-        
-        return dateMonth === month;
+        if (start && date < start) return false;
+        if (end   && date > end)   return false;
+        return true;
     });
 }
 
@@ -293,7 +297,7 @@ function applyFilters() {
     let filtered = [...allData];
     
     if (!isCumulativeMode) {
-        filtered = filterByMonth(filtered, filters.month);
+        filtered = filterByDateRange(filtered, filters.startDate, filters.endDate);
     }
     
     filtered = filterByDR(filtered, filters.dr);
@@ -801,8 +805,13 @@ function updateCharts() {
 }
 
 // Event Listeners
-monthFilterEl.addEventListener('change', (e) => {
-    filters.month = e.target.value;
+startDateFilterEl.addEventListener('change', (e) => {
+    filters.startDate = e.target.value || null;
+    applyFilters();
+});
+
+endDateFilterEl.addEventListener('change', (e) => {
+    filters.endDate = e.target.value || null;
     applyFilters();
 });
 
@@ -822,11 +831,14 @@ agencyFilterEl.addEventListener('change', (e) => {
 });
 
 resetFiltersBtn.addEventListener('click', () => {
-    monthFilterEl.value = getCurrentMonth();
+    const range = getCurrentMonthRange();
+    startDateFilterEl.value = range.startDate;
+    endDateFilterEl.value   = range.endDate;
     cumulToggleEl.checked = false;
     drFilterEl.value = 'all';
     agencyFilterEl.value = 'all';
-    filters.month = getCurrentMonth();
+    filters.startDate = range.startDate;
+    filters.endDate   = range.endDate;
     isCumulativeMode = false;
     filters.dr = null;
     filters.agence = null;
@@ -908,9 +920,11 @@ async function init() {
         populateAgencyFilter();
         populateDRFilter();
         
-        const currentMonth = getCurrentMonth();
-        monthFilterEl.value = currentMonth;
-        filters.month = currentMonth;
+        const range = getCurrentMonthRange();
+        startDateFilterEl.value = range.startDate;
+        endDateFilterEl.value   = range.endDate;
+        filters.startDate = range.startDate;
+        filters.endDate   = range.endDate;
         
         filteredData = [...allData];
         updateKPIs();

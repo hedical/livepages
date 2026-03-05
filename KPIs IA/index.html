@@ -190,7 +190,15 @@
 
                 <!-- General KPIs -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs généraux</h2>
+                    <div class="flex items-center justify-between mb-5">
+                        <h2 class="text-xl font-semibold text-gray-700">Indicateurs généraux</h2>
+                        <button id="open-users-list-btn" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Voir les utilisateurs
+                        </button>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <!-- Total Utilisations -->
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
@@ -220,10 +228,15 @@
                         </div>
 
                         <!-- Total Users -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                        <div id="users-card" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer group" title="Cliquer pour voir l'évolution temporelle">
                             <div class="flex items-start justify-between">
                                 <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Nombre total d'utilisateurs</p>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <p class="text-sm font-medium text-gray-500">Nombre total d'utilisateurs</p>
+                                        <svg class="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                    </div>
                                     <p class="text-3xl font-bold text-gray-900 mb-1" id="total-users">0</p>
                                     <p class="text-xs text-gray-400 mt-1">Utilisateurs uniques</p>
                                 </div>
@@ -497,6 +510,136 @@
     </div>
 
     <!-- Gain Evolution Modal -->
+    <!-- ===== USERS LIST MODAL ===== -->
+    <div id="users-list-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative bg-white w-full max-w-5xl rounded-xl shadow-2xl flex flex-col" style="max-height: 90vh;">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Utilisateurs</h3>
+                    <p class="text-sm text-gray-500 mt-0.5" id="users-list-subtitle">Données de population et d'activité</p>
+                </div>
+                <button id="close-users-list-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-200 px-6 flex-shrink-0">
+                <button id="tab-population" class="px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors">
+                    Population cible <span class="ml-1.5 px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full" id="tab-population-count">—</span>
+                </button>
+                <button id="tab-active-users" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2">
+                    Utilisateurs actifs <span class="ml-1.5 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full" id="tab-active-count">—</span>
+                </button>
+            </div>
+            <!-- Tab content -->
+            <div class="flex-1 overflow-y-auto p-6">
+
+                <!-- Population cible tab -->
+                <div id="panel-population">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="text-sm text-gray-600">Collaborateurs BTP Consultants pris en compte dans le calcul des taux d'adoption.</p>
+                        <span class="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-md px-2 py-1">Total: <strong id="pop-total-effectif">—</strong></span>
+                    </div>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-left">
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 rounded-tl-lg">Direction Régionale</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600">Code Agence</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg">Effectif</th>
+                            </tr>
+                        </thead>
+                        <tbody id="population-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+
+                <!-- Utilisateurs actifs tab -->
+                <div id="panel-active-users" class="hidden">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="relative flex-1">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input id="users-list-search" type="text" placeholder="Rechercher par email…" class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </div>
+                        <select id="users-list-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Toutes les filiales</option>
+                            <option value="BTP Consultants">BTP Consultants</option>
+                            <option value="Citae">Citae</option>
+                            <option value="BTP Diagnostics">BTP Diagnostics</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                    </div>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-left">
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 rounded-tl-lg">Email</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600">Filiale</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600">Fonctionnalités</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Sessions</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg">Dernière activité</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-users-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                    <p class="text-xs text-gray-400 text-center mt-4" id="active-users-count-label"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== USERS EVOLUTION MODAL ===== -->
+    <div id="users-evolution-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative bg-white w-full max-w-4xl rounded-xl shadow-2xl">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Évolution temporelle des utilisateurs</h3>
+                    <p class="text-sm text-gray-500 mt-0.5">Utilisateurs uniques sur toutes les fonctionnalités — historique complet</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- Toggle mensuel / cumulé -->
+                    <div id="users-cumul-toggle" class="flex items-center bg-gray-100 rounded-lg p-1 cursor-pointer select-none gap-1">
+                        <span data-view="monthly" class="px-3 py-1 rounded-md text-sm font-medium bg-white text-indigo-700 shadow-sm transition-all">Mensuel</span>
+                        <span data-view="cumul"   class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
+                    </div>
+                    <button id="close-users-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Modal Body -->
+            <div class="p-6">
+                <!-- Summary KPIs -->
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
+                        <p class="text-xs font-medium text-indigo-700 mb-1">Total utilisateurs uniques</p>
+                        <p class="text-2xl font-bold text-indigo-900" id="users-modal-total">—</p>
+                        <p class="text-xs text-indigo-600 mt-1">toutes périodes</p>
+                    </div>
+                    <div class="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+                        <p class="text-xs font-medium text-emerald-700 mb-1">Nouveaux utilisateurs</p>
+                        <p class="text-2xl font-bold text-emerald-900" id="users-modal-new-last">—</p>
+                        <p class="text-xs text-emerald-600 mt-1" id="users-modal-new-label">dernier mois</p>
+                    </div>
+                    <div class="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                        <p class="text-xs font-medium text-amber-700 mb-1">Pic d'activité</p>
+                        <p class="text-2xl font-bold text-amber-900" id="users-modal-peak">—</p>
+                        <p class="text-xs text-amber-600 mt-1" id="users-modal-peak-label">utilisateurs actifs</p>
+                    </div>
+                </div>
+                <!-- Chart -->
+                <div style="height: 380px;">
+                    <canvas id="usersEvolutionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="gain-evolution-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
         <div class="relative bg-white w-full max-w-4xl rounded-xl shadow-2xl">
             <!-- Modal Header -->

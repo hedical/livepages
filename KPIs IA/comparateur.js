@@ -27,7 +27,8 @@ let parameters = {
 
 // Filters
 const filters = {
-    month: null, // Format: YYYY-MM
+    startDate: null, // Format: YYYY-MM-DD
+    endDate: null,   // Format: YYYY-MM-DD
     dr: null,
     agence: null,
 };
@@ -36,7 +37,8 @@ const filters = {
 const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 const mainContentEl = document.getElementById('main-content');
-const monthFilterEl = document.getElementById('month-filter');
+const startDateFilterEl = document.getElementById('start-date-filter');
+const endDateFilterEl = document.getElementById('end-date-filter');
 const drFilterEl = document.getElementById('dr-filter');
 const agencyFilterEl = document.getElementById('agency-filter');
 const resetFiltersBtn = document.getElementById('reset-filters');
@@ -168,12 +170,16 @@ function extractMaxPage(longResultString) {
     return 0;
 }
 
-// Get current month in YYYY-MM format
-function getCurrentMonth() {
+// Returns {startDate, endDate} for the current month (YYYY-MM-DD)
+function getCurrentMonthRange() {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
+    const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+    return {
+        startDate: `${year}-${month}-01`,
+        endDate: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
+    };
 }
 
 // Format date for display (e.g., "Depuis le 15 janvier 2024")
@@ -276,21 +282,21 @@ function calculateGains(totalPages) {
 
 // Calculate number of months in current period
 function calculatePeriodMonths() {
-    if (!isCumulativeMode) {
-        // Mode "Mois" : 1 mois
-        return 1;
+    if (isCumulativeMode) {
+        const firstDate = getFirstDate(allData);
+        if (!firstDate) return 1;
+        const now = new Date();
+        const yearsDiff = now.getFullYear() - firstDate.getFullYear();
+        const monthsDiff = now.getMonth() - firstDate.getMonth();
+        return Math.max(1, yearsDiff * 12 + monthsDiff + 1);
     }
-    
-    // Mode "Cumulé" : calculer le nombre de mois depuis la première date
-    const firstDate = getFirstDate(allData);
-    if (!firstDate) return 1;
-    
-    const now = new Date();
-    const yearsDiff = now.getFullYear() - firstDate.getFullYear();
-    const monthsDiff = now.getMonth() - firstDate.getMonth();
-    const totalMonths = yearsDiff * 12 + monthsDiff + 1; // +1 pour inclure le mois en cours
-    
-    return Math.max(1, totalMonths); // Au moins 1 mois
+    if (filters.startDate && filters.endDate) {
+        const s = new Date(filters.startDate);
+        const e = new Date(filters.endDate);
+        const months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
+        return Math.max(1, months);
+    }
+    return 1;
 }
 
 // Update gains display
@@ -601,18 +607,17 @@ function transformData(jsonArray) {
 }
 
 // Filter functions
-function filterByMonth(data, month) {
-    if (!month) return data;
-    
+function filterByDateRange(data, startDate, endDate) {
+    if (!startDate && !endDate) return data;
+    const start = startDate ? new Date(startDate) : null;
+    const end   = endDate   ? new Date(endDate)   : null;
+    if (end) end.setHours(23, 59, 59, 999);
     return data.filter((item) => {
         const date = parseDate(item.createdAt);
         if (!date) return false;
-        
-        const year = date.getFullYear();
-        const itemMonth = String(date.getMonth() + 1).padStart(2, '0');
-        const dateMonth = `${year}-${itemMonth}`;
-        
-        return dateMonth === month;
+        if (start && date < start) return false;
+        if (end   && date > end)   return false;
+        return true;
     });
 }
 
@@ -631,12 +636,12 @@ function filterByDR(data, dr) {
 }
 
 // Process data and calculate KPIs
-function processData(data, filters, skipMonthFilter = false) {
+function processData(data, filters, skipDateFilter = false) {
     let filtered = data;
     
-    // Apply month filter (skip if in cumulative mode)
-    if (!skipMonthFilter) {
-        filtered = filterByMonth(filtered, filters.month);
+    // Apply date range filter (skip if in cumulative mode)
+    if (!skipDateFilter) {
+        filtered = filterByDateRange(filtered, filters.startDate, filters.endDate);
     }
 
     // Apply DR filter
@@ -1127,8 +1132,13 @@ function updateChart(data) {
 }
 
 // Event Listeners
-monthFilterEl.addEventListener('change', (e) => {
-    filters.month = e.target.value;
+startDateFilterEl.addEventListener('change', (e) => {
+    filters.startDate = e.target.value || null;
+    updateKPIs();
+});
+
+endDateFilterEl.addEventListener('change', (e) => {
+    filters.endDate = e.target.value || null;
     updateKPIs();
 });
 
@@ -1143,12 +1153,17 @@ agencyFilterEl.addEventListener('change', (e) => {
 });
 
 resetFiltersBtn.addEventListener('click', () => {
-    monthFilterEl.value = getCurrentMonth();
+    const range = getCurrentMonthRange();
+    startDateFilterEl.value = range.startDate;
+    endDateFilterEl.value   = range.endDate;
     drFilterEl.value = 'all';
     agencyFilterEl.value = 'all';
-    filters.month = getCurrentMonth();
+    filters.startDate = range.startDate;
+    filters.endDate   = range.endDate;
     filters.dr = null;
     filters.agence = null;
+    cumulToggleEl.checked = false;
+    isCumulativeMode = false;
     updateKPIs();
 });
 
@@ -1315,10 +1330,12 @@ async function init() {
         populateAgencyFilter();
         populateDRFilter();
 
-        // Set default filter to current month
-        const currentMonth = getCurrentMonth();
-        monthFilterEl.value = currentMonth;
-        filters.month = currentMonth;
+        // Set default filter to current month range
+        const range = getCurrentMonthRange();
+        startDateFilterEl.value = range.startDate;
+        endDateFilterEl.value   = range.endDate;
+        filters.startDate = range.startDate;
+        filters.endDate   = range.endDate;
 
         // Update KPIs
         updateKPIs();

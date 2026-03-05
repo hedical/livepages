@@ -77,14 +77,14 @@
                 <!-- Filters -->
                 <div class="mb-8">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-                        <!-- Month Filter -->
+                        <!-- Date Range Filter -->
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
                             <div class="flex items-center justify-between mb-4">
                                 <label class="block text-sm font-medium text-gray-700">
-                                    Filtrer par mois
+                                    Filtrer par période
                                 </label>
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs text-gray-600">Mois</span>
+                                    <span class="text-xs text-gray-600">Plage</span>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="cumul-toggle" class="sr-only peer">
                                         <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
@@ -92,11 +92,19 @@
                                     <span class="text-xs text-gray-600">Depuis le début</span>
                                 </div>
                             </div>
-                            <input
-                                type="month"
-                                id="month-filter"
-                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
+                            <div class="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    id="start-date-filter"
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <span class="text-gray-400 text-xs font-medium">→</span>
+                                <input
+                                    type="date"
+                                    id="end-date-filter"
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
                         </div>
 
                         <!-- Regional Direction Filter -->

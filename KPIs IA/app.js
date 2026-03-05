@@ -51,6 +51,7 @@ let chatCitaeData = [];
 let expertBTPDiagData = [];
 let chatBTPDiagData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
+let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
 let availableAgencies = [];
 let availableDirections = [];
 let agencyToDirection = {};
@@ -678,6 +679,7 @@ function parsePopulationData(csvString) {
     
     // Reset population map
     agencyPopulation = {};
+    populationRows = [];
     let total = 0;
     
     // Skip header (line 0: DR,Agence,Effectif) - now using commas
@@ -690,6 +692,7 @@ function parsePopulationData(csvString) {
             
             if (agencyCode && !isNaN(effectif)) {
                 agencyPopulation[agencyCode] = effectif;
+                populationRows.push({ dr, agencyCode, effectif });
                 total += effectif;
             } else {
                 console.warn(`Skipping line ${i}: agencyCode="${agencyCode}", effectif="${parts[2]}"`);
@@ -2256,6 +2259,532 @@ applyDateFilterBtn.addEventListener('click', () => {
 
 // ==================== GAIN EVOLUTION MODAL ====================
 
+// ==================== USERS LIST MODAL ====================
+
+/**
+ * Collect all unique active users from every data source.
+ * Returns [{email, filiale, features: Set, sessions, lastActivity}]
+ */
+function collectActiveUsers() {
+    const usersMap = new Map(); // email → {filiale, features: Set, sessions, lastActivity}
+
+    const FEATURE_LABELS = {
+        descriptif:   'Descriptif',
+        autocontact:  'Auto-contact',
+        comparateur:  'Comparateur',
+        expertBTP:    'Expert (BTP)',
+        chatBTP:      'Chat (BTP)',
+        expertCitae:  'Expert (Citae)',
+        chatCitae:    'Chat (Citae)',
+        expertDiag:   'Expert (Diag)',
+        chatDiag:     'Chat (Diag)',
+    };
+
+    const upsert = (email, filiale, featureKey, dateString) => {
+        if (!email || !email.trim()) return;
+        const key = email.toLowerCase().trim();
+        if (!usersMap.has(key)) {
+            usersMap.set(key, { email: key, filiale, features: new Set(), sessions: 0, lastActivity: null });
+        }
+        const u = usersMap.get(key);
+        u.features.add(FEATURE_LABELS[featureKey]);
+        u.sessions += 1;
+        const d = parseFrenchDate(dateString);
+        if (d && (!u.lastActivity || d > u.lastActivity)) u.lastActivity = d;
+    };
+
+    const getDomainFiliale = (email) => {
+        if (!email) return 'Autre';
+        if (email.includes('@btp-consultants.fr')) return 'BTP Consultants';
+        if (email.includes('@citae.fr')) return 'Citae';
+        if (email.includes('@btp-diagnostics.fr')) return 'BTP Diagnostics';
+        return 'Autre';
+    };
+
+    // Descriptif
+    descriptifData
+        .filter(item => item.type === DESCRIPTIF_TYPE && !item.contractNumber.toUpperCase().includes('YIELD'))
+        .forEach(item => upsert(item.email, getDomainFiliale(item.email), 'descriptif', item.createdAt));
+
+    // Autocontact (@btp-consultants.fr, fromAI, pas YIELD)
+    autocontactData
+        .filter(item => !item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI && item.email && item.email.includes('@btp-consultants.fr'))
+        .forEach(item => upsert(item.email, 'BTP Consultants', 'autocontact', item.createdAt));
+
+    // Comparateur
+    comparateurData.forEach(item =>
+        upsert(item.email, getDomainFiliale(item.email), 'comparateur', item.createdAt));
+
+    // Expert / Chat BTP Consultants
+    expertBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr'))
+        .forEach(item => upsert(item.email, 'BTP Consultants', 'expertBTP', item.createdAt));
+    chatBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr'))
+        .forEach(item => upsert(item.email, 'BTP Consultants', 'chatBTP', item.createdAt));
+
+    // Expert / Chat Citae
+    expertCitaeData.filter(item => item.email && item.email.includes('@citae.fr'))
+        .forEach(item => upsert(item.email, 'Citae', 'expertCitae', item.createdAt));
+    chatCitaeData.filter(item => item.email && item.email.includes('@citae.fr'))
+        .forEach(item => upsert(item.email, 'Citae', 'chatCitae', item.createdAt));
+
+    // Expert / Chat BTP Diagnostics
+    expertBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr'))
+        .forEach(item => upsert(item.email, 'BTP Diagnostics', 'expertDiag', item.createdAt));
+    chatBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr'))
+        .forEach(item => upsert(item.email, 'BTP Diagnostics', 'chatDiag', item.createdAt));
+
+    return Array.from(usersMap.values())
+        .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+}
+
+const FILIALE_BADGE = {
+    'BTP Consultants': 'bg-blue-100 text-blue-800',
+    'Citae':           'bg-green-100 text-green-800',
+    'BTP Diagnostics': 'bg-orange-100 text-orange-800',
+    'Autre':           'bg-gray-100 text-gray-600',
+};
+
+let activeUsersCache = null;
+let currentUsersTab = 'population'; // 'population' | 'active'
+
+function renderPopulationTab() {
+    const tbody = document.getElementById('population-table-body');
+    if (!tbody) return;
+
+    const rows = populationRows.slice().sort((a, b) => a.dr.localeCompare(b.dr) || a.agencyCode.localeCompare(b.agencyCode));
+    const total = rows.reduce((s, r) => s + r.effectif, 0);
+
+    document.getElementById('pop-total-effectif').textContent = total;
+    document.getElementById('tab-population-count').textContent = rows.length + ' agences';
+
+    // Group by DR for alternating section colours
+    let lastDr = null;
+    let drColor = false;
+    tbody.innerHTML = rows.map(r => {
+        if (r.dr !== lastDr) { lastDr = r.dr; drColor = !drColor; }
+        const bg = drColor ? '' : 'bg-gray-50/40';
+        return `<tr class="${bg} hover:bg-indigo-50/30 transition-colors">
+            <td class="px-4 py-2.5 text-gray-700">${r.dr}</td>
+            <td class="px-4 py-2.5 font-mono font-medium text-indigo-700">${r.agencyCode}</td>
+            <td class="px-4 py-2.5 text-right font-semibold text-gray-800">${r.effectif}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderActiveUsersTab(search = '', filiale = '') {
+    const tbody = document.getElementById('active-users-table-body');
+    const countLabel = document.getElementById('active-users-count-label');
+    if (!tbody) return;
+
+    if (!activeUsersCache) activeUsersCache = collectActiveUsers();
+
+    const fmt = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const searchLow = search.toLowerCase().trim();
+
+    const filtered = activeUsersCache.filter(u => {
+        if (searchLow && !u.email.includes(searchLow)) return false;
+        if (filiale && u.filiale !== filiale) return false;
+        return true;
+    });
+
+    document.getElementById('tab-active-count').textContent = activeUsersCache.length + ' utilisateurs';
+
+    tbody.innerHTML = filtered.map(u => {
+        const badgeClass = FILIALE_BADGE[u.filiale] || FILIALE_BADGE['Autre'];
+        const features = Array.from(u.features).join(', ') || '—';
+        const lastDate = u.lastActivity ? fmt.format(u.lastActivity) : '—';
+        return `<tr class="hover:bg-indigo-50/30 transition-colors">
+            <td class="px-4 py-2.5 font-medium text-gray-800">${u.email}</td>
+            <td class="px-4 py-2.5">
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${u.filiale}</span>
+            </td>
+            <td class="px-4 py-2.5 text-gray-600 text-xs">${features}</td>
+            <td class="px-4 py-2.5 text-right text-gray-700">${u.sessions}</td>
+            <td class="px-4 py-2.5 text-right text-gray-500">${lastDate}</td>
+        </tr>`;
+    }).join('');
+
+    if (countLabel) {
+        countLabel.textContent = filtered.length < activeUsersCache.length
+            ? `${filtered.length} utilisateur(s) affiché(s) sur ${activeUsersCache.length}`
+            : `${filtered.length} utilisateur(s) au total`;
+    }
+}
+
+function switchUsersListTab(tab) {
+    currentUsersTab = tab;
+    const tabPop    = document.getElementById('tab-population');
+    const tabActive = document.getElementById('tab-active-users');
+    const panelPop    = document.getElementById('panel-population');
+    const panelActive = document.getElementById('panel-active-users');
+
+    if (tab === 'population') {
+        tabPop.className    = 'px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors';
+        tabActive.className = 'px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2';
+        panelPop.classList.remove('hidden');
+        panelActive.classList.add('hidden');
+        document.getElementById('users-list-subtitle').textContent = 'Collaborateurs BTP Consultants (population cible)';
+    } else {
+        tabActive.className = 'px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors ml-2';
+        tabPop.className    = 'px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors';
+        panelPop.classList.add('hidden');
+        panelActive.classList.remove('hidden');
+        document.getElementById('users-list-subtitle').textContent = 'Tous les utilisateurs ayant utilisé au moins une fonctionnalité';
+        renderActiveUsersTab(
+            document.getElementById('users-list-search').value,
+            document.getElementById('users-list-filiale').value
+        );
+    }
+}
+
+function openUsersListModal() {
+    activeUsersCache = null; // always refresh on open
+    document.getElementById('users-list-modal').classList.remove('hidden');
+    renderPopulationTab();
+    switchUsersListTab('population');
+}
+
+function closeUsersListModal() {
+    document.getElementById('users-list-modal').classList.add('hidden');
+}
+
+(function initUsersListModal() {
+    const btn = document.getElementById('open-users-list-btn');
+    if (btn) btn.addEventListener('click', openUsersListModal);
+
+    const closeBtn = document.getElementById('close-users-list-modal');
+    if (closeBtn) closeBtn.addEventListener('click', closeUsersListModal);
+
+    const modal = document.getElementById('users-list-modal');
+    if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeUsersListModal(); });
+
+    const tabPop    = document.getElementById('tab-population');
+    const tabActive = document.getElementById('tab-active-users');
+    if (tabPop)    tabPop.addEventListener('click', () => switchUsersListTab('population'));
+    if (tabActive) tabActive.addEventListener('click', () => switchUsersListTab('active'));
+
+    const search  = document.getElementById('users-list-search');
+    const filiale = document.getElementById('users-list-filiale');
+    const refresh = () => renderActiveUsersTab(search.value, filiale.value);
+    if (search)  search.addEventListener('input', refresh);
+    if (filiale) filiale.addEventListener('change', refresh);
+})();
+
+// ==================== USERS EVOLUTION MODAL ====================
+
+let usersEvolutionChart = null;
+let usersModalIsCumulative = false;
+let usersModalData = null; // cached monthly users data
+
+/**
+ * Calculate monthly user metrics from all data sources (no active filters, full history).
+ * Returns per-month: activeUsers (unique users active that month), newUsers (first appearance),
+ * cumulativeUsers (total unique users up to and including that month).
+ */
+function calculateMonthlyUsers() {
+    const monthlyUserSets = {}; // key → Set<email>
+
+    const addUser = (dateString, email, domain) => {
+        if (!email || !email.trim()) return;
+        if (domain && !email.includes(domain)) return;
+        const key = getMonthKey(dateString);
+        if (!key) return;
+        if (!monthlyUserSets[key]) monthlyUserSets[key] = new Set();
+        monthlyUserSets[key].add(email.toLowerCase().trim());
+    };
+
+    // Descriptif (type = DESCRIPTIF_TYPE, pas de YIELD)
+    descriptifData
+        .filter(item => item.type === DESCRIPTIF_TYPE && !item.contractNumber.toUpperCase().includes('YIELD'))
+        .forEach(item => addUser(item.createdAt, item.email));
+
+    // Autocontact (@btp-consultants.fr, pas de YIELD, fromAI)
+    autocontactData
+        .filter(item => !item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI)
+        .forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
+
+    // Comparateur
+    comparateurData.forEach(item => addUser(item.createdAt, item.email));
+
+    // Expert / Chat BTP Consultants
+    expertBTPData.forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
+    chatBTPData.forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
+
+    // Expert / Chat Citae
+    expertCitaeData.forEach(item => addUser(item.createdAt, item.email, '@citae.fr'));
+    chatCitaeData.forEach(item => addUser(item.createdAt, item.email, '@citae.fr'));
+
+    // Expert / Chat BTP Diagnostics
+    expertBTPDiagData.forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
+    chatBTPDiagData.forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
+
+    const sortedMonths = Object.keys(monthlyUserSets).sort();
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+    const allSeenUsers = new Set();
+    return sortedMonths.map(key => {
+        const monthSet = monthlyUserSets[key];
+        let newUsersCount = 0;
+        monthSet.forEach(u => {
+            if (!allSeenUsers.has(u)) {
+                allSeenUsers.add(u);
+                newUsersCount++;
+            }
+        });
+        const [year, month] = key.split('-');
+        return {
+            key,
+            label: `${monthNames[parseInt(month) - 1]} ${year}`,
+            activeUsers: monthSet.size,
+            newUsers: newUsersCount,
+            cumulativeUsers: allSeenUsers.size,
+        };
+    });
+}
+
+function buildUsersChart() {
+    const canvas = document.getElementById('usersEvolutionChart');
+    if (!canvas || !usersModalData) return;
+
+    if (usersEvolutionChart) {
+        usersEvolutionChart.destroy();
+        usersEvolutionChart = null;
+    }
+
+    const labels = usersModalData.map(d => d.label);
+    const isCumul = usersModalIsCumulative;
+    const ctx = canvas.getContext('2d');
+
+    if (isCumul) {
+        // Cumulative view: area + bar for new users
+        usersEvolutionChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Nouveaux utilisateurs',
+                        data: usersModalData.map(d => d.newUsers),
+                        backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 2,
+                        borderRadius: 5,
+                        yAxisID: 'yNew',
+                        order: 2,
+                    },
+                    {
+                        label: 'Utilisateurs cumulés',
+                        data: usersModalData.map(d => d.cumulativeUsers),
+                        type: 'line',
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'yCumul',
+                        order: 1,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        display: true, position: 'top',
+                        labels: { font: { size: 13, weight: '500' }, color: '#1F2937', padding: 16, usePointStyle: true }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        titleColor: '#F9FAFB', bodyColor: '#E5E7EB',
+                        borderColor: 'rgba(75, 85, 99, 0.4)', borderWidth: 1,
+                        padding: 12, cornerRadius: 8,
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#6B7280' } },
+                    yNew: {
+                        type: 'linear', position: 'left', beginAtZero: true,
+                        grid: { color: 'rgba(229, 231, 235, 0.8)' },
+                        title: { display: true, text: 'Nouveaux utilisateurs', font: { size: 12, weight: 'bold' }, color: '#6366F1' },
+                        ticks: { font: { size: 11 }, color: '#6366F1', stepSize: 1 }
+                    },
+                    yCumul: {
+                        type: 'linear', position: 'right', beginAtZero: true,
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Total cumulé', font: { size: 12, weight: 'bold' }, color: '#10B981' },
+                        ticks: { font: { size: 11 }, color: '#10B981', stepSize: 1 }
+                    }
+                }
+            }
+        });
+    } else {
+        // Monthly view: bar chart of active users + line of new users
+        usersEvolutionChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Utilisateurs actifs (mensuel)',
+                        data: usersModalData.map(d => d.activeUsers),
+                        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 2,
+                        borderRadius: 5,
+                        yAxisID: 'yActive',
+                        order: 2,
+                    },
+                    {
+                        label: 'Nouveaux utilisateurs (mensuel)',
+                        data: usersModalData.map(d => d.newUsers),
+                        type: 'line',
+                        borderColor: 'rgba(245, 158, 11, 1)',
+                        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                        borderWidth: 2.5,
+                        fill: false,
+                        tension: 0.35,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgba(245, 158, 11, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'yActive',
+                        order: 1,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        display: true, position: 'top',
+                        labels: { font: { size: 13, weight: '500' }, color: '#1F2937', padding: 16, usePointStyle: true }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        titleColor: '#F9FAFB', bodyColor: '#E5E7EB',
+                        borderColor: 'rgba(75, 85, 99, 0.4)', borderWidth: 1,
+                        padding: 12, cornerRadius: 8,
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#6B7280' } },
+                    yActive: {
+                        type: 'linear', position: 'left', beginAtZero: true,
+                        grid: { color: 'rgba(229, 231, 235, 0.8)' },
+                        title: { display: true, text: 'Utilisateurs', font: { size: 12, weight: 'bold' }, color: '#6366F1' },
+                        ticks: { font: { size: 11 }, color: '#6366F1', stepSize: 1 }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function updateUsersToggleUI() {
+    const btn = document.getElementById('users-cumul-toggle');
+    if (!btn) return;
+    const monthlyPill = btn.querySelector('[data-view="monthly"]');
+    const cumulPill   = btn.querySelector('[data-view="cumul"]');
+    if (!monthlyPill || !cumulPill) return;
+    if (!usersModalIsCumulative) {
+        monthlyPill.className = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-indigo-700 shadow-sm transition-all';
+        cumulPill.className   = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+    } else {
+        cumulPill.className   = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-indigo-700 shadow-sm transition-all';
+        monthlyPill.className = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+    }
+}
+
+function openUsersEvolutionModal() {
+    const modal = document.getElementById('users-evolution-modal');
+    modal.classList.remove('hidden');
+
+    usersModalData = calculateMonthlyUsers();
+
+    // Summary KPIs
+    const totalUnique = usersModalData.length > 0
+        ? usersModalData[usersModalData.length - 1].cumulativeUsers
+        : 0;
+    const lastMonthNew = usersModalData.length > 0
+        ? usersModalData[usersModalData.length - 1].newUsers
+        : 0;
+    const lastLabel = usersModalData.length > 0
+        ? usersModalData[usersModalData.length - 1].label
+        : '—';
+    const peakMonth = usersModalData.reduce((best, d) =>
+        d.activeUsers > (best ? best.activeUsers : 0) ? d : best, null);
+
+    document.getElementById('users-modal-total').textContent =
+        new Intl.NumberFormat('fr-FR').format(totalUnique);
+    document.getElementById('users-modal-new-last').textContent =
+        new Intl.NumberFormat('fr-FR').format(lastMonthNew);
+    document.getElementById('users-modal-new-label').textContent =
+        `nouveaux en ${lastLabel}`;
+    document.getElementById('users-modal-peak').textContent =
+        peakMonth ? new Intl.NumberFormat('fr-FR').format(peakMonth.activeUsers) : '—';
+    document.getElementById('users-modal-peak-label').textContent =
+        peakMonth ? `actifs en ${peakMonth.label}` : 'utilisateurs actifs';
+
+    // Reset toggle
+    usersModalIsCumulative = false;
+    updateUsersToggleUI();
+    buildUsersChart();
+}
+
+function closeUsersEvolutionModal() {
+    document.getElementById('users-evolution-modal').classList.add('hidden');
+    if (usersEvolutionChart) {
+        usersEvolutionChart.destroy();
+        usersEvolutionChart = null;
+    }
+}
+
+(function initUsersModal() {
+    const usersCard = document.getElementById('users-card');
+    if (usersCard) usersCard.addEventListener('click', openUsersEvolutionModal);
+
+    const closeBtn = document.getElementById('close-users-modal');
+    if (closeBtn) closeBtn.addEventListener('click', closeUsersEvolutionModal);
+
+    const modal = document.getElementById('users-evolution-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeUsersEvolutionModal();
+        });
+    }
+
+    const toggleBtn = document.getElementById('users-cumul-toggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', (e) => {
+            const pill = e.target.closest('[data-view]');
+            if (!pill) return;
+            usersModalIsCumulative = (pill.getAttribute('data-view') === 'cumul');
+            updateUsersToggleUI();
+            buildUsersChart();
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeUsersListModal();
+            closeUsersEvolutionModal();
+            closeGainEvolutionModal();
+        }
+    });
+})();
+
+// ==================== GAIN EVOLUTION MODAL ====================
+
 let gainEvolutionChart = null;
 
 /**
@@ -2620,10 +3149,6 @@ function updateGainToggleUI() {
         });
     }
 
-    // Close on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeGainEvolutionModal();
-    });
 })();
 
 // ==================== REFRESH DATA BUTTON ====================
