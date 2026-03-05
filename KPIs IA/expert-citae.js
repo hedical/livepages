@@ -67,9 +67,8 @@ const inputPopulationEl = document.getElementById('input-population');
 const inputEuroPerMessageEl = document.getElementById('input-euro-per-message');
 
 // Parameters (stored in localStorage)
-// Conversion: si 8€ = 15min, alors 1,5€ = (1,5/8) * 15 = 2,8125 minutes par message
 let parameters = {
-    minutesPerMessage: 2.8125,
+    minutesPerMessage: 5,
     annualHours: 1607,
     population: 15,
     euroPerMessage: 1.5
@@ -881,7 +880,7 @@ if (closeModalBtn) {
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', () => {
         // Update parameters
-        parameters.minutesPerMessage = parseFloat(inputMinutesPerMessageEl.value) || 2.8125;
+        parameters.minutesPerMessage = parseFloat(inputMinutesPerMessageEl.value) || 5;
         parameters.annualHours = parseFloat(inputAnnualHoursEl.value) || 1607;
         parameters.population = parseFloat(inputPopulationEl.value) || 15;
         parameters.euroPerMessage = parseFloat(inputEuroPerMessageEl.value) || 1.5;

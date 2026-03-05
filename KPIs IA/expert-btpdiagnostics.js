@@ -69,7 +69,7 @@ const inputEuroPerMessageEl = document.getElementById('input-euro-per-message');
 
 // Parameters (stored in localStorage)
 let parameters = {
-    minutesPerMessage: 2.8125,
+    minutesPerMessage: 5,
     annualHours: 1607,
     population: 50,
     euroPerMessage: 1.5
@@ -855,7 +855,7 @@ if (closeModalBtn) {
 
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', () => {
-        parameters.minutesPerMessage = parseFloat(inputMinutesPerMessageEl.value) || 2.8125;
+        parameters.minutesPerMessage = parseFloat(inputMinutesPerMessageEl.value) || 5;
         parameters.annualHours = parseFloat(inputAnnualHoursEl.value) || 1607;
         parameters.population = parseFloat(inputPopulationEl.value) || 50;
         parameters.euroPerMessage = parseFloat(inputEuroPerMessageEl.value) || 1.5;

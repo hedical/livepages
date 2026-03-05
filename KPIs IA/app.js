@@ -28,7 +28,8 @@ const AUTOCONTACT_TYPE = 'AUTOCONTACT';
 const MINUTES_PER_DESCRIPTIF = 30;
 const SECONDS_PER_CONTACT = 90; // Default value from autocontact.js
 const SECONDS_PER_PAGE = 20; // Default value for comparateur
-const MINUTES_PER_MESSAGE = 2.8125; // For chat and expert tools (BTP and Citae)
+const MINUTES_PER_MESSAGE = 2.8125; // For chat tools (BTP and Citae)
+const MINUTES_PER_MESSAGE_EXPERT = 5; // For expert technique tools (BTP and Citae)
 const EURO_PER_MESSAGE = 1.5; // For chat and expert tools (BTP and Citae)
 const ANNUAL_HOURS = 1607;
 const TOTAL_REVENUE = 44000000;
@@ -1321,7 +1322,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainHoursChatBTP = timeGainMinutesChatBTP / 60;
     
     // Gain en temps pour expert BTP (minutes → heures)
-    const timeGainMinutesExpertBTP = (expertBTPMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainMinutesExpertBTP = (expertBTPMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertBTP = timeGainMinutesExpertBTP / 60;
     
     // Gain en temps pour chat Citae (minutes → heures)
@@ -1329,7 +1330,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainHoursChatCitae = timeGainMinutesChatCitae / 60;
     
     // Gain en temps pour expert Citae (minutes → heures)
-    const timeGainMinutesExpertCitae = (expertCitaeMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainMinutesExpertCitae = (expertCitaeMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertCitae = timeGainMinutesExpertCitae / 60;
     
     // Gain en temps pour chat BTP Diagnostics (minutes → heures)
@@ -1337,7 +1338,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainHoursChatBTPDiag = timeGainMinutesChatBTPDiag / 60;
     
     // Gain en temps pour expert BTP Diagnostics (minutes → heures)
-    const timeGainMinutesExpertBTPDiag = (expertBTPDiagMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainMinutesExpertBTPDiag = (expertBTPDiagMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertBTPDiag = timeGainMinutesExpertBTPDiag / 60;
     
     // Total time gain
