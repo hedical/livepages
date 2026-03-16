@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Générateur de CR — BTP Consultants</title>
+  <style>
+    :root {
+      --navy:   #0D2B4E;
+      --blue:   #1A6EBD;
+      --orange: #D95F0E;
+      --gray1:  #2C3E50;
+      --gray2:  #7F8C8D;
+      --gray3:  #ECF0F1;
+      --white:  #FFFFFF;
+      --xblue:  #EBF5FC;
+      --green:  #1A6B35;
+      --red:    #C0392B;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Calibri, sans-serif;
+      background: #F4F6F9;
+      color: var(--gray1);
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--navy);
+      display: flex;
+      align-items: stretch;
+    }
+    .header-accent { width: 8px; background: var(--orange); flex-shrink: 0; }
+    .header-content { padding: 20px 32px; flex: 1; }
+    header h1 { color: var(--white); font-size: 1.4rem; font-weight: 700; letter-spacing: 0.02em; }
+    header p  { color: #8EB8D8; font-size: 0.85rem; margin-top: 4px; }
+
+    main { max-width: 780px; margin: 40px auto; padding: 0 20px 60px; }
+
+    .card {
+      background: var(--white);
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(13,43,78,0.10);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--blue); margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title::before {
+      content: ''; display: block; width: 3px; height: 16px;
+      background: var(--orange); border-radius: 2px;
+    }
+
+    .field { margin-bottom: 20px; }
+    .field label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--gray1); margin-bottom: 7px; }
+    .field label .optional { font-weight: 400; color: var(--gray2); font-size: 0.78rem; }
+
+    .field select, .field input[type="text"] {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #D5DDE8;
+      border-radius: 6px; font-size: 0.9rem; color: var(--gray1);
+      background: #FAFCFF; transition: border-color .2s; outline: none;
+    }
+    .field select:focus, .field input[type="text"]:focus {
+      border-color: var(--blue); background: var(--white);
+    }
+
+    .dropzone {
+      border: 2px dashed #C5D6E8; border-radius: 8px; padding: 28px 20px;
+      text-align: center; cursor: pointer; transition: all .2s; background: #FAFCFF; position: relative;
+    }
+    .dropzone:hover, .dropzone.drag-over { border-color: var(--blue); background: var(--xblue); }
+    .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .dropzone-icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+    .dropzone-label { font-size: 0.9rem; color: var(--gray2); }
+    .dropzone-label strong { color: var(--blue); }
+    .dropzone-filename { margin-top: 10px; font-size: 0.85rem; font-weight: 600; color: var(--green); display: none; }
+    .dropzone.has-file .dropzone-filename { display: block; }
+    .dropzone.has-file .dropzone-label    { display: none; }
+    .dropzone.has-file .dropzone-icon     { display: none; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 520px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .btn-generate {
+      width: 100%; padding: 16px; background: var(--navy); color: var(--white);
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: 700;
+      letter-spacing: 0.04em; cursor: pointer; transition: background .2s, transform .1s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .btn-generate:hover:not(:disabled) { background: #163D6E; }
+    .btn-generate:active:not(:disabled) { transform: scale(.99); }
+    .btn-generate:disabled { background: #8FA5C0; cursor: not-allowed; }
+
+    #progress-section { display: none; }
+
+    .progress-bar-wrap { background: var(--gray3); border-radius: 6px; height: 10px; overflow: hidden; margin-bottom: 16px; }
+    .progress-bar-fill {
+      height: 100%; background: linear-gradient(90deg, var(--blue), var(--orange));
+      border-radius: 6px; transition: width .3s ease; width: 0%;
+    }
+    .progress-status { font-size: 0.82rem; color: var(--gray2); margin-bottom: 16px; }
+    .progress-status strong { color: var(--gray1); }
+
+    .log {
+      background: #F8FAFC; border: 1px solid #DDE6EF; border-radius: 6px;
+      padding: 12px 14px; max-height: 220px; overflow-y: auto;
+      font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem; color: var(--gray1);
+    }
+    .log-line { margin: 2px 0; display: flex; gap: 8px; }
+    .log-line.ok   .log-icon { color: var(--green); font-weight: bold; }
+    .log-line.err  .log-icon { color: var(--red);   font-weight: bold; }
+    .log-line.info .log-icon { color: var(--blue);  }
+
+    #download-section { display: none; }
+
+    .btn-download {
+      width: 100%; padding: 16px; background: var(--green); color: var(--white);
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: background .2s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .btn-download:hover { background: #14562B; }
+
+    .result-summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .result-pill { padding: 6px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; }
+    .result-pill.ok  { background: #DFF2E6; color: var(--green); }
+    .result-pill.err { background: #FDECEA; color: var(--red); }
+
+    .error-box {
+      background: #FDECEA; border-left: 4px solid var(--red); border-radius: 4px;
+      padding: 14px 18px; font-size: 0.85rem; color: var(--red); margin-top: 12px; display: none;
+    }
+
+    .loading-hint {
+      background: var(--xblue); border-left: 4px solid var(--blue);
+      border-radius: 4px; padding: 12px 16px; font-size: 0.82rem;
+      color: var(--blue); margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-accent"></div>
+  <div class="header-content">
+    <h1>Générateur de Comptes Rendus</h1>
+    <p>BTP Consultants — Génération automatique des CR mensuels agences &amp; DR</p>
+  </div>
+</header>
+
+<main>
+
+  <div class="card">
+    <div class="card-title">Fichier de données</div>
+    <div class="loading-hint">
+      Au premier chargement, les librairies sont téléchargées (quelques secondes). Les fois suivantes, c'est instantané.
+    </div>
+
+    <div class="field">
+      <label>Fichier Excel de suivi <span class="optional">(*.xlsx)</span></label>
+      <div class="dropzone" id="dropzone-excel">
+        <input type="file" id="input-excel" accept=".xlsx" />
+        <span class="dropzone-icon">📊</span>
+        <div class="dropzone-label"><strong>Cliquer</strong> ou glisser-déposer le fichier .xlsx</div>
+        <div class="dropzone-filename" id="excel-filename"></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Logo BTP Consultants <span class="optional">(optionnel — PNG ou JPG)</span></label>
+      <div class="dropzone" id="dropzone-logo">
+        <input type="file" id="input-logo" accept=".png,.jpg,.jpeg" />
+        <span class="dropzone-icon">🖼️</span>
+        <div class="dropzone-label"><strong>Cliquer</strong> ou glisser-déposer le logo</div>
+        <div class="dropzone-filename" id="logo-filename"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Paramètres de génération</div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label>Mois</label>
+        <select id="select-mois">
+          <option value="0">Janvier</option>
+          <option value="1">Février</option>
+          <option value="2">Mars</option>
+          <option value="3">Avril</option>
+          <option value="4">Mai</option>
+          <option value="5">Juin</option>
+          <option value="6">Juillet</option>
+          <option value="7">Août</option>
+          <option value="8">Septembre</option>
+          <option value="9">Octobre</option>
+          <option value="10">Novembre</option>
+          <option value="11">Décembre</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Filtrer une DR <span class="optional">(optionnel)</span></label>
+        <input type="text" id="input-dr" placeholder="ex : DR CENTRE-EST" />
+      </div>
+    </div>
+
+    <div id="error-box" class="error-box"></div>
+
+    <button class="btn-generate" id="btn-generate" disabled>
+      ⚙️ &nbsp; Générer les CR
+    </button>
+  </div>
+
+  <div class="card" id="progress-section">
+    <div class="card-title">Génération en cours…</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-fill"></div>
+    </div>
+    <div class="progress-status" id="progress-status">Démarrage…</div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card" id="download-section">
+    <div class="card-title">Génération terminée</div>
+    <div class="result-summary" id="result-summary"></div>
+    <button class="btn-download" id="btn-download">
+      ⬇️ &nbsp; Télécharger le ZIP
+    </button>
+  </div>
+
+</main>
+
+<!-- Un seul point d'entrée ES module -->
+<script type="module" src="js/app.js?v=3"></script>
+
+</body>
+</html>
