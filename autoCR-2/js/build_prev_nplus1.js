@@ -1,5 +1,5 @@
 // build_prev_nplus1.js — Prévisionnels N+1 (ES module)
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mjs';
+import * as XLSX from 'https://esm.sh/xlsx';
 
 export function buildPrevNPlus1Sheet(wb) {
   const rows = XLSX.utils.sheet_to_json(

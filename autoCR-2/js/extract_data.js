@@ -1,5 +1,5 @@
 // extract_data.js — Lecture et agrégation Excel (ES module)
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mjs';
+import * as XLSX from 'https://esm.sh/xlsx';
 import { round1, kE } from './helpers.js';
 
 export const MOIS = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN',

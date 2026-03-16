@@ -1,5 +1,5 @@
 // generate_all.js — Orchestration + ZIP (ES module)
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mjs';
+import * as XLSX from 'https://esm.sh/xlsx';
 import JSZip from 'https://esm.sh/jszip@3';
 import { extractAll } from './extract_data.js';
 import { buildPrevNPlus1Sheet, enrichEntityNP1 } from './build_prev_nplus1.js';
