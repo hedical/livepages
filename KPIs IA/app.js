@@ -2495,29 +2495,29 @@ function calculateMonthlyUsers() {
     };
 
     // Descriptif (type = DESCRIPTIF_TYPE, pas de YIELD)
-    descriptifData
+    getFilteredData(descriptifData)
         .filter(item => item.type === DESCRIPTIF_TYPE && !item.contractNumber.toUpperCase().includes('YIELD'))
         .forEach(item => addUser(item.createdAt, item.email));
 
     // Autocontact (@btp-consultants.fr, pas de YIELD, fromAI)
-    autocontactData
+    getFilteredData(autocontactData)
         .filter(item => !item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI)
         .forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
 
     // Comparateur
-    comparateurData.forEach(item => addUser(item.createdAt, item.email));
+    getFilteredData(comparateurData).forEach(item => addUser(item.createdAt, item.email));
 
     // Expert / Chat BTP Consultants
-    expertBTPData.forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
-    chatBTPData.forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
+    getFilteredData(expertBTPData).forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
+    getFilteredData(chatBTPData).forEach(item => addUser(item.createdAt, item.email, '@btp-consultants.fr'));
 
     // Expert / Chat Citae
-    expertCitaeData.forEach(item => addUser(item.createdAt, item.email, '@citae.fr'));
-    chatCitaeData.forEach(item => addUser(item.createdAt, item.email, '@citae.fr'));
+    getFilteredData(expertCitaeData).forEach(item => addUser(item.createdAt, item.email, '@citae.fr'));
+    getFilteredData(chatCitaeData).forEach(item => addUser(item.createdAt, item.email, '@citae.fr'));
 
     // Expert / Chat BTP Diagnostics
-    expertBTPDiagData.forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
-    chatBTPDiagData.forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
+    getFilteredData(expertBTPDiagData).forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
+    getFilteredData(chatBTPDiagData).forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
 
     const sortedMonths = Object.keys(monthlyUserSets).sort();
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -2828,7 +2828,7 @@ function calculateMonthlyGains() {
     // Each contract is attributed to the FIRST month it generated a qualifying
     // descriptif → sum-of-months == all-time unique total (matches the index page).
     const descriptifFirstMonth = new Map(); // contractNumber → earliest valid month key
-    descriptifData
+    getFilteredData(descriptifData)
         .filter(item =>
             item.type === DESCRIPTIF_TYPE &&
             item.contractNumber &&
@@ -2853,7 +2853,7 @@ function calculateMonthlyGains() {
 
     // ── Autocontact ─────────────────────────────────────────────────────────────
     // Mirror processAutocontactData: exclude YIELD, fromAI=true, count each item.
-    autocontactData
+    getFilteredData(autocontactData)
         .filter(item =>
             !item.contractNumber.toUpperCase().includes('YIELD') &&
             item.fromAI
@@ -2866,7 +2866,7 @@ function calculateMonthlyGains() {
         });
 
     // ── Comparateur ─────────────────────────────────────────────────────────────
-    comparateurData.forEach(item => {
+    getFilteredData(comparateurData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
@@ -2874,14 +2874,14 @@ function calculateMonthlyGains() {
     });
 
     // ── Chat / Expert BTP Consultants ───────────────────────────────────────────
-    chatBTPData.forEach(item => {
+    getFilteredData(chatBTPData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
         monthlyData[key].chatBTPMessages += (item.messagesLength || 0);
     });
 
-    expertBTPData.forEach(item => {
+    getFilteredData(expertBTPData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
@@ -2889,14 +2889,14 @@ function calculateMonthlyGains() {
     });
 
     // ── Chat / Expert Citae ──────────────────────────────────────────────────────
-    chatCitaeData.forEach(item => {
+    getFilteredData(chatCitaeData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
         monthlyData[key].chatCitaeMessages += (item.messagesLength || 0);
     });
 
-    expertCitaeData.forEach(item => {
+    getFilteredData(expertCitaeData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
@@ -2904,14 +2904,14 @@ function calculateMonthlyGains() {
     });
 
     // ── Chat / Expert BTP Diagnostics ────────────────────────────────────────────
-    chatBTPDiagData.forEach(item => {
+    getFilteredData(chatBTPDiagData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
         monthlyData[key].chatBTPDiagMessages += (item.messagesLength || 0);
     });
 
-    expertBTPDiagData.forEach(item => {
+    getFilteredData(expertBTPDiagData).forEach(item => {
         const key = getMonthKey(item.createdAt);
         if (!key) return;
         ensureMonth(key);
