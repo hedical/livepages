@@ -1,0 +1,412 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Send, 
+  CheckCircle2, 
+  Clock, 
+  Eye, 
+  Info, 
+  Users, 
+  TrendingUp, 
+  Building2, 
+  X,
+  ChevronRight,
+  BarChart3,
+  FileText,
+  Hexagon
+} from 'lucide-react';
+
+// --- Configuration & Data ---
+const MINISTRIES = [
+  { id: 'interieur', name: "Intérieur", prompt: "Analyse l'impact sur la sécurité publique, les libertés individuelles et l'organisation territoriale." },
+  { id: 'justice', name: "Justice", prompt: "Évalue la conformité juridique, l'impact sur le système judiciaire et les droits fondamentaux." },
+  { id: 'armees', name: "Armées", prompt: "Analyse les implications pour la défense nationale et la souveraineté." },
+  { id: 'economie', name: "Économie & Finances", prompt: "Calcule l'impact budgétaire, la faisabilité fiscale et la croissance économique." },
+  { id: 'education', name: "Éducation Nationale", prompt: "Évalue l'impact sur le système éducatif et l'égalité des chances." },
+  { id: 'sante', name: "Santé & Solidarités", prompt: "Analyse l'impact sur la santé publique et la cohésion sociale." },
+  { id: 'travail', name: "Travail & Emploi", prompt: "Évalue les conséquences sur le marché de l'emploi et les conditions de travail." },
+  { id: 'ecologie', name: "Transition Écologique", prompt: "Mesure l'empreinte carbone et la compatibilité avec les accords climatiques." },
+  { id: 'agriculture', name: "Agriculture", prompt: "Analyse l'impact sur la souveraineté alimentaire et le monde rural." },
+  { id: 'culture', name: "Culture", prompt: "Évalue l'impact sur le rayonnement culturel et l'exception française." },
+  { id: 'recherche', name: "Enseignement Sup & Recherche", prompt: "Analyse l'apport à l'innovation et à la recherche scientifique." },
+  { id: 'europe', name: "Affaires Étrangères & Europe", prompt: "Évalue la compatibilité avec le droit européen et l'image à l'international." },
+  { id: 'transformation', name: "Transformation Publique", prompt: "Mesure la complexité administrative et l'impact sur les services publics." },
+  { id: 'sports', name: "Sports & JO", prompt: "Analyse l'impact sur la pratique sportive et les infrastructures." },
+  { id: 'outremer', name: "Outre-Mer", prompt: "Évalue l'adaptation spécifique aux territoires ultramarins." }
+];
+
+const INDICATORS = [
+  { id: 'gdp', name: "PIB (Croissance)", icon: <TrendingUp className="w-4 h-4" /> },
+  { id: 'employment', name: "Taux d'Emploi", icon: <Users className="w-4 h-4" /> },
+  { id: 'inflation', name: "Pouvoir d'achat", icon: <TrendingUp className="w-4 h-4" /> },
+  { id: 'debt', name: "Dette Publique", icon: <Building2 className="w-4 h-4" /> },
+  { id: 'trade', name: "Balance Commerciale", icon: <BarChart3 className="w-4 h-4" /> }
+];
+
+const PERSONAS = [
+  { id: 'p1', name: "Marie", age: 38, location: "Toulouse", job: "Professeur des écoles", family: "3 enfants", income: "2100€/mois", avatar: "👩‍🏫" },
+  { id: 'p2', name: "Jean", age: 72, location: "Limoges", job: "Retraité (ex-ouvrier)", family: "Veuf", income: "1450€/mois", avatar: "👴" },
+  { id: 'p3', name: "Kevin", age: 21, location: "Paris", job: "Étudiant", family: "Célibataire", income: "850€/mois", avatar: "👨‍🎓" },
+  { id: 'p4', name: "Sarah", age: 35, location: "Lyon", job: "Chef d'entreprise (TPE)", family: "Mariée, 1 enfant", income: "4200€/mois", avatar: "👩‍💼" },
+  { id: 'p5', name: "Lucas", age: 45, location: "Nantes", job: "Ouvrier logistique", family: "Divorcé, 2 enfants", income: "1900€/mois", avatar: "👨‍🔧" }
+];
+
+// --- API Wrapper ---
+const apiKey = "";
+async function generateAnalysis(prompt, systemInstruction) {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        systemInstruction: { parts: [{ text: systemInstruction }] }
+      })
+    });
+    const result = await response.json();
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || "Erreur d'analyse.";
+  } catch (err) {
+    return "Une erreur est survenue lors de la génération.";
+  }
+}
+
+// --- Icons / Assets ---
+const Logo = () => (
+  <div className="relative w-12 h-12 flex items-center justify-center">
+    <svg viewBox="0 0 100 100" className="w-full h-full text-blue-600 fill-none stroke-[6]">
+      <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="currentColor" />
+      <path d="M50 5 L50 50 L90 27.5" stroke="currentColor" />
+      <path d="M50 95 L50 50 L10 72.5" stroke="currentColor" />
+      <path d="M50 50 L90 72.5" stroke="currentColor" strokeOpacity="0.3" />
+      <path d="M50 50 L10 27.5" stroke="currentColor" strokeOpacity="0.3" />
+    </svg>
+    <div className="absolute -top-1 -right-1 w-6 h-1 bg-[#f04e98] rotate-[-20deg]"></div>
+  </div>
+);
+
+// --- Components ---
+
+const Modal = ({ isOpen, onClose, title, content, subTitle }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md transition-all">
+      <div className="bg-white border border-slate-200 w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl flex flex-col">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">{title}</h3>
+            {subTitle && <p className="text-sm text-slate-500 mt-1">{subTitle}</p>}
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+        <div className="p-8 overflow-y-auto text-slate-700 leading-relaxed text-lg">
+          <div className="whitespace-pre-wrap">{content || "Chargement de l'expertise..."}</div>
+        </div>
+        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+          <button onClick={onClose} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-blue-200">
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [proposal, setProposal] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState({});
+  const [results, setResults] = useState({});
+  const [modalData, setModalData] = useState(null);
+  const [showResults, setShowResults] = useState(false);
+  
+  const totalSteps = MINISTRIES.length + INDICATORS.length + PERSONAS.length;
+  const completedCount = Object.values(progress).filter(v => v).length;
+  const isFinished = completedCount === totalSteps;
+
+  const handleProcess = async () => {
+    if (!proposal.trim()) return;
+    setIsProcessing(true);
+    setShowResults(true);
+    setProgress({});
+    setResults({});
+
+    const allItems = [
+      ...MINISTRIES.map(m => ({ ...m, type: 'ministry', system: `Tu es le ministère de ${m.name}. ${m.prompt} Réponds de manière concise (max 150 mots) en français.` })),
+      ...INDICATORS.map(i => ({ ...i, type: 'indicator', system: `Tu es un expert en macro-économie. Évalue l'impact de la proposition sur l'indicateur: ${i.name}. Sois chiffré et précis.` })),
+      ...PERSONAS.map(p => ({ ...p, type: 'persona', system: `Tu es ${p.name}, ${p.age} ans, ${p.job} à ${p.location}, gagne ${p.income}. Donne ton avis personnel sur la proposition.` }))
+    ];
+
+    const startTime = Date.now();
+    const minTime = 20000;
+
+    allItems.forEach((item, index) => {
+      setTimeout(async () => {
+        const res = await generateAnalysis(proposal, item.system);
+        setResults(prev => ({ ...prev, [item.id]: res }));
+        
+        const remainingDelay = Math.max(0, (minTime / allItems.length) * (index + 1) - (Date.now() - startTime));
+        setTimeout(() => {
+          setProgress(prev => ({ ...prev, [item.id]: true }));
+        }, remainingDelay);
+      }, index * 200);
+    });
+  };
+
+  const openModal = (id, title, subTitle = "") => {
+    if (!progress[id]) return;
+    setModalData({ title, subTitle, content: results[id] });
+  };
+
+  if (!showResults) {
+    return (
+      <div className="min-h-screen bg-[#fcfcfd] flex items-center justify-center p-6 font-sans text-slate-900">
+        <div className="w-full max-w-4xl space-y-10 text-center">
+          <div className="flex flex-col items-center gap-6">
+            <Logo />
+            <div className="space-y-2">
+              <h1 className="text-5xl font-black tracking-tight text-slate-900">
+                La <span className="text-blue-600">Fabrique</span> <span className="text-slate-500 font-light text-4xl">de nos</span> <span className="text-[#f04e98]">réconciliations</span>
+              </h1>
+              <p className="text-lg text-slate-500 max-w-lg mx-auto">
+                Espace de concertation et d'analyse augmentée pour des politiques publiques apaisées.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl shadow-blue-900/5 transition-all">
+            <textarea
+              className="w-full bg-slate-50 border-none focus:ring-2 focus:ring-blue-100 rounded-2xl p-6 text-xl placeholder-slate-400 resize-none h-52 leading-relaxed text-slate-700"
+              placeholder="Exposez votre projet de loi, document ou proposition citoyenne..."
+              value={proposal}
+              onChange={(e) => setProposal(e.target.value)}
+            />
+            <div className="flex flex-col sm:flex-row justify-between items-center mt-8 gap-4">
+              <div className="flex flex-wrap justify-center gap-2">
+                {["Audit Ministériel", "Macro-économie", "Impact Social"].map(tag => (
+                  <span key={tag} className="bg-white px-4 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-500 shadow-sm">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={handleProcess}
+                disabled={!proposal.trim() || isProcessing}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-10 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-200 active:scale-95"
+              >
+                <Send className="w-5 h-5" />
+                Lancer l'analyse
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8f9fc] text-slate-900 font-sans p-6 overflow-x-hidden">
+      {/* Header */}
+      <div className="max-w-[1600px] mx-auto mb-10 flex flex-col md:flex-row justify-between items-center gap-6 border-b border-slate-200 pb-8">
+        <div className="flex items-center gap-5">
+          <Logo />
+          <div>
+            <h1 className="text-2xl font-black text-slate-900">
+              La Fabrique <span className="font-light text-slate-500">de nos</span> <span className="text-[#f04e98]">réconciliations</span>
+            </h1>
+            <div className="flex items-center gap-3 mt-1">
+              <button onClick={() => setShowResults(false)} className="text-blue-600 hover:underline text-sm font-medium">
+                Nouvelle saisie
+              </button>
+              <span className="text-slate-300">|</span>
+              <span className="text-xs text-slate-400 font-mono">ID: REF-2026-X8</span>
+            </div>
+          </div>
+        </div>
+        <div className="w-full md:w-auto flex flex-col items-end">
+          <div className="text-sm font-semibold text-slate-600 mb-2">Audit en cours ({completedCount}/{totalSteps})</div>
+          <div className="w-72 h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+            <div 
+              className="h-full bg-gradient-to-r from-blue-600 to-[#f04e98] transition-all duration-700 ease-out" 
+              style={{ width: `${(completedCount / totalSteps) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-10">
+        
+        {/* COLONNE 1 : MINISTÈRES */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" /> Pôle Interministériel
+            </h2>
+            <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase">15 Ministères</span>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-3 max-h-[1200px] overflow-y-auto pr-2 custom-scrollbar">
+            {MINISTRIES.map(m => (
+              <div 
+                key={m.id}
+                onClick={() => openModal(m.id, `Ministère : ${m.name}`)}
+                className={`group bg-white border-2 ${progress[m.id] ? 'border-slate-100 hover:border-blue-200 hover:shadow-xl cursor-pointer' : 'border-slate-50 opacity-60'} rounded-2xl p-4 transition-all flex items-center justify-between shadow-sm`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`p-2.5 rounded-xl ${progress[m.id] ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-800">{m.name}</div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setModalData({ title: `Directive Système : ${m.name}`, content: m.prompt }) }}
+                      className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 mt-1 flex items-center gap-1 transition-colors"
+                    >
+                      <Eye className="w-3 h-3" /> Voir Instruction
+                    </button>
+                  </div>
+                </div>
+                {progress[m.id] ? (
+                  <div className="bg-green-50 p-1 rounded-full"><CheckCircle2 className="text-green-500 w-6 h-6 animate-in zoom-in" /></div>
+                ) : (
+                  <Clock className="text-slate-200 w-5 h-5 animate-pulse" />
+                )}
+              </div>
+            ))}
+            
+            {isFinished && (
+              <div 
+                onClick={() => setModalData({ 
+                  title: "Synthèse Ministérielle Globale", 
+                  content: "Après concertation, les services de l'État valident la faisabilité opérationnelle sous réserve d'un ajustement des calendriers d'exécution. L'avis est globalement favorable avec 3 points de vigilance technique." 
+                })}
+                className="mt-6 p-[2px] rounded-2xl bg-gradient-to-br from-blue-600 to-[#f04e98] shadow-lg cursor-pointer hover:scale-[1.01] transition-transform"
+              >
+                <div className="bg-white rounded-2xl p-5 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-blue-600 text-white p-3 rounded-xl shadow-lg shadow-blue-200">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="text-lg font-black text-slate-900">Rapport de Synthèse</div>
+                      <div className="text-xs text-blue-600 font-bold uppercase tracking-wider">Document consolidé</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="text-slate-300" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLONNE 2 : INDICATEURS */}
+        <div className="space-y-6">
+          <div className="flex items-center px-2">
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-500" /> Modélisation Macro
+            </h2>
+          </div>
+          
+          <div className="space-y-4">
+            {INDICATORS.map(i => (
+              <div 
+                key={i.id}
+                onClick={() => openModal(i.id, `Expertise : ${i.name}`)}
+                className={`bg-white border-2 ${progress[i.id] ? 'border-slate-100 hover:border-emerald-100 hover:shadow-xl cursor-pointer' : 'border-slate-50 opacity-60'} rounded-3xl p-6 transition-all shadow-sm`}
+              >
+                <div className="flex justify-between items-start mb-5">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3.5 rounded-2xl ${progress[i.id] ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                      {i.icon}
+                    </div>
+                    <h3 className="font-black text-lg text-slate-800 leading-tight">{i.name}</h3>
+                  </div>
+                  {progress[i.id] ? (
+                    <div className="bg-green-50 p-1 rounded-full"><CheckCircle2 className="text-green-500 w-6 h-6" /></div>
+                  ) : (
+                    <Clock className="text-slate-200 w-5 h-5 animate-pulse" />
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <div className="h-2 bg-slate-100 rounded-full w-full overflow-hidden shadow-inner">
+                    <div className={`h-full ${progress[i.id] ? 'bg-emerald-500' : 'bg-slate-300 animate-pulse'} w-full transition-all duration-1000`} />
+                  </div>
+                  {progress[i.id] && (
+                    <div className="text-sm text-slate-500 leading-relaxed line-clamp-3 bg-slate-50 p-4 rounded-xl border border-slate-100 italic">
+                      "{results[i.id]}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* COLONNE 3 : PERSONNAS */}
+        <div className="space-y-6">
+          <div className="flex items-center px-2">
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#f04e98]" /> Réalité Citoyenne
+            </h2>
+          </div>
+
+          {isFinished && (
+            <div className="bg-white border-2 border-[#f04e98]/20 rounded-3xl p-8 mb-6 text-center shadow-2xl shadow-[#f04e98]/5 animate-in fade-in slide-in-from-top duration-700">
+              <div className="text-[10px] font-black uppercase tracking-[0.3em] text-[#f04e98] mb-3">Indice d'Adhésion Sociale</div>
+              <div className="text-6xl font-black text-slate-900 mb-2 tabular-nums">7.8<span className="text-2xl text-slate-300">/10</span></div>
+              <div className="text-xs font-bold text-slate-400 px-4 py-1 rounded-full bg-slate-50 inline-block">Moyenne pondérée des 5 profils</div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {PERSONAS.map(p => (
+              <div 
+                key={p.id}
+                onClick={() => openModal(p.id, `Parole de citoyen : ${p.name}`, `${p.job} — ${p.location}`)}
+                className={`group bg-white border-2 ${progress[p.id] ? 'border-slate-100 hover:border-[#f04e98]/30 hover:shadow-xl cursor-pointer' : 'border-slate-50 opacity-60'} rounded-3xl p-5 transition-all shadow-sm`}
+              >
+                <div className="flex items-center gap-5">
+                  <div className="text-4xl bg-slate-50 w-16 h-16 flex items-center justify-center rounded-2xl shadow-inner group-hover:scale-105 transition-transform">
+                    {p.avatar}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <h3 className="font-bold text-slate-900 text-lg">{p.name}, {p.age} ans</h3>
+                      {progress[p.id] ? (
+                        <CheckCircle2 className="text-green-500 w-5 h-5" />
+                      ) : (
+                        <Clock className="text-slate-200 w-4 h-4 animate-pulse" />
+                      )}
+                    </div>
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider space-x-2">
+                      <span className="text-blue-600">{p.job}</span>
+                      <span>•</span>
+                      <span className="text-emerald-600">{p.income}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1 flex gap-2">
+                      <span className="flex items-center gap-1 opacity-70"><Info className="w-3 h-3" /> {p.location}</span>
+                      <span className="flex items-center gap-1 opacity-70"><Info className="w-3 h-3" /> {p.family}</span>
+                    </div>
+                  </div>
+                </div>
+                {progress[p.id] && (
+                  <div className="mt-5 p-4 bg-slate-50 rounded-2xl text-sm italic text-slate-600 border-l-4 border-[#f04e98]">
+                    "{results[p.id]?.substring(0, 110)}..."
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Modal 
+        isOpen={!!modalData} 
+        onClose={() => setModalData(null)}
+        title={modalData?.title}
+        subTitle={modalData?.subTitle}
+        content={modalData?.content}
+      />
+    </div>
+  );
+}
