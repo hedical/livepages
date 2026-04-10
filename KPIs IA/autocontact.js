@@ -12,6 +12,7 @@ let availableAgencies = [];
 let availableDRs = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
+let emailToAgency = {}; // {email (lowercase): agencyCode (uppercase)} — home agency from user directory
 let googleSheetMapping = {}; // {numeroAffaireOpportunite: typologieBatiment}
 let dateChart = null;
 let ratesChart = null;
@@ -270,27 +271,27 @@ function formatHours(hours) {
 }
 
 // Calculate gains based on current data and mode
-function calculateGains(aiContactsCount) {
+// usersCount: unique active users for current period (denominator for %)
+//             pass getTotalEffectif() for max atteignable
+function calculateGains(aiContactsCount, usersCount) {
     // 1. Gain en temps (secondes → heures)
     const timeGainSeconds = aiContactsCount * parameters.secondsPerContact;
     const timeGainHours = timeGainSeconds / 3600;
-    
-    // 2. Total effectif
-    const totalEffectif = getTotalEffectif();
-    
-    // 3. Gain en % volume d'affaire
+
+    // 2. Gain en % volume d'affaire — based on active users, not total effectif
     let percentGain = 0;
-    if (totalEffectif > 0 && parameters.annualHours > 0) {
-        percentGain = (timeGainHours / (totalEffectif * parameters.annualHours)) * 100;
+    if (usersCount > 0 && parameters.annualHours > 0) {
+        percentGain = (timeGainHours / (usersCount * parameters.annualHours)) * 100;
     }
-    
-    // 4. Gain en €
+
+    // 3. Gain en €
     const euroGain = (percentGain / 100) * parameters.totalRevenue;
-    
+
     return {
         timeGainHours,
         percentGain,
-        euroGain
+        euroGain,
+        usersCount
     };
 }
 
@@ -314,35 +315,40 @@ function calculatePeriodMonths() {
 }
 
 // Update gains display
-function updateGains(aiContactsCount, totalContactsCount) {
-    const gains = calculateGains(aiContactsCount);
-    const maxGains = calculateGains(totalContactsCount);
-    
+// uniqueUsers: unique active users in the current period (denominator for all gain %)
+// Both current and max atteignable use the same activeUsers denominator
+// (max changes the numerator — all contacts — not the denominator)
+function updateGains(aiContactsCount, totalContactsCount, uniqueUsers) {
+    const totalEffectif = getTotalEffectif();
+    const activeUsers = (uniqueUsers > 0) ? uniqueUsers : totalEffectif;
+
+    const gains = calculateGains(aiContactsCount, activeUsers);
+    const maxGains = calculateGains(totalContactsCount, activeUsers);
+
     // Calculate projection for the year
     const periodMonths = calculatePeriodMonths();
     const projectionMultiplier = 12 / periodMonths;
     const projectedContacts = aiContactsCount * projectionMultiplier;
-    const projectionGains = calculateGains(projectedContacts);
-    
+    const projectionGains = calculateGains(projectedContacts, activeUsers);
+
     // Calculate max projection for the year
     const projectedMaxContacts = totalContactsCount * projectionMultiplier;
-    const maxProjectionGains = calculateGains(projectedMaxContacts);
-    
+    const maxProjectionGains = calculateGains(projectedMaxContacts, activeUsers);
+
     // Update time gain
     gainTimeEl.textContent = formatHours(gains.timeGainHours);
     gainTimeFormulaEl.textContent = `${formatNumber(aiContactsCount)} contacts × ${parameters.secondsPerContact}s`;
     gainTimeMaxEl.textContent = `Max atteignable: ${formatHours(maxGains.timeGainHours)}`;
     gainTimeProjectionEl.textContent = `Projection année: ${formatHours(projectionGains.timeGainHours)} (${periodMonths} mois)`;
     gainTimeMaxProjectionEl.textContent = `Projection max année: ${formatHours(maxProjectionGains.timeGainHours)}`;
-    
+
     // Update percent gain
     gainPercentEl.textContent = `${gains.percentGain.toFixed(4)}%`;
-    const totalEffectif = getTotalEffectif();
-    gainPercentFormulaEl.textContent = `${formatHours(gains.timeGainHours)} / (${totalEffectif} × ${parameters.annualHours}h)`;
+    gainPercentFormulaEl.textContent = `${formatHours(gains.timeGainHours)} / (${activeUsers} × ${parameters.annualHours}h)`;
     gainPercentMaxEl.textContent = `Max atteignable: ${maxGains.percentGain.toFixed(4)}%`;
     gainPercentProjectionEl.textContent = `Projection année: ${projectionGains.percentGain.toFixed(4)}%`;
     gainPercentMaxProjectionEl.textContent = `Projection max année: ${maxProjectionGains.percentGain.toFixed(4)}%`;
-    
+
     // Update euro gain
     gainEuroEl.textContent = `${formatNumber(gains.euroGain)} €`;
     gainEuroFormulaEl.textContent = `${gains.percentGain.toFixed(4)}% × ${formatNumber(parameters.totalRevenue)} €`;
@@ -421,32 +427,92 @@ function extractCSVFromDataField(csvText) {
     return csvText;
 }
 
-// Parse population CSV file
+// Parse population / user directory file
 async function loadAgencyPopulation() {
     try {
         const response = await fetch(POPULATION_CSV_URL);
         if (!response.ok) {
-            console.warn('Could not load population_cible.csv');
-            return { population: {}, drMapping: {} };
+            console.warn('Could not load population file');
+            return { population: {}, drMapping: {}, emailMap: {} };
         }
-        
-        let csvText = await response.text();
+        const rawData = await response.text();
+        const result = _parseUserDirectoryAutocontact(rawData);
+        console.log('Population loaded:', Object.keys(result.population).length, 'agencies,', Object.keys(result.emailMap).length, 'users');
+        return result;
+    } catch (error) {
+        console.warn('Error loading population data:', error);
+        return { population: {}, drMapping: {}, emailMap: {} };
+    }
+}
+
+function _parseUserDirectoryAutocontact(rawData) {
+    const population = {}, drMapping = {}, emailMap = {};
+    let csvText = rawData.trim();
+    try {
+        const json = JSON.parse(csvText);
+        if (Array.isArray(json) && json.length > 0 && json[0].data) {
+            csvText = json[0].data;
+        } else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object') {
+            const userAssignments = {};
+            json.forEach(user => {
+                const email = (user.Email || user.email || '').toLowerCase().trim();
+                const isEnabled = String(user.IsEnabled || 'true').toLowerCase() === 'true';
+                const isMain = String(user['AgencyToUser → IsMain'] || user.IsMain || 'true').toLowerCase() === 'true';
+                const agencyCode = (user['Agency → AgencyId → ProductionService'] || user.ProductionService || '').trim().toUpperCase();
+                const dr = (user['Agency → AgencyId → Management'] || user.Management || '').trim();
+                if (!email || !agencyCode || !isEnabled) return;
+                if (!userAssignments[email]) userAssignments[email] = [];
+                userAssignments[email].push({ agencyCode, isMain, dr });
+                if (dr) drMapping[agencyCode] = dr;
+            });
+            Object.entries(userAssignments).forEach(([email, assignments]) => {
+                const primary = assignments.find(a => a.isMain) || assignments[0];
+                emailMap[email] = primary.agencyCode;
+                population[primary.agencyCode] = (population[primary.agencyCode] || 0) + 1;
+            });
+            return { population, drMapping, emailMap };
+        }
+    } catch(e) {
         csvText = fixEncoding(csvText);
-        
-        // Extract CSV from "data" field if present
         csvText = extractCSVFromDataField(csvText);
-        
-        const lines = csvText.split('\n').filter(line => line.trim() !== '');
-        
-        const population = {};
-        const drMapping = {};
-        
-        // Skip header (line 0: DR,Agence,Effectif) - now using commas
+    }
+
+    const lines = csvText.split('\n').filter(l => l.trim() !== '');
+    if (lines.length < 2) return { population, drMapping, emailMap };
+    const headers = parseCSVLineWithCommas(lines[0]).map(h => h.toLowerCase().trim());
+    const emailIdx = headers.findIndex(h => h.includes('email') && !h.includes('management'));
+    const productionServiceIdx = headers.findIndex(h => h.includes('productionservice'));
+
+    if (emailIdx !== -1 && productionServiceIdx !== -1) {
+        // New user-directory format
+        const isEnabledIdx = headers.findIndex(h => h.includes('enabled'));
+        const isMainIdx = headers.findIndex(h => h.includes('ismain') || (h.includes('is') && h.includes('main')));
+        const managementIdx = headers.findIndex(h => h.includes('management'));
+        const userAssignments = {};
+        for (let i = 1; i < lines.length; i++) {
+            const v = parseCSVLineWithCommas(lines[i]);
+            const email = (v[emailIdx] || '').toLowerCase().trim();
+            const isEnabled = isEnabledIdx === -1 || (v[isEnabledIdx] || '').toLowerCase() === 'true';
+            const isMain = isMainIdx === -1 || (v[isMainIdx] || '').toLowerCase() === 'true';
+            const agencyCode = (v[productionServiceIdx] || '').trim().toUpperCase();
+            const dr = managementIdx >= 0 ? (v[managementIdx] || '').trim() : '';
+            if (!email || !agencyCode || !isEnabled) continue;
+            if (!userAssignments[email]) userAssignments[email] = [];
+            userAssignments[email].push({ agencyCode, isMain, dr });
+            if (dr) drMapping[agencyCode] = dr;
+        }
+        Object.entries(userAssignments).forEach(([email, assignments]) => {
+            const primary = assignments.find(a => a.isMain) || assignments[0];
+            emailMap[email] = primary.agencyCode;
+            population[primary.agencyCode] = (population[primary.agencyCode] || 0) + 1;
+        });
+    } else {
+        // Legacy format: DR, AgencyCode, Effectif
         for (let i = 1; i < lines.length; i++) {
             const parts = parseCSVLineWithCommas(lines[i]);
             if (parts.length >= 3) {
                 const dr = parts[0].trim();
-                const agencyCode = parts[1].trim();
+                const agencyCode = parts[1].trim().toUpperCase();
                 const effectif = parseInt(parts[2].trim());
                 if (agencyCode && !isNaN(effectif)) {
                     population[agencyCode] = effectif;
@@ -454,14 +520,8 @@ async function loadAgencyPopulation() {
                 }
             }
         }
-        
-        console.log('Loaded population data for', Object.keys(population).length, 'agencies');
-        console.log('Loaded DR mapping for', Object.keys(drMapping).length, 'agencies');
-        return { population, drMapping };
-    } catch (error) {
-        console.warn('Error loading population data:', error);
-        return { population: {}, drMapping: {} };
     }
+    return { population, drMapping, emailMap };
 }
 
 // Load Google Sheet data and create mapping
@@ -607,37 +667,43 @@ function parseCSVData(csvString) {
     let createdAtColumnIndex = -1;
     let fromAIColumnIndex = -1;
     let agencyIndex = -1;
+    let directionIndex = -1;
     let aiProjectIdIndex = -1;
-    
+
     // Search for columns in headers
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
-        
+
         if (contractColumnIndex === -1 && header.includes('contractnumber')) {
             contractColumnIndex = i;
             console.log(`Found ContractNumber at column ${i}: ${headers[i]}`);
         }
-        
-        if (createdAtColumnIndex === -1 && header === 'createdat' && !headers[i].includes('→')) {
+
+        if (createdAtColumnIndex === -1 && header.includes('createdat')) {
             createdAtColumnIndex = i;
             console.log(`Found CreatedAt at column ${i}: ${headers[i]}`);
         }
-        
-        if (fromAIColumnIndex === -1 && header === 'fromai') {
+
+        if (fromAIColumnIndex === -1 && header.includes('fromai')) {
             fromAIColumnIndex = i;
             console.log(`Found FromAI at column ${i}: ${headers[i]}`);
         }
-        
+
         if (btpEmailColumnIndex === -1 && header.includes('user') && header.includes('email')) {
             btpEmailColumnIndex = i;
             console.log(`Found BTP User Email at column ${i}: ${headers[i]}`);
         }
-        
+
         if (agencyIndex === -1 && header.includes('productionservice')) {
             agencyIndex = i;
             console.log(`Found ProductionService at column ${i}: ${headers[i]}`);
         }
-        
+
+        if (directionIndex === -1 && header.includes('management')) {
+            directionIndex = i;
+            console.log(`Found Management at column ${i}: ${headers[i]}`);
+        }
+
         if (aiProjectIdIndex === -1 && header.includes('aiproject') && header.includes('id')) {
             aiProjectIdIndex = i;
             console.log(`Found AIProject ID at column ${i}: ${headers[i]}`);
@@ -650,6 +716,7 @@ function parseCSVData(csvString) {
         email: btpEmailColumnIndex,
         fromAI: fromAIColumnIndex,
         agency: agencyIndex,
+        direction: directionIndex,
         aiProjectId: aiProjectIdIndex
     });
     
@@ -701,6 +768,7 @@ function parseCSVData(csvString) {
         const createdAt = values[createdAtColumnIndex] || '';
         const btpEmail = values[btpEmailColumnIndex] || '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
+        const direction = (directionIndex >= 0 ? values[directionIndex] : '') || '';
         const aiProjectId = (aiProjectIdIndex >= 0 ? values[aiProjectIdIndex] : '') || '';
         
         // ProductionService already contains the agency code (CT78, LYCT, etc.)
@@ -719,6 +787,7 @@ function parseCSVData(csvString) {
             email: (btpEmail || '').trim(),
             fromAI: fromAI,
             agency: (agency || '').trim(), // agency IS the code (CT78, LYCT, etc.)
+            direction: (direction || '').trim(),
             aiProjectId: (aiProjectId || '').trim(),
             contactCount: 1,
             aiContactCount: fromAI ? 1 : 0
@@ -920,29 +989,31 @@ function updateAgencyTable(data) {
     const agencyStats = {};
     
     data.forEach(item => {
-        if (!item.agency) return;
-        
-        if (!agencyStats[item.agency]) {
-            agencyStats[item.agency] = {
+        // Use home agency from user directory, fall back to item agency
+        const email = (item.email || '').toLowerCase().trim();
+        const agencyKey = (email && emailToAgency[email]) ? emailToAgency[email] : item.agency;
+        if (!agencyKey) return;
+
+        if (!agencyStats[agencyKey]) {
+            agencyStats[agencyKey] = {
                 aiContacts: 0,
                 operations: new Set(),
                 users: new Set()
-                // No need to store agencyCode - agency IS the code
             };
         }
-        
+
         // Count AI contacts
         if (item.fromAI === true) {
-            agencyStats[item.agency].aiContacts++;
-            
+            agencyStats[agencyKey].aiContacts++;
+
             // Add user email (only for AI contacts)
             if (item.email && item.email.includes('@btp-consultants.fr')) {
-                agencyStats[item.agency].users.add(item.email);
+                agencyStats[agencyKey].users.add(item.email);
             }
-            
+
             // Add operation (contract number)
             if (item.contractNumber && item.contractNumber.trim() !== '') {
-                agencyStats[item.agency].operations.add(item.contractNumber);
+                agencyStats[agencyKey].operations.add(item.contractNumber);
             }
         }
     });
@@ -1070,7 +1141,7 @@ function updateKPIs() {
     aiContactsSubtitleEl.textContent = `Parmi ${kpis.totalContacts} contacts générés`;
     
     // Update gains
-    updateGains(kpis.aiContacts, kpis.totalContacts);
+    updateGains(kpis.aiContacts, kpis.totalContacts, kpis.totalUsers);
     
     // Update first date display (only once with all data)
     const firstDate = getFirstDate(allData);
@@ -1676,6 +1747,7 @@ async function init() {
         
         agencyPopulation = populationDataResult.population;
         agencyToDR = populationDataResult.drMapping;
+        emailToAgency = populationDataResult.emailMap || {};
         googleSheetMapping = googleSheetMappingResult;
         
         const rawText = await dataResponse.text();

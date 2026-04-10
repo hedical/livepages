@@ -96,16 +96,17 @@ function parseCSVData(csvString) {
     console.log(`CSV has ${headers.length} columns and ${lines.length - 1} data rows`);
     
     // Find column indices
-    const emailIndex = headers.findIndex(h => h.toLowerCase() === 'email');
-    const roleIndex = headers.findIndex(h => h.toLowerCase() === 'role');
-    const firstNameIndex = headers.findIndex(h => h.toLowerCase() === 'firstname');
-    const lastNameIndex = headers.findIndex(h => h.toLowerCase() === 'lastname');
-    const positionIndex = headers.findIndex(h => h.toLowerCase() === 'position');
-    const companyIndex = headers.findIndex(h => h.toLowerCase().includes('company') && h.toLowerCase().includes('name'));
     const btpEmailIndex = headers.findIndex(h => h.toLowerCase().includes('user') && h.toLowerCase().includes('email'));
-    const createdAtIndex = headers.findIndex(h => h.toLowerCase() === 'createdat' && !h.includes('→'));
+    const emailIndex = headers.findIndex(h => h.toLowerCase().includes('email') && !h.toLowerCase().includes('user'));
+    const roleIndex = headers.findIndex(h => h.toLowerCase().includes('role'));
+    const firstNameIndex = headers.findIndex(h => h.toLowerCase().includes('firstname'));
+    const lastNameIndex = headers.findIndex(h => h.toLowerCase().includes('lastname'));
+    const positionIndex = headers.findIndex(h => h.toLowerCase().includes('position'));
+    const companyIndex = headers.findIndex(h => h.toLowerCase().includes('company') && h.toLowerCase().includes('name'));
+    const createdAtIndex = headers.findIndex(h => h.toLowerCase().includes('createdat'));
     const contractIndex = headers.findIndex(h => h.toLowerCase().includes('contractnumber'));
     const phoneIndex = headers.findIndex(h => h.toLowerCase().includes('phone') || h.toLowerCase().includes('téléphone') || h.toLowerCase().includes('telephone'));
+    const directionIndex = headers.findIndex(h => h.toLowerCase().includes('management'));
     
     console.log('Column indices:', {
         email: emailIndex,
@@ -117,7 +118,8 @@ function parseCSVData(csvString) {
         btpEmail: btpEmailIndex,
         createdAt: createdAtIndex,
         contract: contractIndex,
-        phone: phoneIndex
+        phone: phoneIndex,
+        direction: directionIndex
     });
     
     if (emailIndex === -1) {
@@ -155,7 +157,8 @@ function parseCSVData(csvString) {
             btpEmail: btpEmailIndex !== -1 ? values[btpEmailIndex]?.trim() || '' : '',
             createdAt: createdAtIndex !== -1 ? values[createdAtIndex]?.trim() || '' : '',
             contractNumber: contractIndex !== -1 ? values[contractIndex]?.trim() || '' : '',
-            phone: phoneIndex !== -1 ? values[phoneIndex]?.trim() || '' : ''
+            phone: phoneIndex !== -1 ? values[phoneIndex]?.trim() || '' : '',
+            direction: directionIndex !== -1 ? values[directionIndex]?.trim() || '' : ''
         };
         
         // Add all contacts (including internal @btp-consultants.fr)
@@ -321,13 +324,21 @@ function updatePositionChart() {
         '#a855f7', // purple-500
     ];
     
-    const backgroundColors = sortedPositions.map((_, index) => colors[index % colors.length]);
-    
+    const hasPositionFilter = activeFilters.position !== null;
+    const backgroundColors = sortedPositions.map(([position], index) => {
+        if (hasPositionFilter && activeFilters.position !== position) return '#e5e7eb';
+        return colors[index % colors.length];
+    });
+    const borderColors = sortedPositions.map(([position], index) => {
+        if (hasPositionFilter && activeFilters.position !== position) return '#d1d5db';
+        return '#ffffff';
+    });
+
     // Destroy existing chart if it exists
     if (positionChart) {
         positionChart.destroy();
     }
-    
+
     try {
         // Create new chart
         positionChart = new Chart(canvas, {
@@ -337,7 +348,7 @@ function updatePositionChart() {
             datasets: [{
                 data: data,
                 backgroundColor: backgroundColors,
-                borderColor: '#ffffff',
+                borderColor: borderColors,
                 borderWidth: 2
             }]
         },
@@ -348,8 +359,6 @@ function updatePositionChart() {
                 if (elements.length > 0) {
                     const index = elements[0].index;
                     const clickedPosition = labels[index];
-                    
-                    // Toggle filter: if same position clicked, remove filter; otherwise apply filter
                     if (activeFilters.position === clickedPosition) {
                         activeFilters.position = null;
                         filters.position = 'all';
@@ -359,7 +368,6 @@ function updatePositionChart() {
                         filters.position = clickedPosition;
                         positionFilterEl.value = clickedPosition;
                     }
-                    
                     applyFilters();
                 }
             },
@@ -369,26 +377,43 @@ function updatePositionChart() {
             plugins: {
                 legend: {
                     position: 'right',
+                    onClick: function(e, legendItem) {
+                        const clickedPosition = legendItem.text.replace(/ \(.*\)$/, '').replace(' ✓', '');
+                        const label = labels[legendItem.index];
+                        if (activeFilters.position === label) {
+                            activeFilters.position = null;
+                            filters.position = 'all';
+                            positionFilterEl.value = 'all';
+                        } else {
+                            activeFilters.position = label;
+                            filters.position = label;
+                            positionFilterEl.value = label;
+                        }
+                        applyFilters();
+                    },
                     labels: {
                         padding: 15,
-                        font: {
-                            size: 12
-                        },
+                        font: { size: 12 },
                         generateLabels: function(chart) {
                             const data = chart.data;
                             if (data.labels.length && data.datasets.length) {
+                                const baseColors = sortedPositions.map((_, i) => colors[i % colors.length]);
                                 return data.labels.map((label, i) => {
                                     const value = data.datasets[0].data[i];
                                     const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
                                     const percentage = ((value / total) * 100).toFixed(1);
                                     const isActive = activeFilters.position === label;
+                                    const isExcluded = hasPositionFilter && !isActive;
                                     return {
-                                        text: `${label} (${value} - ${percentage}%)${isActive ? ' ✓' : ''}`,
-                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        text: `${label} (${value} — ${percentage}%)${isActive ? ' ✓' : ''}`,
+                                        fillStyle: isExcluded ? '#e5e7eb' : baseColors[i],
+                                        strokeStyle: isExcluded ? '#d1d5db' : baseColors[i],
                                         hidden: false,
                                         index: i,
-                                        fontColor: isActive ? '#1f2937' : '#6b7280',
-                                        fontStyle: isActive ? 'bold' : 'normal'
+                                        fontColor: isExcluded ? '#9ca3af' : (isActive ? '#111827' : '#374151'),
+                                        fontStyle: isActive ? 'bold' : 'normal',
+                                        strikethrough: isExcluded,
+                                        lineWidth: isActive ? 2 : 1,
                                     };
                                 });
                             }
@@ -466,13 +491,21 @@ function updateTypologieChart() {
         '#a855f7', // purple-500
     ];
     
-    const backgroundColors = sortedTypologies.map((_, index) => colors[index % colors.length]);
-    
+    const hasTypologieFilter = activeFilters.typologie !== null;
+    const backgroundColors = sortedTypologies.map(([typologie], index) => {
+        if (hasTypologieFilter && activeFilters.typologie !== typologie) return '#e5e7eb';
+        return colors[index % colors.length];
+    });
+    const borderColors = sortedTypologies.map(([typologie]) => {
+        if (hasTypologieFilter && activeFilters.typologie !== typologie) return '#d1d5db';
+        return '#ffffff';
+    });
+
     // Destroy existing chart if it exists
     if (typologieChart) {
         typologieChart.destroy();
     }
-    
+
     try {
         // Create new chart
         typologieChart = new Chart(canvas, {
@@ -482,54 +515,63 @@ function updateTypologieChart() {
                 datasets: [{
                     data: data,
                     backgroundColor: backgroundColors,
-                    borderColor: '#ffffff',
+                    borderColor: borderColors,
                     borderWidth: 2
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
-            onClick: (event, elements) => {
-                if (elements.length > 0) {
-                    const index = elements[0].index;
-                    const clickedTypologie = labels[index];
-                    
-                    // Toggle filter: if same typologie clicked, remove filter; otherwise apply filter
-                    if (activeFilters.typologie === clickedTypologie) {
-                        activeFilters.typologie = null;
-                    } else {
-                        activeFilters.typologie = clickedTypologie;
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const clickedTypologie = labels[index];
+                        if (activeFilters.typologie === clickedTypologie) {
+                            activeFilters.typologie = null;
+                        } else {
+                            activeFilters.typologie = clickedTypologie;
+                        }
+                        applyFilters();
                     }
-                    
-                    applyFilters();
-                }
-            },
-            onHover: (event, elements) => {
-                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
-            },
+                },
+                onHover: (event, elements) => {
+                    event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                },
                 plugins: {
                     legend: {
                         position: 'right',
+                        onClick: function(e, legendItem) {
+                            const label = labels[legendItem.index];
+                            if (activeFilters.typologie === label) {
+                                activeFilters.typologie = null;
+                            } else {
+                                activeFilters.typologie = label;
+                            }
+                            applyFilters();
+                        },
                         labels: {
                             padding: 15,
-                            font: {
-                                size: 12
-                            },
+                            font: { size: 12 },
                             generateLabels: function(chart) {
                                 const data = chart.data;
                                 if (data.labels.length && data.datasets.length) {
+                                    const baseColors = sortedTypologies.map((_, i) => colors[i % colors.length]);
                                     return data.labels.map((label, i) => {
                                         const value = data.datasets[0].data[i];
                                         const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
                                         const percentage = ((value / total) * 100).toFixed(1);
                                         const isActive = activeFilters.typologie === label;
+                                        const isExcluded = hasTypologieFilter && !isActive;
                                         return {
-                                            text: `${label} (${value} - ${percentage}%)${isActive ? ' ✓' : ''}`,
-                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            text: `${label} (${value} — ${percentage}%)${isActive ? ' ✓' : ''}`,
+                                            fillStyle: isExcluded ? '#e5e7eb' : baseColors[i],
+                                            strokeStyle: isExcluded ? '#d1d5db' : baseColors[i],
                                             hidden: false,
                                             index: i,
-                                            fontColor: isActive ? '#1f2937' : '#6b7280',
-                                            fontStyle: isActive ? 'bold' : 'normal'
+                                            fontColor: isExcluded ? '#9ca3af' : (isActive ? '#111827' : '#374151'),
+                                            fontStyle: isActive ? 'bold' : 'normal',
+                                            strikethrough: isExcluded,
+                                            lineWidth: isActive ? 2 : 1,
                                         };
                                     });
                                 }

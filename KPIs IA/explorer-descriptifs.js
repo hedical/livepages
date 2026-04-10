@@ -253,10 +253,9 @@ function parseCSVLine(line) {
     const values = [];
     let current = '';
     let inQuotes = false;
-    
+
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        
         if (char === '"') {
             inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
@@ -268,6 +267,44 @@ function parseCSVLine(line) {
     }
     values.push(current.trim());
     return values;
+}
+
+/**
+ * Full CSV parser that correctly handles quoted fields containing newlines
+ */
+function parseFullCSV(csvString) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvString.length; i++) {
+        const char = csvString[i];
+        const next = csvString[i + 1];
+
+        if (char === '"') {
+            if (inQuotes && next === '"') { currentField += '"'; i++; }
+            else { inQuotes = !inQuotes; }
+        } else if (char === ',' && !inQuotes) {
+            currentRow.push(currentField.trim());
+            currentField = '';
+        } else if (char === '\r' && next === '\n' && !inQuotes) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = []; currentField = ''; i++;
+        } else if ((char === '\n' || char === '\r') && !inQuotes) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = []; currentField = '';
+        } else {
+            currentField += char;
+        }
+    }
+    if (currentField || currentRow.length > 0) {
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f !== '')) rows.push(currentRow);
+    }
+    return rows;
 }
 
 // ==================== DATA LOADING & PROCESSING ====================
@@ -293,22 +330,18 @@ function parseCSVData(csvString) {
         csvString = csvString.substring(5).trim();
     }
     
-    const lines = csvString.split('\n').filter(line => {
-        const trimmed = line.trim();
-        return trimmed !== '' && trimmed !== '[' && trimmed !== ']';
-    });
-    
-    if (lines.length === 0) {
-        console.warn('No valid lines after CSV cleanup');
+    const rows = parseFullCSV(csvString);
+
+    if (rows.length === 0) {
+        console.warn('No valid rows after CSV parsing');
         return [];
     }
-    
-    const headerLine = lines[0];
-    const headers = parseCSVLine(headerLine);
-    
+
+    const headers = rows[0];
+
     console.log('CSV headers found:', headers.length);
-    
-    // Find column indices - we need to find the description and AI result fields
+
+    // Find column indices
     let typeIndex = -1;
     let contractIndex = -1;
     let diffusedAtIndex = -1;
@@ -317,60 +350,39 @@ function parseCSVData(csvString) {
     let aiResultIndex = -1;
     let agencyIndex = -1;
     let directionIndex = -1;
-    
+
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
-        if (typeIndex === -1 && header.includes('aideliver') && header.includes('type')) {
-            typeIndex = i;
-        }
-        if (contractIndex === -1 && header.includes('contractnumber')) {
-            contractIndex = i;
-        }
-        if (diffusedAtIndex === -1 && header.includes('report') && header.includes('diffusedat')) {
-            diffusedAtIndex = i;
-        }
-        if (emailIndex === -1 && header.includes('user') && header.includes('email')) {
-            emailIndex = i;
-        }
-        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) {
-            descriptionIndex = i;
-        }
-        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) {
-            aiResultIndex = i;
-        }
-        if (agencyIndex === -1 && header.includes('productionservice')) {
-            agencyIndex = i;
-        }
-        if (directionIndex === -1 && (header.includes('management') || header.includes('direction'))) {
-            directionIndex = i;
-        }
+        if (typeIndex === -1 && (
+            (header.includes('aideliver') && header.includes('type')) ||
+            header.includes('reporttype') ||
+            (header.includes('report') && header.includes('type') && !header.includes('diffusedat'))
+        )) { typeIndex = i; }
+        if (contractIndex === -1 && header.includes('contractnumber')) { contractIndex = i; }
+        if (diffusedAtIndex === -1 && header.includes('report') && header.includes('diffusedat')) { diffusedAtIndex = i; }
+        if (emailIndex === -1 && header.includes('user') && header.includes('email')) { emailIndex = i; }
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) { descriptionIndex = i; }
+        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) { aiResultIndex = i; }
+        if (agencyIndex === -1 && header.includes('productionservice')) { agencyIndex = i; }
+        if (directionIndex === -1 && (header.includes('management') || header.includes('direction'))) { directionIndex = i; }
     }
-    
-    console.log('Column indices:', {
-        type: typeIndex,
-        contract: contractIndex,
-        diffusedAt: diffusedAtIndex,
-        email: emailIndex,
-        description: descriptionIndex,
-        aiResult: aiResultIndex
-    });
-    
-    if (typeIndex === -1 || contractIndex === -1) {
-        console.warn('Missing required columns');
+
+    console.log('Column indices:', { type: typeIndex, contract: contractIndex, diffusedAt: diffusedAtIndex, email: emailIndex, description: descriptionIndex, aiResult: aiResultIndex });
+
+    if (contractIndex === -1) {
+        console.warn('Missing required column: contractNumber');
         return [];
     }
-    
-    // Parse data rows - charger TOUTES les données
+
+    // Parse data rows
     const allDataRows = [];
     const descriptifDataRows = [];
-    
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length < headers.length / 2) {
-            continue; // Skip malformed rows
-        }
-        
-        const type = values[typeIndex] || '';
+
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        if (values.length < headers.length / 2) continue;
+
+        const type = typeIndex >= 0 ? (values[typeIndex] || '') : '';
         const contractNumber = values[contractIndex] || '';
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
@@ -378,10 +390,8 @@ function parseCSVData(csvString) {
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
         const direction = (directionIndex >= 0 ? values[directionIndex] : '') || '';
-        
-        // Extract agency code from contract number using the global function
         const agencyCode = extractAgency(contractNumber);
-        
+
         const rowData = {
             type: (type || '').trim(),
             contractNumber: (contractNumber || '').trim(),
@@ -393,12 +403,13 @@ function parseCSVData(csvString) {
             description: description,
             aiResult: aiResult
         };
-        
-        // Ajouter à toutes les données
+
         allDataRows.push(rowData);
-        
-        // Ajouter aux descriptifs si c'est le bon type
-        if ((type || '').trim() === DESCRIPTIF_TYPE) {
+
+        // Si le type est présent et correspond → filtrage strict
+        // Si le type est absent (query Metabase déjà filtrée) → tout passer
+        const typeVal = (type || '').trim();
+        if (typeVal === DESCRIPTIF_TYPE || typeVal === '') {
             descriptifDataRows.push(rowData);
         }
     }
@@ -422,9 +433,9 @@ function processRecords(rawData) {
     const records = [];
     
     rawData.forEach((item, index) => {
-        const processedDesc = extractText(item.description);
-        const processedAI = extractText(item.aiResult);
-        
+        const processedDesc = extractText(item.description || item.aiResult || '');
+        const processedAI = extractText(item.aiResult || item.description || '');
+
         if (processedDesc.length === 0 || processedAI.length === 0) {
             console.log(`Skipping record ${index}: empty description or AI result`);
             return;

@@ -24,6 +24,7 @@ let expertBTPData = [];
 let chatBTPData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
+let emailToAgency = {}; // {email (lowercase): agencyCode (uppercase)} — home agency from user directory
 let availableAgencies = [];
 let availableDirections = [];
 let agencyToDirection = {};
@@ -126,19 +127,78 @@ function countWords(text) {
     return words ? words.length : 0;
 }
 
+// Full CSV parser that correctly handles multi-line quoted fields and "" escaping
+function parseCSVFull(csvText) {
+    const rows = [];
+    let row = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < csvText.length; i++) {
+        const char = csvText[i];
+        if (inQuotes) {
+            if (char === '"') {
+                if (i + 1 < csvText.length && csvText[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else {
+                current += char; // keeps \n inside quoted fields
+            }
+        } else {
+            if (char === '"') {
+                inQuotes = true;
+            } else if (char === ',') {
+                row.push(current.trim());
+                current = '';
+            } else if (char === '\n') {
+                row.push(current.trim());
+                current = '';
+                if (row.some(v => v !== '')) rows.push(row);
+                row = [];
+            } else if (char === '\r') {
+                // skip CR
+            } else {
+                current += char;
+            }
+        }
+    }
+    if (current.trim() !== '' || row.length > 0) {
+        row.push(current.trim());
+        if (row.some(v => v !== '')) rows.push(row);
+    }
+    return rows;
+}
+
 function parseCSVLine(line) {
     const values = [];
     let current = '';
     let inQuotes = false;
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            values.push(current.trim());
-            current = '';
+        if (inQuotes) {
+            if (char === '"') {
+                if (i + 1 < line.length && line[i + 1] === '"') {
+                    // Escaped double-quote ("") → literal "
+                    current += '"';
+                    i++;
+                } else {
+                    // Closing quote
+                    inQuotes = false;
+                }
+            } else {
+                current += char;
+            }
         } else {
-            current += char;
+            if (char === '"') {
+                inQuotes = true;
+            } else if (char === ',') {
+                values.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
         }
     }
     values.push(current.trim());
@@ -204,9 +264,9 @@ function parseDescriptifCSV(csvString) {
     while (csvText.endsWith(']') || csvText.endsWith('}')) {
         csvText = csvText.substring(0, csvText.length - 1).trim();
     }
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    if (lines.length === 0) return [];
-    const headers = parseCSVLine(lines[0]);
+    const rows = parseCSVFull(csvText);
+    if (rows.length === 0) return [];
+    const headers = rows[0];
     let typeIndex = -1, contractIndex = -1, diffusedAtIndex = -1, emailIndex = -1;
     let agencyIndex = -1, managementIndex = -1, descriptionIndex = -1, aiResultIndex = -1;
     for (let i = 0; i < headers.length; i++) {
@@ -217,23 +277,23 @@ function parseDescriptifCSV(csvString) {
         if (emailIndex === -1 && header.includes('user') && header.includes('email')) emailIndex = i;
         if (agencyIndex === -1 && header.includes('productionservice')) agencyIndex = i;
         if (managementIndex === -1 && header.includes('management')) managementIndex = i;
-        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) descriptionIndex = i;
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement') && !header.includes('longresult')) descriptionIndex = i;
         if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) aiResultIndex = i;
     }
     if (typeIndex === -1 || contractIndex === -1) return [];
     const data = [];
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
         if (values.length < headers.length / 2) continue;
         data.push({
             type: (values[typeIndex] || '').trim(),
             contractNumber: (values[contractIndex] || '').trim(),
-            createdAt: (diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '').trim(),
-            email: (emailIndex >= 0 ? values[emailIndex] : '').trim(),
+            createdAt: (diffusedAtIndex >= 0 ? (values[diffusedAtIndex] || '') : '').trim(),
+            email: (emailIndex >= 0 ? (values[emailIndex] || '') : '').trim(),
             agency: ((agencyIndex >= 0 ? values[agencyIndex] : '') || '').trim(),
             direction: ((managementIndex >= 0 ? values[managementIndex] : '') || '').trim(),
-            description: descriptionIndex >= 0 ? values[descriptionIndex] : '',
-            aiResult: aiResultIndex >= 0 ? values[aiResultIndex] : ''
+            description: descriptionIndex >= 0 ? (values[descriptionIndex] || '') : '',
+            aiResult: aiResultIndex >= 0 ? (values[aiResultIndex] || '') : ''
         });
     }
     return data;
@@ -248,11 +308,11 @@ function parseAutocontactCSV(csvString) {
     while (csvText.endsWith(']') || csvText.endsWith('}')) {
         csvText = csvText.substring(0, csvText.length - 1).trim();
     }
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    if (lines.length === 0) return [];
-    const headers = parseCSVLine(lines[0]);
+    const rows = parseCSVFull(csvText);
+    if (rows.length === 0) return [];
+    const headers = rows[0];
     let contractIndex = -1, fromAIIndex = -1, emailIndex = -1, createdAtIndex = -1;
-    let agencyIndex = -1, managementIndex = -1;
+    let agencyIndex = -1, managementIndex = -1, deliverableTypeIndex = -1;
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
         if (contractIndex === -1 && header.includes('contractnumber')) contractIndex = i;
@@ -261,11 +321,12 @@ function parseAutocontactCSV(csvString) {
         if (createdAtIndex === -1 && (header.includes('createdat') || header.includes('created_at'))) createdAtIndex = i;
         if (agencyIndex === -1 && header.includes('productionservice')) agencyIndex = i;
         if (managementIndex === -1 && header.includes('management')) managementIndex = i;
+        if (deliverableTypeIndex === -1 && header.includes('aideliver') && header.includes('type')) deliverableTypeIndex = i;
     }
     if (contractIndex === -1) return [];
     if (emailIndex === -1) {
-        for (let rowIdx = 1; rowIdx < Math.min(10, lines.length); rowIdx++) {
-            const values = parseCSVLine(lines[rowIdx]);
+        for (let rowIdx = 1; rowIdx < Math.min(10, rows.length); rowIdx++) {
+            const values = rows[rowIdx];
             for (let colIdx = 0; colIdx < values.length; colIdx++) {
                 if (values[colIdx] && values[colIdx].includes('@btp-consultants.fr')) {
                     emailIndex = colIdx;
@@ -276,14 +337,15 @@ function parseAutocontactCSV(csvString) {
         }
     }
     const data = [];
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
         if (values.length < headers.length / 2) continue;
         data.push({
             contractNumber: (values[contractIndex] || '').trim(),
             fromAI: fromAIIndex >= 0 ? (values[fromAIIndex] || '').toLowerCase() === 'true' : false,
-            email: (emailIndex >= 0 ? values[emailIndex] : '').trim(),
-            createdAt: (createdAtIndex >= 0 ? values[createdAtIndex] : '').trim(),
+            deliverableType: (deliverableTypeIndex >= 0 ? (values[deliverableTypeIndex] || '') : '').trim(),
+            email: (emailIndex >= 0 ? (values[emailIndex] || '') : '').trim(),
+            createdAt: (createdAtIndex >= 0 ? (values[createdAtIndex] || '') : '').trim(),
             agency: ((agencyIndex >= 0 ? values[agencyIndex] : '') || '').trim(),
             direction: ((managementIndex >= 0 ? values[managementIndex] : '') || '').trim()
         });
@@ -300,69 +362,162 @@ function parseComparateurCSV(csvString) {
     while (csvText.endsWith(']') || csvText.endsWith('}')) {
         csvText = csvText.substring(0, csvText.length - 1).trim();
     }
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    if (lines.length === 0) return [];
-    const headers = parseCSVLine(lines[0]);
-    let contractIndex = -1, emailIndex = -1, longResultIndex = -1, agencyIndex = -1, managementIndex = -1;
+    const rows = parseCSVFull(csvText);
+    if (rows.length === 0) return [];
+    const headers = rows[0];
+    let contractIndex = -1, emailIndex = -1, longResultIndex = -1, agencyIndex = -1, managementIndex = -1, createdAtIndex = -1;
+    let longResultIsItemsArray = false;
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i];
         const headerLower = header.toLowerCase();
         if (contractIndex === -1 && (headerLower.includes('contractnumber') || header.includes('SubAffairDetailId'))) contractIndex = i;
-        if (emailIndex === -1 && header.includes('User') && header.includes('Email')) emailIndex = i;
+        if (emailIndex === -1 && headerLower.includes('email')) emailIndex = i;
+        if (longResultIndex === -1 && headerLower.includes('longresult') && headerLower.includes('indexcomparator')) {
+            longResultIndex = i;
+            longResultIsItemsArray = true;
+        }
         if (longResultIndex === -1 && headerLower === 'longresult') longResultIndex = i;
         if (agencyIndex === -1 && headerLower.includes('productionservice')) agencyIndex = i;
         if (managementIndex === -1 && headerLower.includes('management')) managementIndex = i;
+        if (createdAtIndex === -1 && headerLower.includes('createdat')) createdAtIndex = i;
     }
     if (contractIndex === -1 || longResultIndex === -1) return [];
     const data = [];
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
         if (values.length < headers.length / 2) continue;
         let maxPage = 0;
         try {
-            const longResult = JSON.parse(values[longResultIndex] || '{}');
-            if (longResult && longResult.indexComparator && longResult.indexComparator.items) {
-                longResult.indexComparator.items.forEach(item => {
-                    if (item.page !== undefined && item.page !== null) {
-                        const pageNum = typeof item.page === 'number' ? item.page : parseInt(item.page);
-                        if (!isNaN(pageNum)) maxPage = Math.max(maxPage, pageNum);
-                    }
-                });
-            }
+            const parsed = JSON.parse(values[longResultIndex] || (longResultIsItemsArray ? '[]' : '{}'));
+            const items = longResultIsItemsArray
+                ? (Array.isArray(parsed) ? parsed : [])
+                : (parsed && parsed.indexComparator && parsed.indexComparator.items ? parsed.indexComparator.items : []);
+            items.forEach(item => {
+                if (item.page !== undefined && item.page !== null) {
+                    const pageNum = typeof item.page === 'number' ? item.page : parseInt(item.page);
+                    if (!isNaN(pageNum)) maxPage = Math.max(maxPage, pageNum);
+                }
+            });
         } catch (e) {}
         data.push({
             contractNumber: (values[contractIndex] || '').trim(),
-            email: (emailIndex >= 0 ? values[emailIndex] : '').trim(),
+            email: (emailIndex >= 0 ? (values[emailIndex] || '') : '').trim(),
             agency: ((agencyIndex >= 0 ? values[agencyIndex] : '') || '').trim(),
             direction: ((managementIndex >= 0 ? values[managementIndex] : '') || '').trim(),
+            createdAt: (createdAtIndex >= 0 ? (values[createdAtIndex] || '') : '').trim(),
             maxPage: maxPage
         });
     }
     return data;
 }
 
-function parsePopulationData(csvString) {
-    if (!csvString || typeof csvString !== 'string') return;
-    let csvText = fixEncoding(csvString);
-    csvText = extractCSVFromDataField(csvText);
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    if (lines.length < 2) return;
-    agencyPopulation = {};
-    agencyToDR = {};
-    for (let i = 1; i < lines.length; i++) {
-        const parts = parseCSVLineWithCommas(lines[i]);
-        if (parts.length >= 3) {
-            const dr = parts[0].trim();
-            const agencyCode = parts[1].trim().toUpperCase();
-            const effectif = parseInt(parts[2].trim());
-            if (agencyCode && !isNaN(effectif)) {
-                agencyPopulation[agencyCode] = effectif;
-                agencyToDR[agencyCode] = dr;
-                // Also map agency code to direction for lookup
-                agencyToDirection[agencyCode] = dr;
+function parsePopulationData(rawData) {
+    if (!rawData || typeof rawData !== 'string') return;
+
+    // Try to extract CSV text from various formats
+    let csvText = rawData.trim();
+
+    // Handle JSON wrapper formats
+    try {
+        const json = JSON.parse(csvText);
+        if (Array.isArray(json) && json.length > 0 && json[0].data) {
+            csvText = json[0].data; // [{data: "csv..."}] format
+        } else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object') {
+            // Direct JSON array of user objects — parse directly
+            _parseUserObjects(json);
+            return;
+        }
+    } catch(e) {
+        // Not JSON, treat as plain text
+        csvText = fixEncoding(csvText);
+        csvText = extractCSVFromDataField(csvText);
+    }
+
+    const rows = parseCSVFull(csvText);
+    if (rows.length < 2) return;
+
+    const headers = rows[0].map(h => h.toLowerCase().trim());
+
+    // Detect if new user-directory format (has email + productionservice columns)
+    const emailIdx = headers.findIndex(h => h.includes('email') && !h.includes('management'));
+    const productionServiceIdx = headers.findIndex(h => h.includes('productionservice'));
+
+    if (emailIdx !== -1 && productionServiceIdx !== -1) {
+        // New format: user directory with email → home agency mapping
+        const isEnabledIdx = headers.findIndex(h => h.includes('enabled'));
+        const isMainIdx = headers.findIndex(h => h.includes('ismain') || (h.includes('is') && h.includes('main')));
+        const managementIdx = headers.findIndex(h => h.includes('management'));
+
+        // Collect all assignments per user
+        const userAssignments = {}; // email → [{agencyCode, isMain, dr}]
+        for (let i = 1; i < rows.length; i++) {
+            const values = rows[i];
+            const email = (values[emailIdx] || '').toLowerCase().trim();
+            const isEnabled = isEnabledIdx === -1 || (values[isEnabledIdx] || '').toLowerCase() === 'true';
+            const isMain = isMainIdx === -1 || (values[isMainIdx] || '').toLowerCase() === 'true';
+            const agencyCode = (values[productionServiceIdx] || '').trim().toUpperCase();
+            const dr = managementIdx >= 0 ? (values[managementIdx] || '').trim() : '';
+            if (!email || !agencyCode || !isEnabled) continue;
+            if (!userAssignments[email]) userAssignments[email] = [];
+            userAssignments[email].push({ agencyCode, isMain, dr });
+            if (dr) { agencyToDR[agencyCode] = dr; agencyToDirection[agencyCode] = dr; }
+        }
+
+        // Reset and build population + emailToAgency from primary assignments
+        emailToAgency = {};
+        agencyPopulation = {};
+        Object.entries(userAssignments).forEach(([email, assignments]) => {
+            const primary = assignments.find(a => a.isMain) || assignments[0];
+            const normalizedEmail = email.toLowerCase().trim();
+            emailToAgency[normalizedEmail] = primary.agencyCode;
+            agencyPopulation[primary.agencyCode] = (agencyPopulation[primary.agencyCode] || 0) + 1;
+        });
+        console.log('User directory loaded:', Object.keys(emailToAgency).length, 'users,', Object.keys(agencyPopulation).length, 'agencies');
+    } else {
+        // Legacy format: DR, AgencyCode, Effectif
+        agencyPopulation = {};
+        agencyToDR = {};
+        agencyToDirection = {};
+        for (let i = 1; i < rows.length; i++) {
+            if (rows[i].length >= 3) {
+                const dr = rows[i][0].trim();
+                const agencyCode = rows[i][1].trim().toUpperCase();
+                const effectif = parseInt(rows[i][2].trim());
+                if (agencyCode && !isNaN(effectif)) {
+                    agencyPopulation[agencyCode] = effectif;
+                    agencyToDR[agencyCode] = dr;
+                    agencyToDirection[agencyCode] = dr;
+                }
             }
         }
+        console.log('Legacy population loaded:', Object.keys(agencyPopulation).length, 'agencies');
     }
+}
+
+function _parseUserObjects(jsonArray) {
+    // Handle direct JSON array of user objects
+    const userAssignments = {};
+    emailToAgency = {};
+    agencyPopulation = {};
+    agencyToDR = {};
+    agencyToDirection = {};
+    jsonArray.forEach(user => {
+        const email = (user.Email || user.email || '').toLowerCase().trim();
+        const isEnabled = String(user.IsEnabled || user.isEnabled || 'true').toLowerCase() === 'true';
+        const isMain = String(user['AgencyToUser → IsMain'] || user.IsMain || user.isMain || 'true').toLowerCase() === 'true';
+        const agencyCode = (user['Agency → AgencyId → ProductionService'] || user.ProductionService || user.agencyCode || '').trim().toUpperCase();
+        const dr = (user['Agency → AgencyId → Management'] || user.Management || user.dr || '').trim();
+        if (!email || !agencyCode || !isEnabled) return;
+        if (!userAssignments[email]) userAssignments[email] = [];
+        userAssignments[email].push({ agencyCode, isMain, dr });
+        if (dr) { agencyToDR[agencyCode] = dr; agencyToDirection[agencyCode] = dr; }
+    });
+    Object.entries(userAssignments).forEach(([email, assignments]) => {
+        const primary = assignments.find(a => a.isMain) || assignments[0];
+        const normalizedEmail = email.toLowerCase().trim();
+        emailToAgency[normalizedEmail] = primary.agencyCode;
+        agencyPopulation[primary.agencyCode] = (agencyPopulation[primary.agencyCode] || 0) + 1;
+    });
 }
 
 // ==================== FILTERS ====================
@@ -494,252 +649,148 @@ function calculateAgencyStatistics() {
         return 'Non spécifiée';
     };
     
-    // Calculate relevance rate for descriptif (like sup 100 mots)
+    // Helper: resolve home agency from email (user directory), fall back to item agency
+    const homeAgency = (item) => {
+        const email = (item.email || '').toLowerCase().trim();
+        return (email && emailToAgency[email]) ? emailToAgency[email] : (item.agency || '');
+    };
+
+    // Helper to get or create a statsMap entry keyed by agency code only
+    const getOrCreate = (agencyRaw) => {
+        const key = (agencyRaw || '').trim().toUpperCase() || '__NONE__';
+        if (!statsMap[key]) {
+            statsMap[key] = {
+                agencyKey: key,
+                agency: agencyRaw || '',
+                contractsWithRICT100Plus: new Set(),
+                contractsWithAIOrRICT100Plus: new Set(),
+                usersDescriptif: new Set(),
+                usersAutocontact: new Set(),
+                usersComparateur: new Set(),
+                usersExpertBTP: new Set(),
+                usersChatBTP: new Set(),
+                descriptifCount: 0,
+                autocontactCount: 0,
+                comparateurCount: 0,
+                expertBTPCount: 0,
+                chatBTPCount: 0
+            };
+        }
+        return statsMap[key];
+    };
+
+    // Denominator: ALL unique RICT contracts per agency (project agency).
+    // We count every RICT contract regardless of description length, so the
+    // numerator (AI descriptifs ≥100 words) can never exceed it.
     const allRictFiltered = getFilteredData(allRictData);
     allRictFiltered.forEach(item => {
-        const direction = getDirectionForItem(item);
-        const agency = item.agency || 'Non spécifiée';
-        const key = `${direction}|${agency}`;
-        if (!statsMap[key]) {
-            statsMap[key] = {
-                direction: direction,
-                agency: agency,
-                contractsWithRICT100Plus: new Set(),
-                contractsWithAIOrRICT100Plus: new Set(),
-                usersDescriptif: new Set(),
-                usersAutocontact: new Set(),
-                usersComparateur: new Set(),
-                usersExpertBTP: new Set(),
-                usersChatBTP: new Set(),
-                descriptifCount: 0,
-                autocontactCount: 0,
-                comparateurCount: 0,
-                expertBTPCount: 0,
-                chatBTPCount: 0
-            };
-        }
-        const stats = statsMap[key];
+        const projectAgency = (item.agency || '').trim().toUpperCase();
+        if (!projectAgency) return;
+        const stats = getOrCreate(projectAgency);
         if (item.contractNumber && item.contractNumber.trim() !== '') {
-            const processedDesc = extractText(item.description || '');
-            const descWordCount = countWords(processedDesc);
-            if (descWordCount > 100) {
-                stats.contractsWithRICT100Plus.add(item.contractNumber);
-            }
+            stats.contractsWithRICT100Plus.add(item.contractNumber);
         }
     });
-    
+
     // Process descriptif data for relevance rate
     const descriptifFiltered = getFilteredData(descriptifData);
+    // Helper: only count an email in adoption if it exists in the user directory.
+    // This ensures numerator and denominator are consistent (no user can be counted
+    // without also appearing in agencyPopulation).
+    const hasDirectory = Object.keys(emailToAgency).length > 0;
+    const isKnownUser = (email) => {
+        if (!email) return false;
+        const e = email.toLowerCase().trim();
+        if (hasDirectory) return !!emailToAgency[e];
+        // Legacy fallback: accept any BTP / Citae domain
+        return e.includes('@btp-consultants.fr') || e.includes('@citae.fr');
+    };
+
     descriptifFiltered.forEach(item => {
-        const direction = getDirectionForItem(item);
-        const agency = item.agency || 'Non spécifiée';
-        const key = `${direction}|${agency}`;
-        if (!statsMap[key]) {
-            statsMap[key] = {
-                direction: direction,
-                agency: agency,
-                contractsWithRICT100Plus: new Set(),
-                contractsWithAIOrRICT100Plus: new Set(),
-                usersDescriptif: new Set(),
-                usersAutocontact: new Set(),
-                usersComparateur: new Set(),
-                usersExpertBTP: new Set(),
-                usersChatBTP: new Set(),
-                descriptifCount: 0,
-                autocontactCount: 0,
-                comparateurCount: 0,
-                expertBTPCount: 0,
-                chatBTPCount: 0
-            };
+        // User adoption metrics → home agency (person's agency, not project's)
+        const homeStats = getOrCreate(homeAgency(item));
+        // Contract relevance metrics → project agency (same basis as contractsWithRICT100Plus)
+        const projectAgency = (item.agency || '').trim().toUpperCase();
+        const contractStats = projectAgency ? getOrCreate(projectAgency) : homeStats;
+
+        const processedAI = extractText(item.aiResult || item.description || '');
+        const descWordCount = countWords(processedAI);
+        if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount >= 100) {
+            contractStats.contractsWithAIOrRICT100Plus.add(item.contractNumber);
         }
-        const stats = statsMap[key];
-        const processedDesc = extractText(item.description || '');
-        const descWordCount = countWords(processedDesc);
-        if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount > 100) {
-            stats.contractsWithAIOrRICT100Plus.add(item.contractNumber);
-        }
-        if (item.type === DESCRIPTIF_TYPE) {
-            stats.descriptifCount++;
-            if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
-                stats.usersDescriptif.add(item.email);
+        if (!item.type || item.type === DESCRIPTIF_TYPE) {
+            if (descWordCount >= 100) homeStats.descriptifCount++;
+            if (isKnownUser(item.email)) {
+                homeStats.usersDescriptif.add(item.email.toLowerCase().trim());
             }
         }
     });
-    
+
     // Process autocontact data
     const autocontactFiltered = getFilteredData(autocontactData);
     autocontactFiltered.forEach(item => {
         if (!item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI) {
-            const direction = getDirectionForItem(item);
-            const agency = item.agency || 'Non spécifiée';
-            const key = `${direction}|${agency}`;
-            if (!statsMap[key]) {
-                statsMap[key] = {
-                    direction: direction,
-                    agency: agency,
-                    contractsWithRICT100Plus: new Set(),
-                    contractsWithAIOrRICT100Plus: new Set(),
-                    usersDescriptif: new Set(),
-                    usersAutocontact: new Set(),
-                    usersComparateur: new Set(),
-                    usersExpertBTP: new Set(),
-                    usersChatBTP: new Set(),
-                    descriptifCount: 0,
-                    autocontactCount: 0,
-                    comparateurCount: 0,
-                    expertBTPCount: 0,
-                    chatBTPCount: 0
-                };
-            }
-            const stats = statsMap[key];
+            const stats = getOrCreate(homeAgency(item));
             stats.autocontactCount++;
-            if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
-                stats.usersAutocontact.add(item.email);
+            if (isKnownUser(item.email)) {
+                stats.usersAutocontact.add(item.email.toLowerCase().trim());
             }
         }
     });
-    
+
     // Process comparateur data
     const comparateurFiltered = getFilteredData(comparateurData);
     comparateurFiltered.forEach(item => {
-        const direction = getDirectionForItem(item);
-        const agency = item.agency || 'Non spécifiée';
-        const key = `${direction}|${agency}`;
-        if (!statsMap[key]) {
-            statsMap[key] = {
-                direction: direction,
-                agency: agency,
-                contractsWithRICT100Plus: new Set(),
-                contractsWithAIOrRICT100Plus: new Set(),
-                usersDescriptif: new Set(),
-                usersAutocontact: new Set(),
-                usersComparateur: new Set(),
-                usersExpertBTP: new Set(),
-                usersChatBTP: new Set(),
-                descriptifCount: 0,
-                autocontactCount: 0,
-                comparateurCount: 0,
-                expertBTPCount: 0,
-                chatBTPCount: 0
-            };
-        }
-        const stats = statsMap[key];
+        const stats = getOrCreate(homeAgency(item));
         stats.comparateurCount++;
-        if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
-            stats.usersComparateur.add(item.email);
+        if (isKnownUser(item.email)) {
+            stats.usersComparateur.add(item.email.toLowerCase().trim());
         }
     });
-    
+
     // Process Expert BTP data
     const expertBTPFiltered = getFilteredData(expertBTPData);
     expertBTPFiltered.forEach(item => {
-        const direction = getDirectionForItem(item);
-        const agency = item.agency || 'Non spécifiée';
-        const key = `${direction}|${agency}`;
-        if (!statsMap[key]) {
-            statsMap[key] = {
-                direction: direction,
-                agency: agency,
-                contractsWithRICT100Plus: new Set(),
-                contractsWithAIOrRICT100Plus: new Set(),
-                usersDescriptif: new Set(),
-                usersAutocontact: new Set(),
-                usersComparateur: new Set(),
-                usersExpertBTP: new Set(),
-                usersChatBTP: new Set(),
-                descriptifCount: 0,
-                autocontactCount: 0,
-                comparateurCount: 0,
-                expertBTPCount: 0,
-                chatBTPCount: 0
-            };
-        }
-        const stats = statsMap[key];
-        stats.expertBTPCount++; // Count sessions, not messages
-        if (item.email && item.email.includes('@btp-consultants.fr')) {
-            stats.usersExpertBTP.add(item.email);
+        const stats = getOrCreate(homeAgency(item));
+        stats.expertBTPCount++;
+        if (isKnownUser(item.email)) {
+            stats.usersExpertBTP.add(item.email.toLowerCase().trim());
         }
     });
-    
+
     // Process Chat BTP data
     const chatBTPFiltered = getFilteredData(chatBTPData);
     chatBTPFiltered.forEach(item => {
-        const direction = getDirectionForItem(item);
-        const agency = item.agency || 'Non spécifiée';
-        const key = `${direction}|${agency}`;
-        if (!statsMap[key]) {
-            statsMap[key] = {
-                direction: direction,
-                agency: agency,
-                contractsWithRICT100Plus: new Set(),
-                contractsWithAIOrRICT100Plus: new Set(),
-                usersDescriptif: new Set(),
-                usersAutocontact: new Set(),
-                usersComparateur: new Set(),
-                usersExpertBTP: new Set(),
-                usersChatBTP: new Set(),
-                descriptifCount: 0,
-                autocontactCount: 0,
-                comparateurCount: 0,
-                expertBTPCount: 0,
-                chatBTPCount: 0
-            };
-        }
-        const stats = statsMap[key];
-        stats.chatBTPCount++; // Count sessions, not messages
-        if (item.email && item.email.includes('@btp-consultants.fr')) {
-            stats.usersChatBTP.add(item.email);
+        const stats = getOrCreate(homeAgency(item));
+        stats.chatBTPCount++;
+        if (isKnownUser(item.email)) {
+            stats.usersChatBTP.add(item.email.toLowerCase().trim());
         }
     });
     
     // Convert to array and calculate rates
     const statsArray = Object.values(statsMap).map(stats => {
-        // Get agency code
-        let agencyCode = null;
-        const sampleDescriptif = descriptifData.find(item => item.agency === stats.agency);
-        const sampleAutocontact = autocontactData.find(item => item.agency === stats.agency);
-        const sampleComparateur = comparateurData.find(item => item.agency === stats.agency);
-        const sampleItem = sampleDescriptif || sampleAutocontact || sampleComparateur;
-        if (sampleItem) {
-            if (sampleItem.agencyCode) {
-                agencyCode = sampleItem.agencyCode.trim().toUpperCase();
-            } else if (sampleItem.contractNumber) {
-                const extracted = extractAgency(sampleItem.contractNumber);
-                if (extracted) agencyCode = extracted.trim().toUpperCase();
-            } else {
-                agencyCode = (stats.agency || '').trim().toUpperCase();
-            }
-        } else {
-            agencyCode = (stats.agency || '').trim().toUpperCase();
-        }
-        
-        // Get direction from mapping if not already set
-        let finalDirection = stats.direction;
-        if (!finalDirection || finalDirection === 'Non spécifiée') {
-            if (agencyCode && agencyToDR[agencyCode]) {
-                finalDirection = agencyToDR[agencyCode];
-            } else if (stats.agency && agencyToDirection[stats.agency]) {
-                finalDirection = agencyToDirection[stats.agency];
-            } else if (agencyCode && agencyToDirection[agencyCode]) {
-                finalDirection = agencyToDirection[agencyCode];
-            } else {
-                finalDirection = 'Non spécifiée';
-            }
-        }
-        
-        const effectif = agencyCode ? (agencyPopulation[agencyCode] || 0) : 0;
+        // agencyKey is already the uppercase code set by getOrCreate
+        const agencyCode = stats.agencyKey;
+        const finalDirection = agencyToDR[agencyCode] || agencyToDirection[agencyCode] || 'Non spécifiée';
+        const effectif = agencyCode && agencyCode !== '__NONE__' ? (agencyPopulation[agencyCode] || 0) : 0;
         
         // Relevance rate for descriptif (like sup 100 mots)
         const relevanceRate = stats.contractsWithRICT100Plus.size > 0
             ? (stats.contractsWithAIOrRICT100Plus.size / stats.contractsWithRICT100Plus.size) * 100
             : 0;
         
-        // Adoption rates
-        const adoptionDescriptif = effectif > 0 ? (stats.usersDescriptif.size / effectif) * 100 : 0;
-        const adoptionAutocontact = effectif > 0 ? (stats.usersAutocontact.size / effectif) * 100 : 0;
-        const adoptionComparateur = effectif > 0 ? (stats.usersComparateur.size / effectif) * 100 : 0;
-        const adoptionExpertBTP = effectif > 0 ? (stats.usersExpertBTP.size / effectif) * 100 : 0;
-        const adoptionChatBTP = effectif > 0 ? (stats.usersChatBTP.size / effectif) * 100 : 0;
+        // Adoption rates — capped at 100% (data quality guard)
+        // Log any overflow to help diagnose directory vs data mismatches
+        if (effectif > 0 && stats.usersDescriptif.size > effectif) {
+            console.warn(`[Adoption >100%] ${agencyCode}: ${stats.usersDescriptif.size} users in data vs ${effectif} in directory`);
+            console.warn(`  emails in usersDescriptif not in agencyPopulation scope:`, [...stats.usersDescriptif].filter(e => emailToAgency[e] !== agencyCode));
+        }
+        const adoptionDescriptif  = effectif > 0 ? Math.min(100, (stats.usersDescriptif.size  / effectif) * 100) : 0;
+        const adoptionAutocontact = effectif > 0 ? Math.min(100, (stats.usersAutocontact.size  / effectif) * 100) : 0;
+        const adoptionComparateur = effectif > 0 ? Math.min(100, (stats.usersComparateur.size  / effectif) * 100) : 0;
+        const adoptionExpertBTP   = effectif > 0 ? Math.min(100, (stats.usersExpertBTP.size    / effectif) * 100) : 0;
+        const adoptionChatBTP     = effectif > 0 ? Math.min(100, (stats.usersChatBTP.size      / effectif) * 100) : 0;
         
         const total = stats.descriptifCount + stats.autocontactCount + stats.comparateurCount + stats.expertBTPCount + stats.chatBTPCount;
         
@@ -926,7 +977,7 @@ function updateChart() {
     
     // Process all data sources and group by month (cumulative)
     const allSources = [
-        { data: descriptifData, tool: 'descriptif', filter: (item) => item.type === DESCRIPTIF_TYPE },
+        { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && countWords(extractText(item.aiResult || item.description || '')) >= 100 },
         { data: autocontactData, tool: 'autocontact', filter: (item) => item.fromAI && !item.contractNumber.toUpperCase().includes('YIELD') },
         { data: comparateurData, tool: 'comparateur', filter: () => true },
         { data: expertBTPData, tool: 'expertBTP', filter: () => true },
@@ -1788,7 +1839,12 @@ async function loadData() {
         } catch (e) {}
         if (descriptifCSV) {
             allRictData = parseDescriptifCSV(descriptifCSV);
-            descriptifData = allRictData.filter(item => item.type === DESCRIPTIF_TYPE);
+            // Align with descriptif.js filterByType logic: if export is pre-filtered,
+            // some items may have empty type — include them too
+            const anyHasType = allRictData.some(item => item.type && item.type.trim() !== '');
+            descriptifData = anyHasType
+                ? allRictData.filter(item => !item.type || item.type === DESCRIPTIF_TYPE)
+                : allRictData;
             
             // Enrich with direction from population mapping
             allRictData.forEach(item => {

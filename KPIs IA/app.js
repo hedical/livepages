@@ -197,6 +197,44 @@ function parseCSVLine(line) {
 }
 
 /**
+ * Full CSV parser that correctly handles quoted fields containing newlines
+ */
+function parseFullCSV(csvString) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvString.length; i++) {
+        const char = csvString[i];
+        const next = csvString[i + 1];
+
+        if (char === '"') {
+            if (inQuotes && next === '"') { currentField += '"'; i++; }
+            else { inQuotes = !inQuotes; }
+        } else if (char === ',' && !inQuotes) {
+            currentRow.push(currentField.trim());
+            currentField = '';
+        } else if (char === '\r' && next === '\n' && !inQuotes) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = []; currentField = ''; i++;
+        } else if ((char === '\n' || char === '\r') && !inQuotes) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = []; currentField = '';
+        } else {
+            currentField += char;
+        }
+    }
+    if (currentField || currentRow.length > 0) {
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f !== '')) rows.push(currentRow);
+    }
+    return rows;
+}
+
+/**
  * Extract agency code from contract number
  */
 function extractAgency(contractNumber) {
@@ -277,11 +315,11 @@ function parseDescriptifCSV(csvString) {
         csvString = csvString.substring(0, csvString.length - 1).trim();
     }
     
-    const lines = csvString.split('\n').filter(line => line.trim() !== '');
-    if (lines.length === 0) return [];
-    
-    const headers = parseCSVLine(lines[0]);
-    
+    const rows = parseFullCSV(csvString);
+    if (rows.length === 0) return [];
+
+    const headers = rows[0];
+
     // Find column indices
     let typeIndex = -1;
     let contractIndex = -1;
@@ -291,46 +329,32 @@ function parseDescriptifCSV(csvString) {
     let managementIndex = -1;
     let descriptionIndex = -1;
     let aiResultIndex = -1;
-    
+
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
-        if (typeIndex === -1 && header.includes('aideliver') && header.includes('type')) {
-            typeIndex = i;
-        }
-        if (contractIndex === -1 && header.includes('contractnumber')) {
-            contractIndex = i;
-        }
-        if (diffusedAtIndex === -1 && header.includes('report') && header.includes('diffusedat')) {
-            diffusedAtIndex = i;
-        }
-        if (emailIndex === -1 && header.includes('user') && header.includes('email')) {
-            emailIndex = i;
-        }
-        if (agencyIndex === -1 && header.includes('productionservice')) {
-            agencyIndex = i;
-        }
-        if (managementIndex === -1 && header.includes('management')) {
-            managementIndex = i;
-        }
-        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) {
-            descriptionIndex = i;
-        }
-        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) {
-            aiResultIndex = i;
-        }
+        if (typeIndex === -1 && (
+            (header.includes('aideliver') && header.includes('type')) ||
+            header.includes('reporttype') ||
+            (header.includes('report') && header.includes('type') && !header.includes('diffusedat'))
+        )) { typeIndex = i; }
+        if (contractIndex === -1 && header.includes('contractnumber')) { contractIndex = i; }
+        if (diffusedAtIndex === -1 && header.includes('report') && header.includes('diffusedat')) { diffusedAtIndex = i; }
+        if (emailIndex === -1 && header.includes('user') && header.includes('email')) { emailIndex = i; }
+        if (agencyIndex === -1 && header.includes('productionservice')) { agencyIndex = i; }
+        if (managementIndex === -1 && header.includes('management')) { managementIndex = i; }
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) { descriptionIndex = i; }
+        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) { aiResultIndex = i; }
     }
-    
-    if (typeIndex === -1 || contractIndex === -1) {
-        return [];
-    }
-    
+
+    if (contractIndex === -1) return [];
+
     // Parse data rows
     const data = [];
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
         if (values.length < headers.length / 2) continue;
-        
-        const type = values[typeIndex] || '';
+
+        const type = typeIndex >= 0 ? (values[typeIndex] || '') : '';
         const contractNumber = values[contractIndex] || '';
         const diffusedAt = diffusedAtIndex >= 0 ? values[diffusedAtIndex] : '';
         const email = emailIndex >= 0 ? values[emailIndex] : '';
@@ -338,7 +362,7 @@ function parseDescriptifCSV(csvString) {
         const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
         const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
-        
+
         data.push({
             type: (type || '').trim(),
             contractNumber: (contractNumber || '').trim(),
@@ -350,9 +374,9 @@ function parseDescriptifCSV(csvString) {
             aiResult: aiResult
         });
     }
-    
-        return data;
-    }
+
+    return data;
+}
 
 /**
  * Parse CSV data for autocontact
@@ -497,6 +521,60 @@ function extractMaxPage(longResultString) {
 }
 
 /**
+ * Parse new direct JSON array format for comparateur
+ */
+function parseComparateurJSON(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
+        console.warn('Invalid or empty JSON array for comparateur');
+        return [];
+    }
+
+    console.log('Parsing comparateur from direct JSON array, rows:', jsonArray.length);
+    const data = [];
+
+    jsonArray.forEach((item) => {
+        const contractNumber = (item['ContractNumber'] || '').trim();
+        const createdAt = (item['AIDeliverable → CreatedAt'] || '').trim();
+        const email = (item['User - UserId → Email'] || '').trim();
+        const agency = (item['Agency - AgencyId → ProductionService'] || '').trim();
+        const direction = (item['Agency - AgencyId → Management'] || '').trim();
+
+        let maxPage = 0;
+        const itemsStr = item['LongResult → IndexComparator → Items'];
+        if (itemsStr && typeof itemsStr === 'string') {
+            try {
+                const items = JSON.parse(itemsStr);
+                if (Array.isArray(items)) {
+                    items.forEach(it => {
+                        if (it.page !== undefined && it.page !== null) {
+                            const pageNum = typeof it.page === 'number' ? it.page : parseInt(it.page);
+                            if (!isNaN(pageNum)) maxPage = Math.max(maxPage, pageNum);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse IndexComparator Items:', e.message);
+            }
+        }
+        if (maxPage === 0) {
+            maxPage = extractMaxPage(item['AIDeliverable → LongResult'] || '');
+        }
+
+        data.push({
+            contractNumber,
+            createdAt,
+            email,
+            agency,
+            direction,
+            maxPage
+        });
+    });
+
+    console.log('Parsed', data.length, 'comparateur rows from direct JSON');
+    return data;
+}
+
+/**
  * Parse CSV data for comparateur
  */
 function parseComparateurCSV(csvString) {
@@ -519,22 +597,33 @@ function parseComparateurCSV(csvString) {
     
     // Find column indices
     let contractIndex = -1;
+    let createdAtIndex = -1;
     let emailIndex = -1;
     let longResultIndex = -1;
+    let indexComparatorItemsIndex = -1;
     let agencyIndex = -1;
     let managementIndex = -1;
-    
+
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i];
         const headerLower = header.toLowerCase();
-        
+
         if (contractIndex === -1 && (headerLower.includes('contractnumber') || header.includes('SubAffairDetailId'))) {
             contractIndex = i;
+        }
+        // CreatedAt — supports "CreatedAt" and "AIDeliverable → CreatedAt"
+        if (createdAtIndex === -1 && headerLower.includes('createdat')) {
+            createdAtIndex = i;
         }
         if (emailIndex === -1 && header.includes('User') && header.includes('Email')) {
             emailIndex = i;
         }
-        if (longResultIndex === -1 && headerLower === 'longresult') {
+        // LongResult → IndexComparator → Items (direct JSON array — higher priority for pages)
+        if (indexComparatorItemsIndex === -1 && headerLower.includes('indexcomparator') && headerLower.includes('items')) {
+            indexComparatorItemsIndex = i;
+        }
+        // LongResult — supports "LongResult" and "AIDeliverable → LongResult"
+        if (longResultIndex === -1 && headerLower.includes('longresult') && !headerLower.includes('indexcomparator')) {
             longResultIndex = i;
         }
         if (agencyIndex === -1 && headerLower.includes('productionservice')) {
@@ -544,26 +633,48 @@ function parseComparateurCSV(csvString) {
             managementIndex = i;
         }
     }
-    
-    if (contractIndex === -1 || longResultIndex === -1) {
+
+    if (contractIndex === -1 || (longResultIndex === -1 && indexComparatorItemsIndex === -1)) {
         return [];
     }
-    
+
     // Parse data rows
     const data = [];
     for (let i = 1; i < lines.length; i++) {
         const values = parseCSVLine(lines[i]);
         if (values.length < headers.length / 2) continue;
-        
+
         const contractNumber = values[contractIndex] || '';
-        const email = emailIndex >= 0 ? values[emailIndex] : '';
-        const longResult = values[longResultIndex] || '';
+        const createdAt = (createdAtIndex >= 0 ? values[createdAtIndex] : '') || '';
+        const email = (emailIndex >= 0 ? values[emailIndex] : '') || '';
+        const longResult = (longResultIndex >= 0 ? values[longResultIndex] : '') || '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
         const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
-        const maxPage = extractMaxPage(longResult);
-        
+
+        // Extract max page: try IndexComparator Items (flat array) first, then LongResult JSON
+        let maxPage = 0;
+        if (indexComparatorItemsIndex >= 0 && values[indexComparatorItemsIndex]) {
+            try {
+                const items = JSON.parse(values[indexComparatorItemsIndex]);
+                if (Array.isArray(items)) {
+                    items.forEach(it => {
+                        if (it.page !== undefined && it.page !== null) {
+                            const p = typeof it.page === 'number' ? it.page : parseInt(it.page);
+                            if (!isNaN(p)) maxPage = Math.max(maxPage, p);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse IndexComparator Items in CSV row:', e.message);
+            }
+        }
+        if (maxPage === 0) {
+            maxPage = extractMaxPage(longResult);
+        }
+
         data.push({
             contractNumber: (contractNumber || '').trim(),
+            createdAt: (createdAt || '').trim(),
             email: (email || '').trim(),
             agency: (agency || '').trim(),
             direction: (direction || '').trim(),
@@ -893,7 +1004,7 @@ function updateAgencyTable() {
             
             if (type === 'descriptif' && !item.contractNumber.toUpperCase().includes('YIELD')) {
                 agencyStats[ag].descriptifPotential++;
-                if (item.type === DESCRIPTIF_TYPE) {
+                if ((!item.type || item.type === DESCRIPTIF_TYPE)) {
                     agencyStats[ag].descriptifCount++;
                     if (isBtpOrCitae) agencyStats[ag].usersDescriptif.add(item.email);
                 }
@@ -1176,7 +1287,7 @@ function processDescriptifData(data) {
     
     // Filter by type
     const descriptifFiltered = filtered.filter(item => 
-        item.type === DESCRIPTIF_TYPE
+        (!item.type || item.type === DESCRIPTIF_TYPE)
     );
     
     // Total utilisations = nombre de descriptifs générés
@@ -1195,7 +1306,7 @@ function processDescriptifData(data) {
     descriptifFiltered.forEach(item => {
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.aiResult || '');
+            const processedAI = extractText(item.aiResult || item.description || '');
             const wordCount = countWords(processedAI);
             
             // Ne compter que les RICT avec au moins 100 mots
@@ -1537,7 +1648,7 @@ function updateKPIs() {
     const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions;
     const allUsers = new Set();
     
-    getFilteredData(descriptifData).filter(item => item.type === DESCRIPTIF_TYPE).forEach(item => {
+    getFilteredData(descriptifData).filter(item => (!item.type || item.type === DESCRIPTIF_TYPE)).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
     
@@ -1882,13 +1993,19 @@ async function loadData() {
         let comparateurCSV = null;
         try {
             const comparateurJson = JSON.parse(comparateurRaw);
-            if (Array.isArray(comparateurJson) && comparateurJson[0] && comparateurJson[0].data) {
+            if (Array.isArray(comparateurJson) && comparateurJson.length > 0 && comparateurJson[0].data) {
                 comparateurCSV = comparateurJson[0].data;
+            } else if (Array.isArray(comparateurJson) && comparateurJson.length > 0) {
+                // New direct JSON array format
+                console.log('Found direct JSON array format for comparateur');
+                comparateurData = parseComparateurJSON(comparateurJson);
+                console.log('Loaded', comparateurData.length, 'comparateur records');
+                comparateurCSV = null; // already parsed
             }
         } catch (e) {
             console.warn('Failed to parse comparateur JSON:', e);
         }
-        
+
         if (comparateurCSV) {
             comparateurData = parseComparateurCSV(comparateurCSV);
             console.log('Loaded', comparateurData.length, 'comparateur records');
@@ -2304,7 +2421,7 @@ function collectActiveUsers() {
 
     // Descriptif
     descriptifData
-        .filter(item => item.type === DESCRIPTIF_TYPE && !item.contractNumber.toUpperCase().includes('YIELD'))
+        .filter(item => (!item.type || item.type === DESCRIPTIF_TYPE) && !item.contractNumber.toUpperCase().includes('YIELD'))
         .forEach(item => upsert(item.email, getDomainFiliale(item.email), 'descriptif', item.createdAt));
 
     // Autocontact (@btp-consultants.fr, fromAI, pas YIELD)
@@ -2496,7 +2613,7 @@ function calculateMonthlyUsers() {
 
     // Descriptif (type = DESCRIPTIF_TYPE, pas de YIELD)
     getFilteredData(descriptifData)
-        .filter(item => item.type === DESCRIPTIF_TYPE && !item.contractNumber.toUpperCase().includes('YIELD'))
+        .filter(item => (!item.type || item.type === DESCRIPTIF_TYPE) && !item.contractNumber.toUpperCase().includes('YIELD'))
         .forEach(item => addUser(item.createdAt, item.email));
 
     // Autocontact (@btp-consultants.fr, pas de YIELD, fromAI)
@@ -2830,7 +2947,7 @@ function calculateMonthlyGains() {
     const descriptifFirstMonth = new Map(); // contractNumber → earliest valid month key
     getFilteredData(descriptifData)
         .filter(item =>
-            item.type === DESCRIPTIF_TYPE &&
+            (!item.type || item.type === DESCRIPTIF_TYPE) &&
             item.contractNumber &&
             item.contractNumber.trim() !== '' &&
             !item.contractNumber.toUpperCase().includes('YIELD')
@@ -2838,7 +2955,7 @@ function calculateMonthlyGains() {
         .forEach(item => {
             const key = getMonthKey(item.createdAt);
             if (!key) return;
-            const wordCount = countWords(extractText(item.aiResult || ''));
+            const wordCount = countWords(extractText(item.aiResult || item.description || ''));
             if (wordCount < 100) return;
             const prev = descriptifFirstMonth.get(item.contractNumber);
             if (!prev || key < prev) {
@@ -2941,6 +3058,15 @@ function calculateMonthlyGains() {
             label: `${monthNames[parseInt(month) - 1]} ${year}`,
             hours: gains.timeGainHours,
             euros: gains.euroGain,
+            hoursDescriptif:    gains.timeGainHoursDescriptif,
+            hoursAutocontact:   gains.timeGainHoursAutocontact,
+            hoursComparateur:   gains.timeGainHoursComparateur,
+            hoursChatBTP:       gains.timeGainHoursChatBTP,
+            hoursExpertBTP:     gains.timeGainHoursExpertBTP,
+            hoursChatCitae:     gains.timeGainHoursChatCitae,
+            hoursExpertCitae:   gains.timeGainHoursExpertCitae,
+            hoursChatBTPDiag:   gains.timeGainHoursChatBTPDiag,
+            hoursExpertBTPDiag: gains.timeGainHoursExpertBTPDiag,
         };
     });
 }
@@ -2954,17 +3080,38 @@ function buildGainChart() {
 
     const isCumul = gainModalIsCumulative;
 
-    // Build display data (monthly or cumulative)
-    let hoursData, eurosData;
+    // Feature definitions: key in gainModalData, display label, color
+    const features = [
+        { key: 'hoursDescriptif',    label: 'Descriptif',          color: 'rgba(59, 130, 246, 0.85)'  },
+        { key: 'hoursAutocontact',   label: 'Autocontact',         color: 'rgba(16, 185, 129, 0.85)'  },
+        { key: 'hoursComparateur',   label: 'Comparateur',         color: 'rgba(245, 158, 11, 0.85)'  },
+        { key: 'hoursChatBTP',       label: 'Chat BTP',            color: 'rgba(139, 92, 246, 0.85)'  },
+        { key: 'hoursExpertBTP',     label: 'Expert BTP',          color: 'rgba(99, 102, 241, 0.85)'  },
+        { key: 'hoursChatCitae',     label: 'Chat Citae',          color: 'rgba(20, 184, 166, 0.85)'  },
+        { key: 'hoursExpertCitae',   label: 'Expert Citae',        color: 'rgba(6, 182, 212, 0.85)'   },
+        { key: 'hoursChatBTPDiag',   label: 'Chat BTP Diag',       color: 'rgba(244, 63, 94, 0.85)'   },
+        { key: 'hoursExpertBTPDiag', label: 'Expert BTP Diag',     color: 'rgba(251, 146, 60, 0.85)'  },
+    ];
+
+    // Build cumulative or monthly series per feature + euros line
+    const buildSeries = (fieldKey) => {
+        if (isCumul) {
+            let cum = 0;
+            return gainModalData.map(d => { cum += (d[fieldKey] || 0); return Math.round(cum * 100) / 100; });
+        }
+        return gainModalData.map(d => Math.round((d[fieldKey] || 0) * 100) / 100);
+    };
+
+    let eurosData;
     if (isCumul) {
-        let cumH = 0, cumE = 0;
-        hoursData = gainModalData.map(d => { cumH += d.hours; return Math.round(cumH * 100) / 100; });
+        let cumE = 0;
         eurosData = gainModalData.map(d => { cumE += d.euros; return Math.round(cumE); });
     } else {
-        hoursData = gainModalData.map(d => Math.round(d.hours * 100) / 100);
         eurosData = gainModalData.map(d => Math.round(d.euros));
     }
+
     const labels = gainModalData.map(d => d.label);
+    const modeLabel = isCumul ? ' (cumulé)' : ' (mensuel)';
 
     if (gainEvolutionChart) {
         gainEvolutionChart.destroy();
@@ -2972,23 +3119,25 @@ function buildGainChart() {
     }
 
     const ctx = canvas.getContext('2d');
-    const modeLabel = isCumul ? ' (cumulé)' : ' (mensuel)';
+
+    // One stacked bar dataset per feature + euros line on top
+    const barDatasets = features.map(f => ({
+        label: f.label,
+        data: buildSeries(f.key),
+        backgroundColor: f.color,
+        borderColor: f.color.replace('0.85', '1'),
+        borderWidth: 0,
+        stack: 'hours',
+        yAxisID: 'yHours',
+        order: 2,
+    }));
 
     gainEvolutionChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels,
             datasets: [
-                {
-                    label: `Gain en heures${modeLabel}`,
-                    data: hoursData,
-                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
-                    borderColor: 'rgba(37, 99, 235, 1)',
-                    borderWidth: 2,
-                    borderRadius: 5,
-                    yAxisID: 'yHours',
-                    order: 2,
-                },
+                ...barDatasets,
                 {
                     label: `Gain en €${modeLabel}`,
                     data: eurosData,
@@ -3015,8 +3164,14 @@ function buildGainChart() {
             plugins: {
                 legend: {
                     display: true,
-                    position: 'top',
-                    labels: { font: { size: 13, weight: '500' }, color: '#1F2937', padding: 16, usePointStyle: true }
+                    position: 'bottom',
+                    labels: {
+                        font: { size: 12, weight: '500' },
+                        color: '#1F2937',
+                        padding: 14,
+                        usePointStyle: true,
+                        pointStyle: 'rectRounded',
+                    }
                 },
                 tooltip: {
                     backgroundColor: 'rgba(17, 24, 39, 0.95)',
@@ -3031,9 +3186,18 @@ function buildGainChart() {
                             const label = context.dataset.label || '';
                             const value = context.parsed.y;
                             if (context.dataset.yAxisID === 'yHours') {
-                                return ` ${label} : ${new Intl.NumberFormat('fr-FR').format(Math.round(value))} h`;
+                                const h = Math.round(value * 10) / 10;
+                                return ` ${label} : ${new Intl.NumberFormat('fr-FR').format(h)} h`;
                             }
                             return ` ${label} : ${new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)}`;
+                        },
+                        footer: function(tooltipItems) {
+                            // Sum of all bar segments = total hours for the month
+                            const total = tooltipItems
+                                .filter(i => i.dataset.yAxisID === 'yHours')
+                                .reduce((sum, i) => sum + (i.parsed.y || 0), 0);
+                            if (total <= 0) return '';
+                            return `Total : ${new Intl.NumberFormat('fr-FR').format(Math.round(total * 10) / 10)} h`;
                         }
                     }
                 }
@@ -3041,12 +3205,14 @@ function buildGainChart() {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { font: { size: 11 }, color: '#6B7280' }
+                    ticks: { font: { size: 11 }, color: '#6B7280' },
+                    stacked: true,
                 },
                 yHours: {
                     type: 'linear',
                     position: 'left',
                     beginAtZero: true,
+                    stacked: true,
                     grid: { color: 'rgba(229, 231, 235, 0.8)' },
                     title: { display: true, text: 'Heures (h)', font: { size: 12, weight: 'bold' }, color: '#3B82F6' },
                     ticks: {

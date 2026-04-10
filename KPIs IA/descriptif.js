@@ -12,6 +12,7 @@ let availableAgencies = [];
 let availableDRs = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
+let emailToAgency = {}; // {email (lowercase): agencyCode (uppercase)} — home agency from user directory
 let dateChart = null;
 let ratesChart = null;
 let tableSortState = {
@@ -253,27 +254,27 @@ function formatHours(hours) {
 }
 
 // Calculate gains based on current data and mode
-function calculateGains(descriptifsCount) {
+// usersCount: unique active users for current period (denominator for %)
+//             pass getTotalEffectif() for max atteignable
+function calculateGains(descriptifsCount, usersCount) {
     // 1. Gain en temps (minutes → heures)
     const timeGainMinutes = descriptifsCount * parameters.minutesPerDescriptif;
     const timeGainHours = timeGainMinutes / 60;
-    
-    // 2. Total effectif
-    const totalEffectif = getTotalEffectif();
-    
-    // 3. Gain en % volume d'affaire
+
+    // 2. Gain en % volume d'affaire — based on active users, not total effectif
     let percentGain = 0;
-    if (totalEffectif > 0 && parameters.annualHours > 0) {
-        percentGain = (timeGainHours / (totalEffectif * parameters.annualHours)) * 100;
+    if (usersCount > 0 && parameters.annualHours > 0) {
+        percentGain = (timeGainHours / (usersCount * parameters.annualHours)) * 100;
     }
-    
-    // 4. Gain en €
+
+    // 3. Gain en €
     const euroGain = (percentGain / 100) * parameters.totalRevenue;
-    
+
     return {
         timeGainHours,
         percentGain,
-        euroGain
+        euroGain,
+        usersCount
     };
 }
 
@@ -298,35 +299,39 @@ function calculatePeriodMonths() {
 }
 
 // Update gains display
-function updateGains(descriptifsCount, totalRictCount) {
-    const gains = calculateGains(descriptifsCount);
-    const maxGains = calculateGains(totalRictCount);
-    
+// uniqueUsers: unique active users in the current period (denominator for current gain %)
+// Max atteignable always uses getTotalEffectif() as denominator
+function updateGains(descriptifsCount, totalRictCount, uniqueUsers) {
+    const totalEffectif = getTotalEffectif();
+    const activeUsers = (uniqueUsers > 0) ? uniqueUsers : totalEffectif;
+
+    const gains = calculateGains(descriptifsCount, activeUsers);
+    const maxGains = calculateGains(totalRictCount, activeUsers);
+
     // Calculate projection for the year
     const periodMonths = calculatePeriodMonths();
     const projectionMultiplier = 12 / periodMonths;
     const projectedDescriptifs = descriptifsCount * projectionMultiplier;
-    const projectionGains = calculateGains(projectedDescriptifs);
-    
+    const projectionGains = calculateGains(projectedDescriptifs, activeUsers);
+
     // Calculate max projection for the year
     const projectedMaxDescriptifs = totalRictCount * projectionMultiplier;
-    const maxProjectionGains = calculateGains(projectedMaxDescriptifs);
-    
+    const maxProjectionGains = calculateGains(projectedMaxDescriptifs, activeUsers);
+
     // Update time gain
     gainTimeEl.textContent = formatHours(gains.timeGainHours);
     gainTimeFormulaEl.textContent = `${formatNumber(descriptifsCount)} descriptifs × ${parameters.minutesPerDescriptif}min`;
     gainTimeMaxEl.textContent = `Max atteignable: ${formatHours(maxGains.timeGainHours)}`;
     gainTimeProjectionEl.textContent = `Projection année: ${formatHours(projectionGains.timeGainHours)} (${periodMonths} mois)`;
     gainTimeMaxProjectionEl.textContent = `Projection max année: ${formatHours(maxProjectionGains.timeGainHours)}`;
-    
+
     // Update percent gain
     gainPercentEl.textContent = `${gains.percentGain.toFixed(4)}%`;
-    const totalEffectif = getTotalEffectif();
-    gainPercentFormulaEl.textContent = `${formatHours(gains.timeGainHours)} / (${totalEffectif} × ${parameters.annualHours}h)`;
+    gainPercentFormulaEl.textContent = `${formatHours(gains.timeGainHours)} / (${activeUsers} × ${parameters.annualHours}h)`;
     gainPercentMaxEl.textContent = `Max atteignable: ${maxGains.percentGain.toFixed(4)}%`;
     gainPercentProjectionEl.textContent = `Projection année: ${projectionGains.percentGain.toFixed(4)}%`;
     gainPercentMaxProjectionEl.textContent = `Projection max année: ${maxProjectionGains.percentGain.toFixed(4)}%`;
-    
+
     // Update euro gain
     gainEuroEl.textContent = `${formatNumber(gains.euroGain)} €`;
     gainEuroFormulaEl.textContent = `${gains.percentGain.toFixed(4)}% × ${formatNumber(parameters.totalRevenue)} €`;
@@ -340,10 +345,10 @@ function parseCSVLine(line) {
     const values = [];
     let current = '';
     let inQuotes = false;
-    
+
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        
+
         if (char === '"') {
             inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
@@ -355,6 +360,60 @@ function parseCSVLine(line) {
     }
     values.push(current.trim());
     return values;
+}
+
+// Full CSV parser that correctly handles quoted fields containing newlines
+function parseFullCSV(csvString) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvString.length; i++) {
+        const char = csvString[i];
+        const next = csvString[i + 1];
+
+        if (char === '"') {
+            if (inQuotes && next === '"') {
+                // Escaped quote ""
+                currentField += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            currentRow.push(currentField.trim());
+            currentField = '';
+        } else if (char === '\r' && next === '\n' && !inQuotes) {
+            // Windows CRLF line ending
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = [];
+            currentField = '';
+            i++; // skip the \n
+        } else if (char === '\n' && !inQuotes) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = [];
+            currentField = '';
+        } else if (char === '\r' && !inQuotes) {
+            // Lone \r — treat as line ending
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = [];
+            currentField = '';
+        } else {
+            currentField += char;
+        }
+    }
+
+    // Flush last field/row
+    if (currentField || currentRow.length > 0) {
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f !== '')) rows.push(currentRow);
+    }
+
+    return rows;
 }
 
 // Fix encoding issues in text (convert from Latin-1/Windows-1252 to UTF-8)
@@ -427,47 +486,113 @@ function extractCSVFromDataField(csvText) {
     return csvText;
 }
 
-// Parse population CSV file
+// Parse population / user directory file
 async function loadAgencyPopulation() {
     try {
         const response = await fetch(POPULATION_CSV_URL);
         if (!response.ok) {
-            console.warn('Could not load population_cible.csv');
-            return { population: {}, drMapping: {} };
+            console.warn('Could not load population file');
+            return { population: {}, drMapping: {}, emailMap: {} };
         }
-        
-        let csvText = await response.text();
+
+        const rawData = await response.text();
+        const result = _parseUserDirectory(rawData);
+        console.log('Population loaded:', Object.keys(result.population).length, 'agencies,', Object.keys(result.emailMap).length, 'users');
+        return result;
+    } catch (error) {
+        console.warn('Error loading population data:', error);
+        return { population: {}, drMapping: {}, emailMap: {} };
+    }
+}
+
+function _parseUserDirectory(rawData) {
+    const population = {};
+    const drMapping = {};
+    const emailMap = {};
+
+    let csvText = rawData.trim();
+
+    // Try JSON formats
+    try {
+        const json = JSON.parse(csvText);
+        if (Array.isArray(json) && json.length > 0 && json[0].data) {
+            csvText = json[0].data;
+        } else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object') {
+            return _parseUserObjectsDescriptif(json);
+        }
+    } catch(e) {
         csvText = fixEncoding(csvText);
-        
-        // Extract CSV from "data" field if present
         csvText = extractCSVFromDataField(csvText);
-        
-        const lines = csvText.split('\n').filter(line => line.trim() !== '');
-        
-        const population = {};
-        const drMapping = {};
-        
-        // Skip header (line 0: DR,Agence,Effectif) - now using commas
-        for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLineWithCommas(lines[i]);
-            if (parts.length >= 3) {
-                const dr = parts[0].trim();
-                const agencyCode = parts[1].trim();
-                const effectif = parseInt(parts[2].trim());
+    }
+
+    const rows = parseFullCSV(csvText);
+    if (rows.length < 2) return { population, drMapping, emailMap };
+
+    const headers = rows[0].map(h => h.toLowerCase().trim());
+    const emailIdx = headers.findIndex(h => h.includes('email') && !h.includes('management'));
+    const productionServiceIdx = headers.findIndex(h => h.includes('productionservice'));
+
+    if (emailIdx !== -1 && productionServiceIdx !== -1) {
+        // New user-directory format
+        const isEnabledIdx = headers.findIndex(h => h.includes('enabled'));
+        const isMainIdx = headers.findIndex(h => h.includes('ismain') || (h.includes('is') && h.includes('main')));
+        const managementIdx = headers.findIndex(h => h.includes('management'));
+
+        const userAssignments = {};
+        for (let i = 1; i < rows.length; i++) {
+            const v = rows[i];
+            const email = (v[emailIdx] || '').toLowerCase().trim();
+            const isEnabled = isEnabledIdx === -1 || (v[isEnabledIdx] || '').toLowerCase() === 'true';
+            const isMain = isMainIdx === -1 || (v[isMainIdx] || '').toLowerCase() === 'true';
+            const agencyCode = (v[productionServiceIdx] || '').trim().toUpperCase();
+            const dr = managementIdx >= 0 ? (v[managementIdx] || '').trim() : '';
+            if (!email || !agencyCode || !isEnabled) continue;
+            if (!userAssignments[email]) userAssignments[email] = [];
+            userAssignments[email].push({ agencyCode, isMain, dr });
+            if (dr) drMapping[agencyCode] = dr;
+        }
+        Object.entries(userAssignments).forEach(([email, assignments]) => {
+            const primary = assignments.find(a => a.isMain) || assignments[0];
+            emailMap[email] = primary.agencyCode;
+            population[primary.agencyCode] = (population[primary.agencyCode] || 0) + 1;
+        });
+    } else {
+        // Legacy format: DR, AgencyCode, Effectif
+        for (let i = 1; i < rows.length; i++) {
+            if (rows[i].length >= 3) {
+                const dr = rows[i][0].trim();
+                const agencyCode = rows[i][1].trim().toUpperCase();
+                const effectif = parseInt(rows[i][2].trim());
                 if (agencyCode && !isNaN(effectif)) {
                     population[agencyCode] = effectif;
                     drMapping[agencyCode] = dr;
                 }
             }
         }
-        
-        console.log('Loaded population data for', Object.keys(population).length, 'agencies');
-        console.log('Loaded DR mapping for', Object.keys(drMapping).length, 'agencies');
-        return { population, drMapping };
-    } catch (error) {
-        console.warn('Error loading population data:', error);
-        return { population: {}, drMapping: {} };
     }
+    return { population, drMapping, emailMap };
+}
+
+function _parseUserObjectsDescriptif(jsonArray) {
+    const population = {}, drMapping = {}, emailMap = {};
+    const userAssignments = {};
+    jsonArray.forEach(user => {
+        const email = (user.Email || user.email || '').toLowerCase().trim();
+        const isEnabled = String(user.IsEnabled || user.isEnabled || 'true').toLowerCase() === 'true';
+        const isMain = String(user['AgencyToUser → IsMain'] || user.IsMain || user.isMain || 'true').toLowerCase() === 'true';
+        const agencyCode = (user['Agency → AgencyId → ProductionService'] || user.ProductionService || '').trim().toUpperCase();
+        const dr = (user['Agency → AgencyId → Management'] || user.Management || '').trim();
+        if (!email || !agencyCode || !isEnabled) return;
+        if (!userAssignments[email]) userAssignments[email] = [];
+        userAssignments[email].push({ agencyCode, isMain, dr });
+        if (dr) drMapping[agencyCode] = dr;
+    });
+    Object.entries(userAssignments).forEach(([email, assignments]) => {
+        const primary = assignments.find(a => a.isMain) || assignments[0];
+        emailMap[email] = primary.agencyCode;
+        population[primary.agencyCode] = (population[primary.agencyCode] || 0) + 1;
+    });
+    return { population, drMapping, emailMap };
 }
 
 // Parse CSV data from string
@@ -489,18 +614,14 @@ function parseCSVData(csvString) {
         csvString = csvString.substring(5).trim();
     }
     
-    const lines = csvString.split('\n').filter(line => {
-        const trimmed = line.trim();
-        return trimmed !== '' && trimmed !== '[' && trimmed !== ']';
-    });
-    
-    if (lines.length === 0) {
-        console.warn('No valid lines after CSV cleanup');
+    const rows = parseFullCSV(csvString);
+
+    if (rows.length === 0) {
+        console.warn('No valid rows after CSV parsing');
         return [];
     }
-    
-    const headerLine = lines[0];
-    const headers = parseCSVLine(headerLine);
+
+    const headers = rows[0];
     
     console.log('CSV headers:', headers.slice(0, 10));
     
@@ -516,7 +637,11 @@ function parseCSVData(csvString) {
     
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
-        if (typeIndex === -1 && header.includes('aideliver') && header.includes('type')) {
+        if (typeIndex === -1 && (
+            (header.includes('aideliver') && header.includes('type')) ||
+            header.includes('reporttype') ||
+            (header.includes('report') && header.includes('type') && !header.includes('diffusedat'))
+        )) {
             typeIndex = i;
         }
         if (contractIndex === -1 && header.includes('contractnumber')) {
@@ -558,8 +683,8 @@ function parseCSVData(csvString) {
     
     // Parse data rows
     const data = [];
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
         if (values.length < headers.length / 2) {
             continue; // Skip malformed rows
         }
@@ -640,7 +765,10 @@ function filterYieldAffairs(data) {
 }
 
 function filterByType(data, type) {
-    return data.filter((item) => item.type === type);
+    // Si aucun item n'a de type (query Metabase déjà filtrée), on passe tout
+    const anyHasType = data.some(item => item.type && item.type.trim() !== '');
+    if (!anyHasType) return data;
+    return data.filter((item) => !item.type || item.type === type);
 }
 
 function filterByDateRange(data, startDate, endDate) {
@@ -704,13 +832,13 @@ function processData(data, filters, skipMonthFilter = false) {
     const uniqueOperations = new Set();
     
     descriptifFiltered.forEach(item => {
-        if (item.email && item.email.trim() !== '') {
+        if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
             uniqueUsers.add(item.email);
         }
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.aiResult || '');
+            const processedAI = extractText(item.aiResult || item.description || '');
             const wordCount = countWords(processedAI);
             
             // Ne compter que les RICT avec au moins 100 mots
@@ -930,18 +1058,15 @@ function updateAgencyTable(allRictData, descriptifData) {
         }
     };
     
-    // Count total RICT per agency (nombre unique d'affaires)
+    // Count total RICT per agency (use home agency from user directory)
     allRictData.forEach(item => {
-        if (!item.agency) return;
-        initAgency(item.agency, item.agencyCode);
-        
-        // Créer un Set pour les contractNumber uniques si pas encore fait
-        if (!agencyStats[item.agency].uniqueContracts) {
-            agencyStats[item.agency].uniqueContracts = new Set();
-        }
-        
+        const email = (item.email || '').toLowerCase();
+        const agencyKey = (email && emailToAgency[email]) ? emailToAgency[email] : item.agency;
+        if (!agencyKey) return;
+        initAgency(agencyKey, agencyKey);
+        if (!agencyStats[agencyKey].uniqueContracts) agencyStats[agencyKey].uniqueContracts = new Set();
         if (item.contractNumber && item.contractNumber.trim() !== '') {
-            agencyStats[item.agency].uniqueContracts.add(item.contractNumber);
+            agencyStats[agencyKey].uniqueContracts.add(item.contractNumber);
         }
     });
     
@@ -950,24 +1075,26 @@ function updateAgencyTable(allRictData, descriptifData) {
         agencyStats[agency].totalRict = agencyStats[agency].uniqueContracts ? agencyStats[agency].uniqueContracts.size : 0;
     });
     
-    // Count descriptifs effectifs and users per agency
+    // Count descriptifs effectifs and users per agency (use home agency from user directory)
     descriptifData.forEach(item => {
-        if (!item.agency) return;
-        initAgency(item.agency, item.agencyCode);
-        
-        if (item.email && item.email.trim() !== '') {
-            agencyStats[item.agency].users.add(item.email);
+        const email = (item.email || '').toLowerCase();
+        const agencyKey = (email && emailToAgency[email]) ? emailToAgency[email] : item.agency;
+        if (!agencyKey) return;
+        initAgency(agencyKey, agencyKey);
+
+        if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
+            agencyStats[agencyKey].users.add(item.email);
         }
         
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.aiResult || '');
+            const processedAI = extractText(item.aiResult || item.description || '');
             const wordCount = countWords(processedAI);
             
             // Ne compter que les RICT avec au moins 100 mots
             if (wordCount >= 100) {
-                agencyStats[item.agency].operations.add(item.contractNumber);
+                agencyStats[agencyKey].operations.add(item.contractNumber);
             }
         }
     });
@@ -1196,7 +1323,7 @@ function updateKPIs() {
     }
     
     // Update gains
-    updateGains(kpis.totalOperations, kpis.totalRict);
+    updateGains(kpis.totalOperations, kpis.totalRict, kpis.totalUsers);
     
     // Update first date display (only once with all data)
     const firstDate = getFirstDate(allData);
@@ -1277,7 +1404,7 @@ function updateChart(data) {
         if (!date) return;
         
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
-        const processedAI = extractText(item.aiResult || '');
+        const processedAI = extractText(item.aiResult || item.description || '');
         const wordCount = countWords(processedAI);
         if (wordCount < 100) return;
         
@@ -1521,7 +1648,7 @@ function updateRatesChart(data) {
         if (!date) return;
         
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
-        const processedAI = extractText(item.aiResult || '');
+        const processedAI = extractText(item.aiResult || item.description || '');
         const wordCount = countWords(processedAI);
         if (wordCount < 100) return;
         
@@ -2155,6 +2282,7 @@ async function init() {
         
         agencyPopulation = populationDataResult.population;
         agencyToDR = populationDataResult.drMapping;
+        emailToAgency = populationDataResult.emailMap || {};
         
         const rawText = await dataResponse.text();
         console.log('Response received, length:', rawText.length);

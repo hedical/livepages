@@ -87,28 +87,47 @@ function parseDate(dateString) {
     
     // If that fails, try to parse different formats
     if (isNaN(date.getTime())) {
-        // Try format: "DD Month, YYYY, HH:MM" or "DD Month, YYYY" (e.g., "5 décembre, 2025, 15:33" or "28 octobre, 2025")
         const frenchMonths = {
             'janvier': 0, 'février': 1, 'fevrier': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
             'juillet': 6, 'août': 7, 'aout': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11, 'decembre': 11
         };
-        
-        // Match with optional time part: "DD Month, YYYY" or "DD Month, YYYY, HH:MM"
-        const match = cleanDate.match(/(\d+)\s+([a-zàâäéèêëïôùûü]+)[,\s]+(\d{4})/i);
-        if (match) {
-            const day = parseInt(match[1]);
-            const monthName = match[2].toLowerCase().trim();
-            const year = parseInt(match[3]);
-            
+
+        // Helper to apply optional time (handles "HH:MM" and "H:MM AM/PM")
+        const applyTime = (d, str) => {
+            const timeMatch = str.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+            if (timeMatch) {
+                let hours = parseInt(timeMatch[1]);
+                const minutes = parseInt(timeMatch[2]);
+                const ampm = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
+                if (ampm === 'PM' && hours < 12) hours += 12;
+                if (ampm === 'AM' && hours === 12) hours = 0;
+                d.setHours(hours, minutes, 0, 0);
+            }
+        };
+
+        // Format 1 (old): "DD Month, YYYY" or "DD Month, YYYY, HH:MM"
+        const matchDayFirst = cleanDate.match(/(\d+)\s+([a-zàâäéèêëïôùûü]+)[,\s]+(\d{4})/i);
+        if (matchDayFirst) {
+            const day = parseInt(matchDayFirst[1]);
+            const monthName = matchDayFirst[2].toLowerCase().trim();
+            const year = parseInt(matchDayFirst[3]);
             if (frenchMonths[monthName] !== undefined) {
                 date = new Date(year, frenchMonths[monthName], day);
-                
-                // Try to parse time if present
-                const timeMatch = cleanDate.match(/(\d{1,2}):(\d{2})/);
-                if (timeMatch) {
-                    const hours = parseInt(timeMatch[1]);
-                    const minutes = parseInt(timeMatch[2]);
-                    date.setHours(hours, minutes, 0, 0);
+                applyTime(date, cleanDate);
+            }
+        }
+
+        // Format 2 (new): "Month DD, YYYY" or "Month DD, YYYY, H:MM AM/PM"
+        // e.g. "octobre 21, 2025, 1:54 PM"
+        if (isNaN(date.getTime())) {
+            const matchMonthFirst = cleanDate.match(/([a-zàâäéèêëïôùûü]+)\s+(\d+)[,\s]+(\d{4})/i);
+            if (matchMonthFirst) {
+                const monthName = matchMonthFirst[1].toLowerCase().trim();
+                const day = parseInt(matchMonthFirst[2]);
+                const year = parseInt(matchMonthFirst[3]);
+                if (frenchMonths[monthName] !== undefined) {
+                    date = new Date(year, frenchMonths[monthName], day);
+                    applyTime(date, cleanDate);
                 }
             }
         }
@@ -168,6 +187,63 @@ function extractMaxPage(longResultString) {
     }
     
     return 0;
+}
+
+// Parse new direct JSON array format from Metabase
+function parseComparateurJSON(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
+        console.warn('Invalid or empty JSON array for comparateur');
+        return [];
+    }
+
+    console.log('Parsing comparateur from direct JSON array, rows:', jsonArray.length);
+    const data = [];
+
+    jsonArray.forEach((item) => {
+        // Contract number
+        const contractNumber = (item['ContractNumber'] || '').trim();
+
+        // CreatedAt
+        const createdAt = (item['AIDeliverable → CreatedAt'] || '').trim();
+
+        // Email
+        const email = (item['User - UserId → Email'] || '').trim();
+
+        // Agency (production service)
+        const agency = (item['Agency - AgencyId → ProductionService'] || '').trim();
+
+        // Direction (management)
+        const direction = (item['Agency - AgencyId → Management'] || '').trim();
+
+        // Max page — try direct items array first, then fall back to LongResult JSON
+        let maxPage = 0;
+        const itemsStr = item['LongResult → IndexComparator → Items'];
+        if (itemsStr && typeof itemsStr === 'string') {
+            try {
+                const items = JSON.parse(itemsStr);
+                if (Array.isArray(items)) {
+                    items.forEach(it => {
+                        if (it.page !== undefined && it.page !== null) {
+                            const pageNum = typeof it.page === 'number' ? it.page : parseInt(it.page);
+                            if (!isNaN(pageNum)) maxPage = Math.max(maxPage, pageNum);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse IndexComparator Items:', e.message);
+            }
+        }
+        if (maxPage === 0) {
+            maxPage = extractMaxPage(item['AIDeliverable → LongResult'] || '');
+        }
+
+        const agencyCode = extractAgency(contractNumber);
+
+        data.push({ contractNumber, createdAt, email, agency, agencyCode, direction, maxPage });
+    });
+
+    console.log('Parsed', data.length, 'rows from direct JSON');
+    return data;
 }
 
 // Returns {startDate, endDate} for the current month (YYYY-MM-DD)
@@ -503,36 +579,43 @@ function parseCSVData(csvString) {
     let createdAtIndex = -1;
     let emailIndex = -1;
     let longResultIndex = -1;
+    let indexComparatorItemsIndex = -1;
     let agencyIndex = -1;
-    
+
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i];
         const headerLower = header.toLowerCase();
-        
+
         // SubAffairDetailId → ContractNumber
         if (contractIndex === -1 && (headerLower.includes('contractnumber') || header.includes('SubAffairDetailId'))) {
             contractIndex = i;
             console.log(`Found ContractNumber at column ${i}: ${header}`);
         }
-        
-        // CreatedAt
-        if (createdAtIndex === -1 && headerLower === 'createdat') {
+
+        // CreatedAt (supports both "CreatedAt" and "AIDeliverable → CreatedAt")
+        if (createdAtIndex === -1 && headerLower.includes('createdat')) {
             createdAtIndex = i;
             console.log(`Found CreatedAt at column ${i}: ${header}`);
         }
-        
+
         // User → Email
         if (emailIndex === -1 && header.includes('User') && header.includes('Email')) {
             emailIndex = i;
             console.log(`Found Email at column ${i}: ${header}`);
         }
-        
-        // LongResult
-        if (longResultIndex === -1 && headerLower === 'longresult') {
+
+        // LongResult → IndexComparator → Items (direct JSON array — higher priority for pages)
+        if (indexComparatorItemsIndex === -1 && headerLower.includes('indexcomparator') && headerLower.includes('items')) {
+            indexComparatorItemsIndex = i;
+            console.log(`Found IndexComparator Items at column ${i}: ${header}`);
+        }
+
+        // LongResult (supports both "LongResult" and "AIDeliverable → LongResult")
+        if (longResultIndex === -1 && headerLower.includes('longresult') && !headerLower.includes('indexcomparator')) {
             longResultIndex = i;
             console.log(`Found LongResult at column ${i}: ${header}`);
         }
-        
+
         // ProductionService (Agency)
         if (agencyIndex === -1 && headerLower.includes('productionservice')) {
             agencyIndex = i;
@@ -565,12 +648,30 @@ function parseCSVData(csvString) {
         const email = emailIndex >= 0 ? values[emailIndex] : '';
         const longResult = longResultIndex >= 0 ? values[longResultIndex] : '';
         const agency = (agencyIndex >= 0 ? values[agencyIndex] : '') || '';
-        
+
         // Extract agency code from contract number using the global function
         const agencyCode = extractAgency(contractNumber);
-        
-        // Extract max page from LongResult
-        const maxPage = extractMaxPage(longResult);
+
+        // Extract max page: try IndexComparator Items (flat array) first, then LongResult JSON
+        let maxPage = 0;
+        if (indexComparatorItemsIndex >= 0 && values[indexComparatorItemsIndex]) {
+            try {
+                const items = JSON.parse(values[indexComparatorItemsIndex]);
+                if (Array.isArray(items)) {
+                    items.forEach(it => {
+                        if (it.page !== undefined && it.page !== null) {
+                            const p = typeof it.page === 'number' ? it.page : parseInt(it.page);
+                            if (!isNaN(p)) maxPage = Math.max(maxPage, p);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse IndexComparator Items in CSV row:', e.message);
+            }
+        }
+        if (maxPage === 0) {
+            maxPage = extractMaxPage(longResult);
+        }
         
         data.push({
             contractNumber: (contractNumber || '').trim(),
@@ -1289,13 +1390,20 @@ async function init() {
         console.log('First 200 chars:', rawText.substring(0, 200));
         
         let csvData = null;
-        
+        let jsonParsed = false;
+
         try {
             const jsonData = JSON.parse(rawText);
-            
+
             if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].data) {
                 console.log('Found JSON array with data field in first element');
                 csvData = jsonData[0].data;
+            }
+            else if (Array.isArray(jsonData) && jsonData.length > 0) {
+                // New direct JSON array format (no .data wrapper)
+                console.log('Found direct JSON array format');
+                allData = parseComparateurJSON(jsonData);
+                jsonParsed = true;
             }
             else if (jsonData.data && typeof jsonData.data === 'string') {
                 console.log('Found JSON object with data field');
@@ -1304,16 +1412,18 @@ async function init() {
         } catch (jsonError) {
             console.log('Standard JSON parsing failed:', jsonError.message);
         }
-        
-        if (!csvData) {
-            console.log('No CSV data found, trying raw text as CSV');
-            csvData = rawText;
+
+        if (!jsonParsed) {
+            if (!csvData) {
+                console.log('No CSV data found, trying raw text as CSV');
+                csvData = rawText;
+            }
+
+            console.log('CSV data length:', csvData.length);
+            console.log('First 500 chars of CSV:', csvData.substring(0, 500));
+
+            allData = parseCSVData(csvData);
         }
-        
-        console.log('CSV data length:', csvData.length);
-        console.log('First 500 chars of CSV:', csvData.substring(0, 500));
-        
-        allData = parseCSVData(csvData);
         
         if (allData.length === 0) {
             throw new Error('No data parsed from CSV');
