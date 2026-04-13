@@ -5,6 +5,7 @@ const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
+let NF_HABITAT_URL = '';
 // Expert BTP Consultants URL (public)
 const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
 // Chat BTP Consultants URL (public)
@@ -30,6 +31,8 @@ const SECONDS_PER_CONTACT = 90; // Default value from autocontact.js
 const SECONDS_PER_PAGE = 20; // Default value for comparateur
 const MINUTES_PER_MESSAGE = 2.8125; // For chat tools (BTP and Citae)
 const MINUTES_PER_MESSAGE_EXPERT = 5; // For expert technique tools (BTP and Citae)
+const HOURS_PER_POINT_NF = 0.02816; // NF Habitat: hours gained per point checked
+const NF_HABITAT_REVENUE = 7000000; // NF Habitat specific revenue base
 const EURO_PER_MESSAGE = 1.5; // For chat and expert tools (BTP and Citae)
 const ANNUAL_HOURS = 1607;
 const TOTAL_REVENUE = 44000000;
@@ -51,6 +54,7 @@ let expertCitaeData = [];
 let chatCitaeData = [];
 let expertBTPDiagData = [];
 let chatBTPDiagData = [];
+let nfHabitatData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
 let availableAgencies = [];
@@ -1415,54 +1419,57 @@ function processComparateurData(data) {
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
-    
+
     // Gain en temps pour autocontacts (secondes → heures)
     const timeGainSecondsAutocontact = aiContactsCount * SECONDS_PER_CONTACT;
     const timeGainHoursAutocontact = timeGainSecondsAutocontact / 3600;
-    
+
     // Gain en temps pour comparateur (secondes → heures)
     const timeGainSecondsComparateur = totalPages * SECONDS_PER_PAGE;
     const timeGainHoursComparateur = timeGainSecondsComparateur / 3600;
-    
+
     // Gain en temps pour chat BTP (minutes → heures)
     const timeGainMinutesChatBTP = (chatBTPMessages || 0) * MINUTES_PER_MESSAGE;
     const timeGainHoursChatBTP = timeGainMinutesChatBTP / 60;
-    
+
     // Gain en temps pour expert BTP (minutes → heures)
     const timeGainMinutesExpertBTP = (expertBTPMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertBTP = timeGainMinutesExpertBTP / 60;
-    
+
     // Gain en temps pour chat Citae (minutes → heures)
     const timeGainMinutesChatCitae = (chatCitaeMessages || 0) * MINUTES_PER_MESSAGE;
     const timeGainHoursChatCitae = timeGainMinutesChatCitae / 60;
-    
+
     // Gain en temps pour expert Citae (minutes → heures)
     const timeGainMinutesExpertCitae = (expertCitaeMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertCitae = timeGainMinutesExpertCitae / 60;
-    
+
     // Gain en temps pour chat BTP Diagnostics (minutes → heures)
     const timeGainMinutesChatBTPDiag = (chatBTPDiagMessages || 0) * MINUTES_PER_MESSAGE;
     const timeGainHoursChatBTPDiag = timeGainMinutesChatBTPDiag / 60;
-    
+
     // Gain en temps pour expert BTP Diagnostics (minutes → heures)
     const timeGainMinutesExpertBTPDiag = (expertBTPDiagMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertBTPDiag = timeGainMinutesExpertBTPDiag / 60;
-    
+
+    // Gain en temps pour NF Habitat (heures par point)
+    const timeGainHoursNFHabitat = (nfHabitatPoints || 0) * HOURS_PER_POINT_NF;
+
     // Total time gain
-    const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur 
+    const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur
         + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae
-        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag;
-    
-    // Gain en % volume d'affaire
+        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursNFHabitat;
+
+    // Gain en % volume d'affaire (BTP Consultants scope: 44M€)
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
-    
+
     // Gain en €
     const euroGain = (percentGain / 100) * TOTAL_REVENUE;
-    
+
     return {
         timeGainHours: totalTimeGain,
         timeGainHoursDescriptif,
@@ -1474,6 +1481,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
         timeGainHoursExpertCitae,
         timeGainHoursChatBTPDiag,
         timeGainHoursExpertBTPDiag,
+        timeGainHoursNFHabitat,
         percentGain,
         euroGain
     };
@@ -1632,6 +1640,34 @@ function processChatBTPDiagData(data) {
     return { totalSessions, uniqueUsers: uniqueUsers.size, totalMessages, totalCost };
 }
 
+/**
+ * NF Habitat filter: controlName contains "NF" AND "Habitat" (case-insensitive), status === "COMPLETED"
+ */
+function isNFHabitatItem(item) {
+    const name = (item.controlName || '').toLowerCase();
+    return name.includes('nf') && name.includes('habitat') && item.status === 'COMPLETED';
+}
+
+function processNFHabitatData(data) {
+    const filtered = getFilteredData(data).filter(isNFHabitatItem);
+    const uniqueUsers = new Set();
+    const uniqueProjects = new Set();
+    let totalPoints = 0;
+    filtered.forEach(item => {
+        totalPoints += (item.pointCount || 0);
+        const email = (item.userEmail || item.email || '').trim();
+        if (email) uniqueUsers.add(email.toLowerCase());
+        const proj = item.projectId || item.projectName;
+        if (proj) uniqueProjects.add(proj);
+    });
+    return {
+        totalControls: filtered.length,
+        totalPoints,
+        uniqueUsers: uniqueUsers.size,
+        uniqueProjects: uniqueProjects.size
+    };
+}
+
 function updateKPIs() {
     const descriptifStats = processDescriptifData(descriptifData);
     const autocontactStats = processAutocontactData(autocontactData);
@@ -1642,10 +1678,11 @@ function updateKPIs() {
     const chatCitaeStats = processChatCitaeData(chatCitaeData);
     const expertBTPDiagStats = processExpertBTPDiagData(expertBTPDiagData);
     const chatBTPDiagStats = processChatBTPDiagData(chatBTPDiagData);
-    
+    const nfHabitatStats = processNFHabitatData(nfHabitatData);
+
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + nfHabitatStats.totalControls;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => (!item.type || item.type === DESCRIPTIF_TYPE)).forEach(item => {
@@ -1701,9 +1738,25 @@ function updateKPIs() {
             allUsers.add(item.email);
         }
     });
-    
+
+    // NF Habitat users
+    getFilteredData(nfHabitatData).filter(isNFHabitatItem).forEach(item => {
+        const email = (item.userEmail || item.email || '').trim().toLowerCase();
+        if (email) allUsers.add(email);
+    });
+
     totalUtilisationsEl.textContent = formatNumber(totalUtilisations);
     totalUsersEl.textContent = allUsers.size;
+
+    // NF Habitat card stats
+    const nfHabitatCountEl = document.getElementById('nf-habitat-count');
+    const nfHabitatPointsEl = document.getElementById('nf-habitat-points');
+    const nfHabitatProjectsEl = document.getElementById('nf-habitat-projects');
+    const nfHabitatUsersEl = document.getElementById('nf-habitat-users');
+    if (nfHabitatCountEl) nfHabitatCountEl.textContent = formatNumber(nfHabitatStats.totalControls);
+    if (nfHabitatPointsEl) nfHabitatPointsEl.textContent = formatNumber(nfHabitatStats.totalPoints);
+    if (nfHabitatProjectsEl) nfHabitatProjectsEl.textContent = formatNumber(nfHabitatStats.uniqueProjects);
+    if (nfHabitatUsersEl) nfHabitatUsersEl.textContent = formatNumber(nfHabitatStats.uniqueUsers);
     
     // Descriptif stats
     descriptifCountEl.textContent = formatNumber(descriptifStats.totalUtilisations);
@@ -1794,22 +1847,24 @@ function updateKPIs() {
     // Autocontact page uses: aiContacts (total AI contacts, not operations)
     // Comparateur page uses: totalPages
     // Chat and Expert pages use: totalMessages
+    // NF Habitat uses: totalPoints
     const gains = calculateGains(
-        descriptifStats.uniqueOperations, 
-        autocontactStats.aiContacts, 
+        descriptifStats.uniqueOperations,
+        autocontactStats.aiContacts,
         comparateurStats.totalPages,
         chatBTPStats.totalMessages,
         expertBTPStats.totalMessages,
         chatCitaeStats.totalMessages,
         expertCitaeStats.totalMessages,
         chatBTPDiagStats.totalMessages,
-        expertBTPDiagStats.totalMessages
+        expertBTPDiagStats.totalMessages,
+        nfHabitatStats.totalPoints
     );
-    
+
     gainHeuresEl.textContent = formatNumber(gains.timeGainHours);
     gainSubtitleEl.innerHTML = `
         <div class="space-y-1">
-            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h)</div>
+            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h + NF Habitat: ${formatNumber(gains.timeGainHoursNFHabitat)}h)</div>
             <div class="text-xs">≈ ${gains.percentGain.toFixed(4)}% du volume d'affaires</div>
             <div class="text-xs">≈ ${formatNumber(gains.euroGain)} €</div>
         </div>
@@ -1865,16 +1920,23 @@ async function authenticateWithPassword(password) {
         
         const result = await response.text();
         
-        // Parse the response to extract URLs
-        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
-        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
-        const comparateurMatch = result.match(/COMPARATEUR_URL = '([^']+)'/);
-        
+        // Parse the response to extract URLs (accepts both single and double quotes)
+        const urlRegex = (name) => result.match(new RegExp(name + `\\s*=\\s*['"]([^'"]+)['"]`));
+        const descriptifMatch  = urlRegex('DESCRIPTIF_URL');
+        const autocontactMatch = urlRegex('AUTOCONTACT_URL');
+        const comparateurMatch = urlRegex('COMPARATEUR_URL');
+        const nfHabitatMatch   = urlRegex('NF_HABITAT_URL');
+
         if (descriptifMatch && autocontactMatch && comparateurMatch) {
             DESCRIPTIF_URL = descriptifMatch[1];
             AUTOCONTACT_URL = autocontactMatch[1];
             COMPARATEUR_URL = comparateurMatch[1];
-            
+            if (nfHabitatMatch) NF_HABITAT_URL = nfHabitatMatch[1];
+
+            // Cache the full webhook response so other pages (nfhabitat.js, etc.)
+            // can reuse it without re-calling the webhook
+            localStorage.setItem('roi_auth_result', result);
+
             console.log('Authentication successful');
             return true;
         }
@@ -2236,6 +2298,56 @@ async function loadData() {
             }
         } catch (e) {
             console.warn('Error loading Chat BTP Diagnostics data:', e);
+        }
+
+        // Load NF Habitat data
+        if (NF_HABITAT_URL) {
+            console.log('Loading NF Habitat data...');
+            try {
+                const nfHabitatResponse = await fetch(NF_HABITAT_URL);
+                if (nfHabitatResponse.ok) {
+                    const nfHabitatJson = await nfHabitatResponse.json();
+                    // Handle all wrapper formats:
+                    // [{items:[...]}]  ← format réel de l'API
+                    // {items:[...]}    ← sans tableau externe
+                    // [...]            ← tableau direct
+                    let items;
+                    if (Array.isArray(nfHabitatJson) && nfHabitatJson.length > 0 && Array.isArray(nfHabitatJson[0].items)) {
+                        items = nfHabitatJson[0].items;
+                    } else if (!Array.isArray(nfHabitatJson) && Array.isArray(nfHabitatJson.items)) {
+                        items = nfHabitatJson.items;
+                    } else if (Array.isArray(nfHabitatJson)) {
+                        items = nfHabitatJson;
+                    } else {
+                        items = [];
+                    }
+                    nfHabitatData = items.map(item => {
+                        const email = (item.user && item.user.email) ? item.user.email : (item.email || '');
+                        return {
+                            id: item.id,
+                            createdAt: item.createdAt || '',
+                            status: item.status || '',
+                            projectId: item.projectId || '',
+                            projectName: item.projectName || '',
+                            totalCost: item.totalCost || 0,
+                            pointCount: item.pointCount || 0,
+                            controlName: item.controlName || '',
+                            email: email,        // used by getFilteredData filiale filter
+                            userEmail: email,
+                            userName: (item.user && item.user.name) ? item.user.name : (item.userName || ''),
+                            direction: '',       // NF Habitat has no direction
+                            agency: ''           // NF Habitat has no agency
+                        };
+                    });
+                    console.log('Loaded', nfHabitatData.length, 'NF Habitat records');
+                } else {
+                    console.warn('Failed to load NF Habitat data:', nfHabitatResponse.status);
+                }
+            } catch (e) {
+                console.warn('Error loading NF Habitat data:', e);
+            }
+        } else {
+            console.warn('NF_HABITAT_URL not set — skipping NF Habitat data');
         }
 
         // Initialize filters and table
@@ -2936,6 +3048,7 @@ function calculateMonthlyGains() {
                 expertCitaeMessages: 0,
                 chatBTPDiagMessages: 0,
                 expertBTPDiagMessages: 0,
+                nfHabitatPoints: 0,
             };
         }
     };
@@ -3035,6 +3148,14 @@ function calculateMonthlyGains() {
         monthlyData[key].expertBTPDiagMessages += (item.messagesLength || 0);
     });
 
+    // ── NF Habitat ───────────────────────────────────────────────────────────────
+    getFilteredData(nfHabitatData).filter(isNFHabitatItem).forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].nfHabitatPoints += (item.pointCount || 0);
+    });
+
     // ── Build sorted result ──────────────────────────────────────────────────────
     const sortedMonths = Object.keys(monthlyData).sort();
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -3050,7 +3171,8 @@ function calculateMonthlyGains() {
             d.chatCitaeMessages,
             d.expertCitaeMessages,
             d.chatBTPDiagMessages,
-            d.expertBTPDiagMessages
+            d.expertBTPDiagMessages,
+            d.nfHabitatPoints
         );
         const [year, month] = key.split('-');
         return {
@@ -3067,6 +3189,7 @@ function calculateMonthlyGains() {
             hoursExpertCitae:   gains.timeGainHoursExpertCitae,
             hoursChatBTPDiag:   gains.timeGainHoursChatBTPDiag,
             hoursExpertBTPDiag: gains.timeGainHoursExpertBTPDiag,
+            hoursNFHabitat:     gains.timeGainHoursNFHabitat,
         };
     });
 }
@@ -3091,6 +3214,7 @@ function buildGainChart() {
         { key: 'hoursExpertCitae',   label: 'Expert Citae',        color: 'rgba(6, 182, 212, 0.85)'   },
         { key: 'hoursChatBTPDiag',   label: 'Chat BTP Diag',       color: 'rgba(244, 63, 94, 0.85)'   },
         { key: 'hoursExpertBTPDiag', label: 'Expert BTP Diag',     color: 'rgba(251, 146, 60, 0.85)'  },
+        { key: 'hoursNFHabitat',     label: 'NF Habitat',          color: 'rgba(52, 211, 153, 0.85)'  },
     ];
 
     // Build cumulative or monthly series per feature + euros line
