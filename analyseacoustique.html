@@ -144,20 +144,84 @@
                 <div className="p-8 animate-in fade-in duration-500">
                     <div className="text-center mb-8">
                         <h2 className="text-2xl font-bold text-purple-600 mb-2">Données extraites</h2>
-                        <p className="text-gray-500">Analysées par l'IA pour ce projet</p>
+                        <p className="text-gray-500">Voici toutes les données acoustiques analysées par l'IA</p>
                     </div>
-                    <div className="space-y-6 max-w-4xl mx-auto">
+                    <div className="space-y-6 max-w-4xl mx-auto pb-8">
+                        {/* Section Informations Projet */}
                         <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                            <div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-gray-700 flex items-center gap-2"><Icon name="info" size={18} className="text-blue-500" /> Informations Projet</h3><Icon name="chevron-down" className="text-gray-400" /></div>
-                            <div className="p-6">
+                            <div className="p-4 bg-gray-50 border-b flex justify-between items-center cursor-pointer">
+                                <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                                    <Icon name="info" size={18} className="text-blue-500" /> Informations Générales du projet
+                                </h3>
+                                <Icon name="chevron-down" className="text-gray-400" />
+                            </div>
+                            <div className="p-6 space-y-6">
                                 <div className="bg-purple-50 p-5 rounded-xl border border-purple-100">
                                     <div className="flex gap-4 mb-4 items-start">
-                                        <div className="bg-white p-2 rounded-lg shadow-sm text-purple-600 shrink-0"><Icon name="building-2" /></div>
-                                        <div><h4 className="font-bold text-purple-900 text-sm">Type de bâtiment</h4><p className="text-xs text-gray-600 mt-1 leading-relaxed">Logement collectif R+7 sur 1 niveau de sous-sol.</p></div>
+                                        <div className="bg-white p-2.5 rounded-lg shadow-sm text-purple-600 shrink-0"><Icon name="building-2" /></div>
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-purple-900 text-sm">Type de bâtiment</h4>
+                                            <p className="text-xs text-gray-700 mt-1 leading-relaxed">
+                                                Construction d'un ensemble de bâtiments de logements collectifs et d'activités (A à D) de type R+7 sur 1 niveau de sous-sol.
+                                            </p>
+                                        </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button className="bg-green-600 text-white text-[10px] px-3 py-1.5 rounded-lg font-bold hover:bg-green-700 flex items-center gap-1"><Icon name="plus" size={12} /> Insérer notice</button>
+                                        <button className="bg-green-600 text-white text-[10px] px-3 py-1.5 rounded-lg font-bold hover:bg-green-700 flex items-center gap-1"><Icon name="plus-circle" size={12} /> Insérer notice</button>
                                         <button className="bg-blue-600 text-white text-[10px] px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 flex items-center gap-1"><Icon name="copy" size={12} /> Copier</button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-purple-50 p-5 rounded-xl border border-purple-100">
+                                    <div className="flex gap-4 items-start">
+                                        <div className="bg-white p-2.5 rounded-lg shadow-sm text-purple-600 shrink-0"><Icon name="scale" /></div>
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-purple-900 text-sm">Référentiel utilisé</h4>
+                                            <p className="text-xs text-gray-700 mt-1 leading-relaxed">
+                                                Arrêté du 30 juin 1999 relatif aux modalités d'application de la réglementation acoustique dans les bâtiments d'habitation. Objectif de performance : Qualitel / NF Habitat HQE.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Section Parois identifiées */}
+                        <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                            <div className="p-4 bg-gray-50 border-b flex justify-between items-center cursor-pointer">
+                                <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                                    <Icon name="layers" size={18} className="text-blue-500" /> Parois identifiées & matériaux
+                                </h3>
+                                <Icon name="chevron-down" className="text-gray-400" />
+                            </div>
+                            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="p-5 border border-gray-100 rounded-xl hover:border-blue-200 transition-colors bg-white shadow-sm">
+                                    <div className="flex gap-3 items-center mb-4 pb-2 border-b border-gray-50 text-blue-600">
+                                        <Icon name="layers" size={20} />
+                                        <h4 className="font-bold text-sm">Murs périphériques</h4>
+                                    </div>
+                                    <div className="space-y-2.5 text-[11px]">
+                                        <div className="flex justify-between text-gray-500"><span>Structure:</span><span className="font-bold text-gray-800">Voile béton armé (20cm)</span></div>
+                                        <div className="flex justify-between text-gray-500"><span>Doublage:</span><span className="font-bold text-gray-800">Laine minérale (120mm) + Placo</span></div>
+                                        <div className="flex justify-between text-green-600 pt-2 border-t border-gray-50">
+                                            <span className="font-semibold">Performance:</span>
+                                            <span className="font-bold">Rw+Ctr ≥ 55 dB</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-5 border border-gray-100 rounded-xl hover:border-blue-200 transition-colors bg-white shadow-sm">
+                                    <div className="flex gap-3 items-center mb-4 pb-2 border-b border-gray-50 text-blue-600">
+                                        <Icon name="home" size={20} />
+                                        <h4 className="font-bold text-sm">Toiture terrasse</h4>
+                                    </div>
+                                    <div className="space-y-2.5 text-[11px]">
+                                        <div className="flex justify-between text-gray-500"><span>Type:</span><span className="font-bold text-gray-800">Dalle pleine béton (22cm)</span></div>
+                                        <div className="flex justify-between text-gray-500"><span>Isolation:</span><span className="font-bold text-gray-800">PU (140mm) + étanchéité</span></div>
+                                        <div className="flex justify-between text-green-600 pt-2 border-t border-gray-50">
+                                            <span className="font-semibold">Performance:</span>
+                                            <span className="font-bold">Ln,w ≤ 52 dB</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
