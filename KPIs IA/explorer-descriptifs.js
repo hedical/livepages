@@ -20,7 +20,8 @@ let currentIndex = 0;
 let filters = {
     quality: 'all',
     agency: 'all',
-    sortBy: 'date-desc'
+    sortBy: 'date-desc',
+    email: ''
 };
 
 // DOM Elements
@@ -433,8 +434,8 @@ function processRecords(rawData) {
     const records = [];
     
     rawData.forEach((item, index) => {
-        const processedDesc = extractText(item.description || item.aiResult || '');
-        const processedAI = extractText(item.aiResult || item.description || '');
+        const processedDesc = extractText(item.description || '');
+        const processedAI = extractText(item.aiResult || '');
 
         if (processedDesc.length === 0 || processedAI.length === 0) {
             console.log(`Skipping record ${index}: empty description or AI result`);
@@ -632,7 +633,10 @@ function applyFilters() {
         
         // Agency filter
         if (filters.agency !== 'all' && rec.agency !== filters.agency) return false;
-        
+
+        // Email filter
+        if (filters.email && !rec.email.toLowerCase().includes(filters.email.toLowerCase())) return false;
+
         return true;
     });
     
@@ -742,9 +746,11 @@ resetFiltersBtn.addEventListener('click', () => {
     filters.quality = 'all';
     filters.agency = 'all';
     filters.sortBy = 'date-desc';
+    filters.email = '';
     qualityFilterEl.value = 'all';
     agencyFilterEl.value = 'all';
     sortByEl.value = 'date-desc';
+    searchEmailInput.value = '';
     applyFilters();
 });
 
@@ -764,24 +770,36 @@ nextBtn.addEventListener('click', () => {
 });
 
 // Search listeners
-const search = (key, value) => {
+const searchContract = (value) => {
     if (!value) return;
-    const foundIndex = filteredRecords.findIndex(rec => 
-        String(rec[key]).toLowerCase().includes(value.toLowerCase())
+    const foundIndex = filteredRecords.findIndex(rec =>
+        String(rec.contractNumber).toLowerCase().includes(value.toLowerCase())
     );
     if (foundIndex !== -1) {
         currentIndex = foundIndex;
         showRecord();
-        displayMessage(`${key === 'contractNumber' ? 'Contrat' : 'Email'} trouvé !`, 'success');
+        displayMessage(`Contrat trouvé !`, 'success');
     } else {
         displayMessage(`Aucun résultat pour "${value}".`, 'error');
     }
 };
 
-searchButton.addEventListener('click', () => search('contractNumber', searchContractInput.value.trim()));
-searchEmailButton.addEventListener('click', () => search('email', searchEmailInput.value.trim()));
-searchContractInput.addEventListener('keydown', (e) => e.key === 'Enter' && search('contractNumber', e.target.value.trim()));
-searchEmailInput.addEventListener('keydown', (e) => e.key === 'Enter' && search('email', e.target.value.trim()));
+const applyEmailFilter = (value) => {
+    filters.email = value.trim();
+    applyFilters();
+    if (filters.email) {
+        if (filteredRecords.length > 0) {
+            displayMessage(`${filteredRecords.length} enregistrement(s) pour "${filters.email}"`, 'success');
+        } else {
+            displayMessage(`Aucun résultat pour "${filters.email}".`, 'error');
+        }
+    }
+};
+
+searchButton.addEventListener('click', () => searchContract(searchContractInput.value.trim()));
+searchEmailButton.addEventListener('click', () => applyEmailFilter(searchEmailInput.value));
+searchContractInput.addEventListener('keydown', (e) => e.key === 'Enter' && searchContract(e.target.value.trim()));
+searchEmailInput.addEventListener('keydown', (e) => e.key === 'Enter' && applyEmailFilter(e.target.value));
 
 // ==================== INITIALIZATION ====================
 

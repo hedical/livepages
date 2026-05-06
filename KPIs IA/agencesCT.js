@@ -679,15 +679,16 @@ function calculateAgencyStatistics() {
         return statsMap[key];
     };
 
-    // Denominator: ALL unique RICT contracts per agency (project agency).
-    // We count every RICT contract regardless of description length, so the
-    // numerator (AI descriptifs ≥100 words) can never exceed it.
+    // Denominator: RICT contracts with description ≥ 100 words per agency.
+    // Only contracts with a substantive description are counted, matching the
+    // numerator basis (AI descriptifs ≥ 100 words).
     const allRictFiltered = getFilteredData(allRictData);
     allRictFiltered.forEach(item => {
         const projectAgency = (item.agency || '').trim().toUpperCase();
         if (!projectAgency) return;
         const stats = getOrCreate(projectAgency);
-        if (item.contractNumber && item.contractNumber.trim() !== '') {
+        const descWordCount = countWords(extractText(item.description || ''));
+        if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount >= 100) {
             stats.contractsWithRICT100Plus.add(item.contractNumber);
         }
     });
@@ -713,9 +714,11 @@ function calculateAgencyStatistics() {
         const projectAgency = (item.agency || '').trim().toUpperCase();
         const contractStats = projectAgency ? getOrCreate(projectAgency) : homeStats;
 
-        const processedAI = extractText(item.aiResult || item.description || '');
-        const descWordCount = countWords(processedAI);
-        if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount >= 100) {
+        const descWordCount = countWords(extractText(item.description || ''));
+        // Numérateur : affaires IA parmi celles du dénominateur (description ≥ 100 mots)
+        // contractsWithRICT100Plus garantit déjà que la description est ≥ 100 mots
+        if (item.contractNumber && item.contractNumber.trim() !== ''
+                && contractStats.contractsWithRICT100Plus.has(item.contractNumber)) {
             contractStats.contractsWithAIOrRICT100Plus.add(item.contractNumber);
         }
         if (!item.type || item.type === DESCRIPTIF_TYPE) {
@@ -739,12 +742,17 @@ function calculateAgencyStatistics() {
     });
 
     // Process comparateur data
+    // Attribution : item.agency (agence du projet), comme comparateur.html et index
+    // Pas de restriction isKnownUser : même base que les autres pages
     const comparateurFiltered = getFilteredData(comparateurData);
     comparateurFiltered.forEach(item => {
-        const stats = getOrCreate(homeAgency(item));
+        const projectAgency = (item.agency || '').trim().toUpperCase();
+        if (!projectAgency) return; // ignorer les lignes sans agence
+        const stats = getOrCreate(projectAgency);
         stats.comparateurCount++;
-        if (isKnownUser(item.email)) {
-            stats.usersComparateur.add(item.email.toLowerCase().trim());
+        const email = (item.email || '').toLowerCase().trim();
+        if (email) {
+            stats.usersComparateur.add(email);
         }
     });
 
@@ -776,21 +784,23 @@ function calculateAgencyStatistics() {
         const effectif = agencyCode && agencyCode !== '__NONE__' ? (agencyPopulation[agencyCode] || 0) : 0;
         
         // Relevance rate for descriptif (like sup 100 mots)
+        // null = pas de contrats RICT (aucune base de calcul), 0 = vrais 0%
         const relevanceRate = stats.contractsWithRICT100Plus.size > 0
             ? (stats.contractsWithAIOrRICT100Plus.size / stats.contractsWithRICT100Plus.size) * 100
-            : 0;
-        
+            : null;
+
         // Adoption rates — capped at 100% (data quality guard)
+        // null = effectif inconnu (aucune base de calcul), 0 = vrais 0%
         // Log any overflow to help diagnose directory vs data mismatches
         if (effectif > 0 && stats.usersDescriptif.size > effectif) {
             console.warn(`[Adoption >100%] ${agencyCode}: ${stats.usersDescriptif.size} users in data vs ${effectif} in directory`);
             console.warn(`  emails in usersDescriptif not in agencyPopulation scope:`, [...stats.usersDescriptif].filter(e => emailToAgency[e] !== agencyCode));
         }
-        const adoptionDescriptif  = effectif > 0 ? Math.min(100, (stats.usersDescriptif.size  / effectif) * 100) : 0;
-        const adoptionAutocontact = effectif > 0 ? Math.min(100, (stats.usersAutocontact.size  / effectif) * 100) : 0;
-        const adoptionComparateur = effectif > 0 ? Math.min(100, (stats.usersComparateur.size  / effectif) * 100) : 0;
-        const adoptionExpertBTP   = effectif > 0 ? Math.min(100, (stats.usersExpertBTP.size    / effectif) * 100) : 0;
-        const adoptionChatBTP     = effectif > 0 ? Math.min(100, (stats.usersChatBTP.size      / effectif) * 100) : 0;
+        const adoptionDescriptif  = effectif > 0 ? Math.min(100, (stats.usersDescriptif.size  / effectif) * 100) : null;
+        const adoptionAutocontact = effectif > 0 ? Math.min(100, (stats.usersAutocontact.size  / effectif) * 100) : null;
+        const adoptionComparateur = effectif > 0 ? Math.min(100, (stats.usersComparateur.size  / effectif) * 100) : null;
+        const adoptionExpertBTP   = effectif > 0 ? Math.min(100, (stats.usersExpertBTP.size    / effectif) * 100) : null;
+        const adoptionChatBTP     = effectif > 0 ? Math.min(100, (stats.usersChatBTP.size      / effectif) * 100) : null;
         
         const total = stats.descriptifCount + stats.autocontactCount + stats.comparateurCount + stats.expertBTPCount + stats.chatBTPCount;
         
@@ -864,7 +874,7 @@ function updateAgencyTable() {
         
         // Helper function to get badge style for any rate
         const getBadgeStyle = (rate) => {
-            if (rate === 0 || rate === null || rate === undefined) {
+            if (rate === null || rate === undefined) {
                 return { bg: '', text: 'text-gray-500', content: '-' };
             }
             let bg = '';
@@ -977,7 +987,7 @@ function updateChart() {
     
     // Process all data sources and group by month (cumulative)
     const allSources = [
-        { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && countWords(extractText(item.aiResult || item.description || '')) >= 100 },
+        { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && countWords(extractText(item.description || '')) >= 100 },
         { data: autocontactData, tool: 'autocontact', filter: (item) => item.fromAI && !item.contractNumber.toUpperCase().includes('YIELD') },
         { data: comparateurData, tool: 'comparateur', filter: () => true },
         { data: expertBTPData, tool: 'expertBTP', filter: () => true },
@@ -1151,25 +1161,24 @@ function updateChart() {
         const monthContractsWithRICT100Plus = new Set();
         const monthContractsWithAIOrRICT100Plus = new Set();
         
-        // Process RICT data for descriptif relevance rate (THIS MONTH ONLY)
+        // Process RICT data for descriptif relevance rate (CE MOIS → accumulation cumulative)
         allRictForCalculation.forEach(item => {
             if (!item.createdAt) return;
             const date = parseFrenchDate(item.createdAt);
             if (!date) return;
-            
-            // Count contracts from this specific month only
             if (date.getFullYear() === year && date.getMonth() === month - 1) {
                 if (item.contractNumber && item.contractNumber.trim() !== '') {
                     const processedDesc = extractText(item.description || '');
                     const descWordCount = countWords(processedDesc);
-                    if (descWordCount > 100) {
-                        monthContractsWithRICT100Plus.add(item.contractNumber);
+                    if (descWordCount >= 100) {  // >= comme dans calculateAgencyStatistics
+                        monthContractsWithRICT100Plus.add(item.contractNumber);       // mensuel (non utilisé pour taux)
+                        cumulativeContractsWithRICT100Plus.add(item.contractNumber);  // cumulatif ← utilisé pour taux
                     }
                 }
             }
         });
-        
-        // Process descriptif data for relevance rate (THIS MONTH ONLY)
+
+        // Process descriptif data for relevance rate (CE MOIS → accumulation cumulative)
         let descriptifForCalculation = descriptifData;
         if (selectedDirection || selectedAgency) {
             descriptifForCalculation = descriptifData.filter(item => {
@@ -1184,20 +1193,17 @@ function updateChart() {
                 return true;
             });
         }
-        
+
         descriptifForCalculation.forEach(item => {
             if (!item.createdAt) return;
             const date = parseFrenchDate(item.createdAt);
             if (!date) return;
-            
-            // Count contracts from this specific month only
             if (date.getFullYear() === year && date.getMonth() === month - 1) {
-                if (item.type === DESCRIPTIF_TYPE && item.contractNumber && item.contractNumber.trim() !== '') {
-                    const processedDesc = extractText(item.description || '');
-                    const descWordCount = countWords(processedDesc);
-                    if (descWordCount > 100) {
-                        monthContractsWithAIOrRICT100Plus.add(item.contractNumber);
-                    }
+                // Numérateur : affaire IA parmi celles du dénominateur (description ≥ 100 mots)
+                if (item.type === DESCRIPTIF_TYPE && item.contractNumber && item.contractNumber.trim() !== ''
+                        && cumulativeContractsWithRICT100Plus.has(item.contractNumber)) {
+                    monthContractsWithAIOrRICT100Plus.add(item.contractNumber);       // mensuel
+                    cumulativeContractsWithAIOrRICT100Plus.add(item.contractNumber);  // cumulatif ← utilisé pour taux
                 }
             }
         });
@@ -1229,9 +1235,10 @@ function updateChart() {
             chatBTP: 0
         };
         
-        // Descriptif: relevance rate (calculated for THIS MONTH ONLY)
-        rates.descriptif = monthContractsWithRICT100Plus.size > 0
-            ? (monthContractsWithAIOrRICT100Plus.size / monthContractsWithRICT100Plus.size) * 100
+        // Descriptif: taux de couverture CUMULATIF (comme les autres outils)
+        // → cohérent avec la table qui montre le cumul all-time
+        rates.descriptif = cumulativeContractsWithRICT100Plus.size > 0
+            ? Math.min(100, (cumulativeContractsWithAIOrRICT100Plus.size / cumulativeContractsWithRICT100Plus.size) * 100)
             : 0;
         
         // Other tools: adoption rates

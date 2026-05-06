@@ -319,46 +319,77 @@ function extractCSVFromDataField(csvText) {
 }
 
 // Load population CSV to map agencies to DRs
+const POPULATION_FALLBACK = [
+    ['DR Aquitaine','BXCT',7],['DR Aquitaine','LRCT',3],['DR Aquitaine','NOACTC',1],
+    ['DR Bretagne','LOCT',3],['DR Bretagne','RECT',9],
+    ['DR Centre-Est','ALCT',6],['DR Centre-Est','DJCT',3],['DR Centre-Est','GRCT',1],['DR Centre-Est','LYCT',12],
+    ['DR Grand Est','DRGEST',1],['DR Grand Est','MECT',6],['DR Grand Est','STCT',2],
+    ['DR IDF Nord','CT75',8],['DR IDF Nord','CT92N',7],['DR IDF Nord','CT93',13],['DR IDF Nord','CT95',8],['DR IDF Nord','DRN',2],['DR IDF Nord','TECT',6],
+    ['DR IDF Sud','CT75E',8],['DR IDF Sud','CT77',8],['DR IDF Sud','CT78',4],['DR IDF Sud','CT91',7],['DR IDF Sud','CT92S',7],['DR IDF Sud','CT94',9],['DR IDF Sud','DRSCTC',2],
+    ['DR Midi-Pyrénées','TLCT',11],
+    ['DR Nord','AMCT',2],['DR Nord','BMCT',1],['DR Nord','LICT',6],['DR Nord','VACT',1],
+    ['DR Normandie','ROCT',3],
+    ['DR Pays de Loire','NACT',4],
+    ['DR Sud Est','DRSE',1],['DR Sud Est','MPCT',2],['DR Sud Est','NICT',3],['DR Sud Est','PACT',6],
+    ['DR Val de Loire','TRCT',4],
+    ['Direction Grands Comptes','AGCT',4],
+    ['Direction Opérationnelle','DOCT',1],
+];
+
+function parsePopulationCSV(csvText) {
+    const population = {};
+    const drMapping = {};
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    if (lines.length < 2) return { population, drMapping };
+    const separator = lines[0].includes(';') ? ';' : ',';
+    for (let i = 1; i < lines.length; i++) {
+        const parts = separator === ';' ? lines[i].split(';') : parseCSVLineWithCommas(lines[i]);
+        if (parts.length >= 3) {
+            const dr = fixEncoding(parts[0].trim());
+            const agencyCode = parts[1].trim();
+            const effectif = parseInt(parts[2].trim());
+            if (agencyCode && !isNaN(effectif)) {
+                population[agencyCode] = effectif;
+                drMapping[agencyCode] = dr;
+            }
+        }
+    }
+    return { population, drMapping };
+}
+
 async function loadAgencyPopulation() {
     try {
         const response = await fetch(POPULATION_CSV_URL);
-        if (!response.ok) {
-            console.warn('Could not load population_cible.csv');
-            return { population: {}, drMapping: {} };
-        }
-        
-        let csvText = await response.text();
-        csvText = fixEncoding(csvText);
-        
-        // Extract CSV from "data" field if present
-        csvText = extractCSVFromDataField(csvText);
-        
-        const lines = csvText.split('\n').filter(line => line.trim() !== '');
-        
-        const population = {};
-        const drMapping = {};
-        
-        // Skip header (line 0: DR,Agence,Effectif) - now using commas
-        for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLineWithCommas(lines[i]);
-            if (parts.length >= 3) {
-                const dr = fixEncoding(parts[0].trim());
-                const agencyCode = parts[1].trim();
-                const effectif = parseInt(parts[2].trim());
-                if (agencyCode && !isNaN(effectif)) {
-                    population[agencyCode] = effectif;
-                    drMapping[agencyCode] = dr;
+        if (response.ok) {
+            let csvText = await response.text();
+            csvText = fixEncoding(csvText);
+            try {
+                const json = JSON.parse(csvText);
+                if (Array.isArray(json) && json.length > 0 && json[0].data) {
+                    csvText = json[0].data;
                 }
+            } catch(e) {
+                csvText = extractCSVFromDataField(csvText);
+            }
+            const result = parsePopulationCSV(csvText);
+            if (Object.keys(result.population).length > 0) {
+                console.log('Population loaded from Supabase:', Object.keys(result.population).length, 'agencies');
+                return result;
             }
         }
-        
-        console.log('Loaded population data for', Object.keys(population).length, 'agencies');
-        console.log('Loaded DR mapping for', Object.keys(drMapping).length, 'agencies');
-        return { population, drMapping };
     } catch (error) {
-        console.warn('Error loading population data:', error);
-        return { population: {}, drMapping: {} };
+        console.warn('Error loading population from Supabase:', error);
     }
+
+    // Fallback: use hardcoded data
+    console.log('Using hardcoded population fallback');
+    const population = {};
+    const drMapping = {};
+    POPULATION_FALLBACK.forEach(([dr, code, effectif]) => {
+        population[code] = effectif;
+        drMapping[code] = dr;
+    });
+    return { population, drMapping };
 }
 
 // Transform JSON data to our format

@@ -957,6 +957,7 @@ function getFilteredData(data) {
  * Update Agency Table
  */
 function updateAgencyTable() {
+    if (!agencyTableBodyEl) return;
     const agencyStats = {};
     const hourlyRate = getHourlyRate();
     
@@ -1310,7 +1311,7 @@ function processDescriptifData(data) {
     descriptifFiltered.forEach(item => {
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.aiResult || item.description || '');
+            const processedAI = extractText(item.description || '');
             const wordCount = countWords(processedAI);
             
             // Ne compter que les RICT avec au moins 100 mots
@@ -2411,7 +2412,10 @@ function initializeFeatureCards() {
 function updateDashboard() {
     // Update KPIs (calls process...Data which uses getFilteredData)
     updateKPIs();
-    
+
+    // Update objective gauges (always current month/year, ignores date filter)
+    updateObjectiveGauges();
+
     // Update Agency Table
     updateAgencyTable();
     
@@ -2531,36 +2535,53 @@ function collectActiveUsers() {
         return 'Autre';
     };
 
+    const inDateRange = (dateString) => {
+        if (!dateFilter.startDate && !dateFilter.endDate) return true;
+        const d = parseFrenchDate(dateString);
+        if (!d) return false;
+        if (dateFilter.startDate) {
+            const start = new Date(dateFilter.startDate);
+            start.setHours(0, 0, 0, 0);
+            if (d < start) return false;
+        }
+        if (dateFilter.endDate) {
+            const end = new Date(dateFilter.endDate);
+            end.setHours(23, 59, 59, 999);
+            if (d > end) return false;
+        }
+        return true;
+    };
+
     // Descriptif
     descriptifData
-        .filter(item => (!item.type || item.type === DESCRIPTIF_TYPE) && !item.contractNumber.toUpperCase().includes('YIELD'))
+        .filter(item => (!item.type || item.type === DESCRIPTIF_TYPE) && !item.contractNumber.toUpperCase().includes('YIELD') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, getDomainFiliale(item.email), 'descriptif', item.createdAt));
 
     // Autocontact (@btp-consultants.fr, fromAI, pas YIELD)
     autocontactData
-        .filter(item => !item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI && item.email && item.email.includes('@btp-consultants.fr'))
+        .filter(item => !item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI && item.email && item.email.includes('@btp-consultants.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Consultants', 'autocontact', item.createdAt));
 
     // Comparateur
-    comparateurData.forEach(item =>
+    comparateurData.filter(item => inDateRange(item.createdAt)).forEach(item =>
         upsert(item.email, getDomainFiliale(item.email), 'comparateur', item.createdAt));
 
     // Expert / Chat BTP Consultants
-    expertBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr'))
+    expertBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Consultants', 'expertBTP', item.createdAt));
-    chatBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr'))
+    chatBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Consultants', 'chatBTP', item.createdAt));
 
     // Expert / Chat Citae
-    expertCitaeData.filter(item => item.email && item.email.includes('@citae.fr'))
+    expertCitaeData.filter(item => item.email && item.email.includes('@citae.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'Citae', 'expertCitae', item.createdAt));
-    chatCitaeData.filter(item => item.email && item.email.includes('@citae.fr'))
+    chatCitaeData.filter(item => item.email && item.email.includes('@citae.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'Citae', 'chatCitae', item.createdAt));
 
     // Expert / Chat BTP Diagnostics
-    expertBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr'))
+    expertBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Diagnostics', 'expertDiag', item.createdAt));
-    chatBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr'))
+    chatBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Diagnostics', 'chatDiag', item.createdAt));
 
     return Array.from(usersMap.values())
@@ -3068,7 +3089,7 @@ function calculateMonthlyGains() {
         .forEach(item => {
             const key = getMonthKey(item.createdAt);
             if (!key) return;
-            const wordCount = countWords(extractText(item.aiResult || item.description || ''));
+            const wordCount = countWords(extractText(item.description || ''));
             if (wordCount < 100) return;
             const prev = descriptifFirstMonth.get(item.contractNumber);
             if (!prev || key < prev) {
@@ -3192,6 +3213,102 @@ function calculateMonthlyGains() {
             hoursNFHabitat:     gains.timeGainHoursNFHabitat,
         };
     });
+}
+
+/**
+ * Calculate gains for the current calendar month and year, ignoring any active
+ * date filter (org filters still apply). Used by the objective gauges.
+ */
+function calculateObjectiveGains() {
+    const savedDateFilter = { ...dateFilter };
+    dateFilter.startDate = null;
+    dateFilter.endDate = null;
+
+    const monthlyData = calculateMonthlyGains();
+
+    dateFilter.startDate = savedDateFilter.startDate;
+    dateFilter.endDate = savedDateFilter.endDate;
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const currentYear = String(now.getFullYear());
+
+    let monthlyHours = 0;
+    let annualHours = 0;
+    monthlyData.forEach(entry => {
+        if (entry.key === currentMonthKey) monthlyHours = entry.hours;
+        if (entry.key.startsWith(currentYear)) annualHours += entry.hours;
+    });
+
+    return { monthlyHours, annualHours };
+}
+
+// ==================== OBJECTIVE GAUGES ====================
+
+function updateGaugeSVG(arcId, valueId, subId, badgeId, labelId, value, target, labelText, subText) {
+    const pct = value / target;
+    const capped = Math.min(pct, 1);
+
+    const color = pct >= 1 ? '#f97316'
+                : pct >= 0.8 ? '#22c55e'
+                : pct >= 0.5 ? '#3b82f6'
+                : '#94a3b8';
+
+    const cx = 100, cy = 100, r = 80;
+    let arcPath;
+    if (capped <= 0) {
+        arcPath = `M ${cx - r} ${cy}`;
+    } else {
+        const angle = Math.PI * (1 + capped);
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        const largeArc = capped > 0.5 ? 1 : 0;
+        arcPath = `M ${cx - r} ${cy} A ${r} ${r} 0 ${largeArc} 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+
+    const arcEl = document.getElementById(arcId);
+    if (arcEl) {
+        arcEl.setAttribute('d', arcPath);
+        arcEl.setAttribute('stroke', color);
+    }
+
+    const pctStr = (pct * 100).toFixed(0) + '%';
+    document.getElementById(valueId).textContent = `${formatNumber(Math.round(value))} h`;
+    document.getElementById(subId).textContent = subText;
+    document.getElementById(labelId).textContent = labelText;
+
+    const badge = document.getElementById(badgeId);
+    if (badge) {
+        badge.textContent = pctStr;
+        const classes = pct >= 1   ? 'bg-orange-100 text-orange-700'
+                      : pct >= 0.8 ? 'bg-green-100 text-green-700'
+                      : pct >= 0.5 ? 'bg-blue-100 text-blue-700'
+                      :              'bg-gray-100 text-gray-500';
+        badge.className = `px-2.5 py-1 text-xs font-semibold rounded-full ${classes}`;
+    }
+}
+
+function updateObjectiveGauges() {
+    const { monthlyHours, annualHours } = calculateObjectiveGains();
+    const now = new Date();
+    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                        'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+    updateGaugeSVG(
+        'gauge-monthly-arc', 'gauge-monthly-value', 'gauge-monthly-sub',
+        'gauge-monthly-badge', 'gauge-monthly-label',
+        monthlyHours, 772,
+        `${monthNames[now.getMonth()]} ${now.getFullYear()}`,
+        'sur 772 h'
+    );
+
+    updateGaugeSVG(
+        'gauge-annual-arc', 'gauge-annual-value', 'gauge-annual-sub',
+        'gauge-annual-badge', 'gauge-annual-label',
+        annualHours, 9256,
+        `${now.getFullYear()}`,
+        'sur 9 256 h'
+    );
 }
 
 let gainModalIsCumulative = false;

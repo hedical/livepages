@@ -838,7 +838,7 @@ function processData(data, filters, skipMonthFilter = false) {
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.aiResult || item.description || '');
+            const processedAI = extractText(item.description || '');
             const wordCount = countWords(processedAI);
             
             // Ne compter que les RICT avec au moins 100 mots
@@ -1089,7 +1089,7 @@ function updateAgencyTable(allRictData, descriptifData) {
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.aiResult || item.description || '');
+            const processedAI = extractText(item.description || '');
             const wordCount = countWords(processedAI);
             
             // Ne compter que les RICT avec au moins 100 mots
@@ -1175,7 +1175,7 @@ function updateAgencyTable(allRictData, descriptifData) {
         
         // Taux d'utilisation descriptifs: operations / totalRict
         const tauxDescriptifs = totalRict > 0 ? ((operations / totalRict) * 100).toFixed(1) : '-';
-        
+
         // Taux d'adoption: users / effectif
         const tauxUsers = effectif > 0 ? ((users / effectif) * 100).toFixed(1) : '-';
         
@@ -1215,7 +1215,7 @@ function updateAgencyTable(allRictData, descriptifData) {
                 tauxUsersBg = 'bg-red-500';
             }
         }
-        
+
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${dr}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${agency}</td>
@@ -1404,7 +1404,7 @@ function updateChart(data) {
         if (!date) return;
         
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
-        const processedAI = extractText(item.aiResult || item.description || '');
+        const processedAI = extractText(item.description || '');
         const wordCount = countWords(processedAI);
         if (wordCount < 100) return;
         
@@ -1648,7 +1648,7 @@ function updateRatesChart(data) {
         if (!date) return;
         
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
-        const processedAI = extractText(item.aiResult || item.description || '');
+        const processedAI = extractText(item.description || '');
         const wordCount = countWords(processedAI);
         if (wordCount < 100) return;
         
