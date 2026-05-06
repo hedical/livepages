@@ -2354,6 +2354,7 @@ async function loadData() {
         // Initialize filters and table
         extractDirectionsAndAgencies();
         populateFilters();
+        populateGaugeSelectors();
 
         // Update Dashboard (KPIs + Table)
         updateDashboard();
@@ -3219,7 +3220,7 @@ function calculateMonthlyGains() {
  * Calculate gains for the current calendar month and year, ignoring any active
  * date filter (org filters still apply). Used by the objective gauges.
  */
-function calculateObjectiveGains() {
+function calculateObjectiveGains(selectedYear, selectedMonth) {
     const savedDateFilter = { ...dateFilter };
     dateFilter.startDate = null;
     dateFilter.endDate = null;
@@ -3229,18 +3230,48 @@ function calculateObjectiveGains() {
     dateFilter.startDate = savedDateFilter.startDate;
     dateFilter.endDate = savedDateFilter.endDate;
 
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const currentYear = String(now.getFullYear());
+    const yearStr = String(selectedYear);
+    const monthKey = `${yearStr}-${String(selectedMonth).padStart(2, '0')}`;
 
     let monthlyHours = 0;
     let annualHours = 0;
     monthlyData.forEach(entry => {
-        if (entry.key === currentMonthKey) monthlyHours = entry.hours;
-        if (entry.key.startsWith(currentYear)) annualHours += entry.hours;
+        if (entry.key === monthKey) monthlyHours = entry.hours;
+        // Annual = YTD: sum all months in selected year up to and including selected month
+        if (entry.key.startsWith(yearStr) && entry.key <= monthKey) annualHours += entry.hours;
     });
 
     return { monthlyHours, annualHours };
+}
+
+function populateGaugeSelectors() {
+    const now = new Date();
+    const monthEl = document.getElementById('gauge-month-select');
+    const yearEl  = document.getElementById('gauge-year-select');
+    if (!monthEl || !yearEl) return;
+
+    // Default month to current month
+    monthEl.value = String(now.getMonth() + 1);
+
+    // Build year list from available data (ignoring any date filter)
+    const savedDateFilter = { ...dateFilter };
+    dateFilter.startDate = null;
+    dateFilter.endDate = null;
+    const months = calculateMonthlyGains();
+    dateFilter.startDate = savedDateFilter.startDate;
+    dateFilter.endDate = savedDateFilter.endDate;
+
+    const yearsInData = [...new Set(months.map(m => m.key.split('-')[0]))].sort();
+    const currentYearStr = String(now.getFullYear());
+    if (!yearsInData.includes(currentYearStr)) yearsInData.push(currentYearStr);
+
+    yearEl.innerHTML = yearsInData
+        .map(y => `<option value="${y}" ${y === currentYearStr ? 'selected' : ''}>${y}</option>`)
+        .join('');
+
+    const refresh = () => updateObjectiveGauges();
+    monthEl.addEventListener('change', refresh);
+    yearEl.addEventListener('change', refresh);
 }
 
 // ==================== OBJECTIVE GAUGES ====================
@@ -3272,9 +3303,17 @@ function updateGaugeSVG(arcId, valueId, subId, badgeId, labelId, value, target, 
         arcEl.setAttribute('stroke', color);
     }
 
-    const pctStr = (pct * 100).toFixed(0) + '%';
+    const pctStr = pct >= 1
+        ? `${(pct * 100).toFixed(0)}% ✓`
+        : `${(pct * 100).toFixed(0)}%`;
+
+    const surplusHours = Math.round(value - target);
+    const subDisplay = pct >= 1
+        ? `+${formatNumber(surplusHours)} h au-dessus`
+        : subText;
+
     document.getElementById(valueId).textContent = `${formatNumber(Math.round(value))} h`;
-    document.getElementById(subId).textContent = subText;
+    document.getElementById(subId).textContent = subDisplay;
     document.getElementById(labelId).textContent = labelText;
 
     const badge = document.getElementById(badgeId);
@@ -3289,16 +3328,28 @@ function updateGaugeSVG(arcId, valueId, subId, badgeId, labelId, value, target, 
 }
 
 function updateObjectiveGauges() {
-    const { monthlyHours, annualHours } = calculateObjectiveGains();
+    const monthEl = document.getElementById('gauge-month-select');
+    const yearEl  = document.getElementById('gauge-year-select');
     const now = new Date();
+    const selectedMonth = monthEl ? parseInt(monthEl.value) : now.getMonth() + 1;
+    const selectedYear  = yearEl  ? parseInt(yearEl.value)  : now.getFullYear();
+
+    const { monthlyHours, annualHours } = calculateObjectiveGains(selectedYear, selectedMonth);
+
     const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
                         'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const monthLabel = monthNames[selectedMonth - 1];
+
+    const isCurrentYear = selectedYear === now.getFullYear();
+    const annualLabel = isCurrentYear
+        ? `YTD ${selectedYear} (Jan → ${monthLabel})`
+        : `Bilan ${selectedYear}`;
 
     updateGaugeSVG(
         'gauge-monthly-arc', 'gauge-monthly-value', 'gauge-monthly-sub',
         'gauge-monthly-badge', 'gauge-monthly-label',
         monthlyHours, 772,
-        `${monthNames[now.getMonth()]} ${now.getFullYear()}`,
+        `${monthLabel} ${selectedYear}`,
         'sur 772 h'
     );
 
@@ -3306,7 +3357,7 @@ function updateObjectiveGauges() {
         'gauge-annual-arc', 'gauge-annual-value', 'gauge-annual-sub',
         'gauge-annual-badge', 'gauge-annual-label',
         annualHours, 9256,
-        `${now.getFullYear()}`,
+        annualLabel,
         'sur 9 256 h'
     );
 }
