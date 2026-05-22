@@ -395,25 +395,37 @@ function computeActivationByMonth(stats) {
 }
 
 // Segmentation: Champions / Engagés / À risque / Fantômes
+// Returns counts AND the lists of users per segment.
 function computeSegmentation(stats) {
     const now = Date.now();
-    const segments = { champions: 0, engages: 0, aRisque: 0, fantomes: 0 };
+    const buckets = { champions: [], engages: [], aRisque: [], fantomes: [] };
     stats.forEach(u => {
         const inactiveDays = (now - u.lastDate.getTime()) / DAY;
+        const enriched = {
+            email: u.email,
+            totalEvents: u.totalEvents,
+            lastDate: u.lastDate,
+            firstDate: u.firstDate,
+            inactiveDays: Math.floor(inactiveDays)
+        };
         if (inactiveDays > 60) {
-            segments.fantomes++;
+            buckets.fantomes.push(enriched);
         } else if (inactiveDays > 14) {
-            segments.aRisque++;
+            buckets.aRisque.push(enriched);
         } else if (u.totalEvents >= 10) {
-            segments.champions++;
-        } else if (u.totalEvents >= 2) {
-            segments.engages++;
+            buckets.champions.push(enriched);
         } else {
-            // 1 event, active (<14j): borderline activated, count as engagé
-            segments.engages++;
+            // 1-9 events, dernier event <14j
+            buckets.engages.push(enriched);
         }
     });
-    return segments;
+    return {
+        champions: buckets.champions.length,
+        engages: buckets.engages.length,
+        aRisque: buckets.aRisque.length,
+        fantomes: buckets.fantomes.length,
+        buckets: buckets
+    };
 }
 
 // ==================== RENDERING ====================
@@ -553,39 +565,54 @@ function renderActivationChart(perMonth) {
     });
 }
 
+// Holds the segmentation buckets so the modal can access them after click.
+let __segBuckets = null;
+
+const SEGMENT_META = [
+    { key: 'champions', label: 'Champions  (≥10 events, actif <14j)',     color: '#10b981', short: 'Champions' },
+    { key: 'engages',   label: 'Engagés  (1-9 events, actif <14j)',       color: '#8b5cf6', short: 'Engagés' },
+    { key: 'aRisque',   label: 'À risque  (dernier event 14j-60j)',       color: '#f59e0b', short: 'À risque' },
+    { key: 'fantomes',  label: 'Fantômes  (dernier event >60j)',          color: '#ef4444', short: 'Fantômes' }
+];
+
 function renderSegmentationChart(seg) {
+    __segBuckets = seg.buckets;
     const ctx = document.getElementById('chart-segmentation');
     const total = seg.champions + seg.engages + seg.aRisque + seg.fantomes;
     const pct = (n) => total > 0 ? ((n / total) * 100).toFixed(1) + '%' : '0%';
     new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: [
-                'Champions  (≥10 events, actif <14j)',
-                'Engagés  (1-9 events, actif <14j)',
-                'À risque  (dernier event 14j-60j)',
-                'Fantômes  (dernier event >60j)'
-            ],
+            labels: SEGMENT_META.map(s => s.label),
             datasets: [{
                 label: 'Users',
-                data: [seg.champions, seg.engages, seg.aRisque, seg.fantomes],
-                backgroundColor: ['#10b981', '#8b5cf6', '#f59e0b', '#ef4444']
+                data: SEGMENT_META.map(s => seg[s.key]),
+                backgroundColor: SEGMENT_META.map(s => s.color)
             }]
         },
         options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (evt, elems) => {
+                if (elems && elems.length > 0) {
+                    const idx = elems[0].index;
+                    openSegmentModal(SEGMENT_META[idx]);
+                }
+            },
+            onHover: (evt, elems) => {
+                evt.native.target.style.cursor = elems.length ? 'pointer' : 'default';
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.raw} users  (${pct(ctx.raw)} de la base)`
+                        label: (ctx) => `${ctx.raw} users  (${pct(ctx.raw)} de la base) — clic pour voir la liste`
                     }
                 },
                 title: {
                     display: true,
-                    text: 'Seuil "actif" : dernier event IA dans les 14 derniers jours',
+                    text: 'Seuil "actif" : dernier event IA dans les 14 derniers jours  •  Clique sur une barre pour voir les emails',
                     font: { size: 11, weight: 'normal' },
                     color: '#6b7280',
                     padding: { bottom: 10 }
@@ -599,8 +626,143 @@ function renderSegmentationChart(seg) {
     });
 }
 
+// ==================== SEGMENT MODAL ====================
+let __segModalState = {
+    users: [],         // current segment users
+    sortBy: 'totalEvents',
+    sortDesc: true,
+    filter: '',
+    title: ''
+};
+
+function openSegmentModal(segMeta) {
+    if (!__segBuckets) return;
+    const users = __segBuckets[segMeta.key] || [];
+    __segModalState = {
+        users: users,
+        sortBy: 'totalEvents',
+        sortDesc: true,
+        filter: '',
+        title: segMeta.short,
+        color: segMeta.color
+    };
+    document.getElementById('segment-modal-title').textContent = `${segMeta.short} — ${users.length} user${users.length !== 1 ? 's' : ''}`;
+    document.getElementById('segment-modal-subtitle').textContent = segMeta.label.replace(segMeta.short, '').trim();
+    document.getElementById('segment-modal-title').style.color = segMeta.color;
+    document.getElementById('segment-search').value = '';
+    document.getElementById('segment-copy-text').textContent = 'Copier les emails';
+    document.getElementById('segment-modal').classList.remove('hidden');
+    renderSegmentModalRows();
+}
+
+function closeSegmentModal() {
+    document.getElementById('segment-modal').classList.add('hidden');
+}
+
+function formatRelativeDate(d) {
+    if (!d) return '—';
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function renderSegmentModalRows() {
+    const body  = document.getElementById('segment-modal-body');
+    const empty = document.getElementById('segment-modal-empty');
+    if (!body) return;
+
+    const filter = __segModalState.filter.toLowerCase().trim();
+    let rows = __segModalState.users.filter(u => !filter || u.email.includes(filter));
+
+    // Sort
+    const { sortBy, sortDesc } = __segModalState;
+    rows.sort((a, b) => {
+        let av = a[sortBy], bv = b[sortBy];
+        if (av instanceof Date) av = av.getTime();
+        if (bv instanceof Date) bv = bv.getTime();
+        if (typeof av === 'string') return sortDesc ? bv.localeCompare(av) : av.localeCompare(bv);
+        return sortDesc ? (bv - av) : (av - bv);
+    });
+
+    if (rows.length === 0) {
+        body.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    body.innerHTML = rows.map(u => `
+        <tr class="border-b border-gray-100 hover:bg-gray-50">
+            <td class="py-2 px-3 text-gray-900">${u.email}</td>
+            <td class="py-2 px-3 text-right text-gray-700">${u.totalEvents}</td>
+            <td class="py-2 px-3 text-gray-600">${formatRelativeDate(u.lastDate)}</td>
+            <td class="py-2 px-3 text-right text-gray-500 text-xs">il y a ${u.inactiveDays}j</td>
+        </tr>
+    `).join('');
+}
+
+function copySegmentEmails() {
+    const filter = __segModalState.filter.toLowerCase().trim();
+    const emails = __segModalState.users
+        .filter(u => !filter || u.email.includes(filter))
+        .map(u => u.email)
+        .join('\n');
+    if (!emails) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(emails).then(() => {
+            const btn = document.getElementById('segment-copy-text');
+            const prev = btn.textContent;
+            btn.textContent = '✓ Copié !';
+            setTimeout(() => { btn.textContent = prev; }, 2000);
+        });
+    } else {
+        // Fallback (e.g., file:// in some browsers)
+        const ta = document.createElement('textarea');
+        ta.value = emails;
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+            document.execCommand('copy');
+            const btn = document.getElementById('segment-copy-text');
+            btn.textContent = '✓ Copié !';
+            setTimeout(() => { btn.textContent = 'Copier les emails'; }, 2000);
+        } catch(e) {}
+        document.body.removeChild(ta);
+    }
+}
+
+// Modal event wiring (runs once on DOMContentLoaded)
+function wireSegmentModal() {
+    const modal = document.getElementById('segment-modal');
+    if (!modal) return;
+
+    document.getElementById('segment-modal-close').addEventListener('click', closeSegmentModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target === modal.firstElementChild) closeSegmentModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeSegmentModal();
+    });
+    document.getElementById('segment-search').addEventListener('input', (e) => {
+        __segModalState.filter = e.target.value;
+        renderSegmentModalRows();
+    });
+    document.getElementById('segment-copy-emails').addEventListener('click', copySegmentEmails);
+    document.querySelectorAll('#segment-modal th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.getAttribute('data-sort');
+            if (__segModalState.sortBy === col) {
+                __segModalState.sortDesc = !__segModalState.sortDesc;
+            } else {
+                __segModalState.sortBy = col;
+                __segModalState.sortDesc = (col !== 'email'); // email asc by default
+            }
+            renderSegmentModalRows();
+        });
+    });
+}
+
 // ==================== MAIN ====================
 (async function init() {
+    wireSegmentModal();
     const events = await loadAllData();
     if (!events) return; // redirected or showed error
 
