@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse géotechnique - AnalyzTech</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Header -->
+            <div class="mb-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <a href="index.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                            Analyse géotechnique - Analyse détaillée
+                        </h1>
+                        <p class="text-gray-500 text-sm">Détails d'utilisation de la fonctionnalité Analyse géotechnique (axe qualité)</p>
+                        <p class="text-gray-400 text-xs mt-1" id="first-date-text">-</p>
+                    </div>
+                    <div class="px-3 py-1.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 self-start">
+                        BTP Consultants
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="flex items-center justify-center py-20">
+                <div class="text-center">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-6">
+                <div class="flex items-start">
+                    <svg class="w-6 h-6 text-red-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <h3 class="text-red-800 font-medium mb-1">Erreur de chargement</h3>
+                        <p class="text-red-700 text-sm" id="error-message">Impossible de charger les données. Veuillez réessayer.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div id="main-content" class="hidden">
+                <!-- Banner: focus qualité, pas de productivité -->
+                <div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                        <svg class="w-5 h-5 text-amber-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p class="text-sm text-amber-900">
+                            Cette brique apporte un gain en <strong>qualité</strong> (notices structurées par l'IA), pas en productivité.
+                            Les KPIs heures / euros ne sont donc volontairement pas affichés.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="mb-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                        <!-- Date Range Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <div class="flex items-center justify-between mb-4">
+                                <label class="block text-sm font-medium text-gray-700">
+                                    Filtrer par période
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-600">Plage</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="cumul-toggle" class="sr-only peer">
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                    <span class="text-xs text-gray-600">Depuis le début</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    id="start-date-filter"
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <span class="text-gray-400 text-xs font-medium">→</span>
+                                <input
+                                    type="date"
+                                    id="end-date-filter"
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Regional Direction Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par direction régionale
+                            </label>
+                            <select
+                                id="dr-filter"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Toutes les directions</option>
+                            </select>
+                        </div>
+
+                        <!-- Agency Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par agence
+                            </label>
+                            <select
+                                id="agency-filter"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Toutes les agences</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button
+                        id="reset-filters"
+                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                        Réinitialiser les filtres
+                    </button>
+                </div>
+
+                <!-- KPIs -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs qualité</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Opérations IA -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Opérations IA géotechnique</p>
+                                    <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="total-operations" title="Nombre d'opérations IA distinctes (déduplique Notice + Report par DeliverableId)">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Déduplique Notice + Report</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notices créées -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Notices créées</p>
+                                    <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-notices" title="Nombre de notices générées par l'IA et insérées dans un rapport">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Insérées dans un rapport</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Reports créés -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Rapports créés</p>
+                                    <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-reports" title="Nombre de rapports créés à partir d'une analyse géotechnique IA">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">À partir de l'IA</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Utilisateurs -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-500 mb-2">Utilisateurs uniques</p>
+                                    <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-users" title="Nombre d'utilisateurs distincts ayant utilisé la fonctionnalité">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Utilisateurs distincts</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agency Stats Table -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Utilisation par agence</h2>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('dr')">
+                                            <div class="flex items-center">
+                                                Direction Régionale
+                                                <span id="sort-icon-dr" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
+                                            <div class="flex items-center">
+                                                Agence
+                                                <span id="sort-icon-agency" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('operations')">
+                                            <div class="flex items-center">
+                                                Opérations IA
+                                                <span id="sort-icon-operations" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('notices')">
+                                            <div class="flex items-center">
+                                                Notices
+                                                <span id="sort-icon-notices" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('reports')">
+                                            <div class="flex items-center">
+                                                Rapports
+                                                <span id="sort-icon-reports" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('users')">
+                                            <div class="flex items-center">
+                                                Utilisateurs
+                                                <span id="sort-icon-users" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('rate')">
+                                            <div class="flex items-center">
+                                                Taux d'adoption
+                                                <span id="sort-icon-rate" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="agency-table-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- Rows will be inserted here by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Évolution mensuelle</h2>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div style="height: 450px;">
+                            <canvas id="dateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="analyse-geotechnique.js"></script>
+</body>
+</html>

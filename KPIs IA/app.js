@@ -6,6 +6,7 @@ let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
+let GEOTECH_URL = '';
 // Expert BTP Consultants URL (public)
 const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
 // Chat BTP Consultants URL (public)
@@ -55,6 +56,7 @@ let chatCitaeData = [];
 let expertBTPDiagData = [];
 let chatBTPDiagData = [];
 let nfHabitatData = [];
+let geotechData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
 let availableAgencies = [];
@@ -141,6 +143,13 @@ const chatProjetBTPDiagCountEl = document.getElementById('chat-projet-btpdiag-co
 const chatProjetBTPDiagUsersEl = document.getElementById('chat-projet-btpdiag-users');
 const chatProjetBTPDiagMessagesEl = document.getElementById('chat-projet-btpdiag-messages');
 const chatProjetBTPDiagCostEl = document.getElementById('chat-projet-btpdiag-cost');
+
+// Analyse géotechnique (BTP Consultants) elements
+const analyseGeoCountEl = document.getElementById('analyse-geo-count');
+const analyseGeoOpsEl = document.getElementById('analyse-geo-ops');
+const analyseGeoNoticesEl = document.getElementById('analyse-geo-notices');
+const analyseGeoReportsEl = document.getElementById('analyse-geo-reports');
+const analyseGeoUsersEl = document.getElementById('analyse-geo-users');
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -706,6 +715,66 @@ function parseComparateurJSON(jsonArray) {
 }
 
 /**
+ * Parse direct JSON array from Metabase card 139 (Analyse Géotechnique).
+ * One row per AnalyticEvent (Notice or Report). Front-end dedupes operations via DeliverableId.
+ */
+function parseGeotechJSON(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
+        return [];
+    }
+    const data = [];
+    jsonArray.forEach(item => {
+        const eventName = (item['EventName'] || '').trim();
+        const isNotice = eventName === 'Create Notice From AI Geotech';
+        const isReport = eventName === 'Create Report From AI Geotech';
+        if (!isNotice && !isReport) return;
+        const contractNumber = (item['ContractNumber'] || '').trim();
+        let agencyCode = null;
+        const m = contractNumber.match(/C-([A-Z0-9]+)-/);
+        if (m) agencyCode = m[1];
+        data.push({
+            eventName,
+            isNotice,
+            isReport,
+            createdAt: (item['EventDate'] || '').trim(),
+            deliverableId: (item['DeliverableId'] || '').trim(),
+            reportId: (item['ReportId'] || '').trim(),
+            noticesCount: parseInt(item['NoticesCount']) || 0,
+            contractNumber,
+            agencyCode,
+            email: (item['UserEmail'] || '').trim(),
+            agency: (item['Agence'] || '').trim(),
+            direction: (item['DR'] || '').trim(),
+        });
+    });
+    console.log('Parsed', data.length, 'geotech events from direct JSON');
+    return data;
+}
+
+/**
+ * Parse geotech CSV envelope (n8n format: [{ data: "csv..." }]).
+ * The CSV is simple — no commas in fields — so we split on comma directly.
+ */
+function parseGeotechCSV(csvString) {
+    if (!csvString || typeof csvString !== 'string') return [];
+    const lines = csvString.split('\n').filter(l => l.trim() !== '');
+    if (lines.length < 2) return [];
+
+    const header = lines[0].split(',').map(h => h.trim());
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        if (parts.length < header.length) continue;
+        const row = {};
+        header.forEach((key, idx) => {
+            row[key] = (parts[idx] ?? '').trim();
+        });
+        rows.push(row);
+    }
+    return parseGeotechJSON(rows);
+}
+
+/**
  * Parse CSV data for comparateur
  */
 function parseComparateurCSV(csvString) {
@@ -1023,7 +1092,8 @@ function extractDirectionsAndAgencies() {
     processItems(chatCitaeData);
     processItems(expertBTPDiagData);
     processItems(chatBTPDiagData);
-    
+    processItems(geotechData);
+
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
 }
@@ -1579,6 +1649,30 @@ function processComparateurData(data) {
 }
 
 /**
+ * Process geotech (analyse géotechnique) data — quality-focused brique, no time/€ gain.
+ * Dedupes operations via DeliverableId (one operation emits 2 events: Notice + Report).
+ */
+function processGeotechData(data) {
+    const filtered = getFilteredData(data);
+    const uniqueUsers = new Set();
+    const uniqueDeliverables = new Set();
+    let totalNotices = 0;
+    let totalReports = 0;
+    filtered.forEach(item => {
+        if (item.email) uniqueUsers.add(item.email);
+        if (item.deliverableId) uniqueDeliverables.add(item.deliverableId);
+        if (item.isNotice) totalNotices += item.noticesCount || 1;
+        if (item.isReport) totalReports++;
+    });
+    return {
+        totalOperations: uniqueDeliverables.size,
+        totalNotices,
+        totalReports,
+        uniqueUsers: uniqueUsers.size,
+    };
+}
+
+/**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
 function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints) {
@@ -1834,6 +1928,7 @@ function updateKPIs() {
     const descriptifStats = processDescriptifData(descriptifData);
     const autocontactStats = processAutocontactData(autocontactData);
     const comparateurStats = processComparateurData(comparateurData);
+    const geotechStats = processGeotechData(geotechData);
     const expertBTPStats = processExpertBTPData(expertBTPData);
     const chatBTPStats = processChatBTPData(chatBTPData);
     const expertCitaeStats = processExpertCitaeData(expertCitaeData);
@@ -1844,7 +1939,8 @@ function updateKPIs() {
 
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + nfHabitatStats.totalControls;
+    // For geotech, use totalOperations (distinct DeliverableId) — one operation = 1 notice + 1 report, so we dedup.
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => (!item.type || item.type === DESCRIPTIF_TYPE)).forEach(item => {
@@ -1864,7 +1960,11 @@ function updateKPIs() {
     getFilteredData(comparateurData).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
-    
+
+    getFilteredData(geotechData).forEach(item => {
+        if (item.email) allUsers.add(item.email);
+    });
+
     getFilteredData(expertBTPData).forEach(item => {
         if (item.email && item.email.includes('@btp-consultants.fr')) {
             allUsers.add(item.email);
@@ -1937,6 +2037,13 @@ function updateKPIs() {
     comparateurOpsEl.textContent = formatNumber(comparateurStats.uniqueOperations);
     comparateurPagesEl.textContent = formatNumber(comparateurStats.totalPages);
     comparateurUsersEl.textContent = comparateurStats.uniqueUsers;
+
+    // Analyse géotechnique stats (quality-focused — no gain h/€)
+    if (analyseGeoCountEl) analyseGeoCountEl.textContent = formatNumber(geotechStats.totalOperations);
+    if (analyseGeoOpsEl) analyseGeoOpsEl.textContent = formatNumber(geotechStats.totalOperations);
+    if (analyseGeoNoticesEl) analyseGeoNoticesEl.textContent = formatNumber(geotechStats.totalNotices);
+    if (analyseGeoReportsEl) analyseGeoReportsEl.textContent = formatNumber(geotechStats.totalReports);
+    if (analyseGeoUsersEl) analyseGeoUsersEl.textContent = formatNumber(geotechStats.uniqueUsers);
     
     // Expert BTP stats
     if (expertTechBTPCountEl) expertTechBTPCountEl.textContent = formatNumber(expertBTPStats.totalSessions);
@@ -2088,12 +2195,14 @@ async function authenticateWithPassword(password) {
         const autocontactMatch = urlRegex('AUTOCONTACT_URL');
         const comparateurMatch = urlRegex('COMPARATEUR_URL');
         const nfHabitatMatch   = urlRegex('NF_HABITAT_URL');
+        const geotechMatch     = urlRegex('GEOTECH_URL');
 
         if (descriptifMatch && autocontactMatch && comparateurMatch) {
             DESCRIPTIF_URL = descriptifMatch[1];
             AUTOCONTACT_URL = autocontactMatch[1];
             COMPARATEUR_URL = comparateurMatch[1];
             if (nfHabitatMatch) NF_HABITAT_URL = nfHabitatMatch[1];
+            if (geotechMatch) GEOTECH_URL = geotechMatch[1];
 
             // Cache the full webhook response so other pages (nfhabitat.js, etc.)
             // can reuse it without re-calling the webhook
@@ -2247,6 +2356,46 @@ async function loadData() {
         if (comparateurCSV) {
             comparateurData = parseComparateurCSV(comparateurCSV);
             console.log('Loaded', comparateurData.length, 'comparateur records');
+        }
+
+        // Load Analyse géotechnique data (optional — depends on n8n exposing GEOTECH_URL)
+        if (GEOTECH_URL) {
+            console.log('Loading geotech data...');
+            try {
+                const geotechResponse = await fetch(GEOTECH_URL);
+                if (geotechResponse.ok) {
+                    const geotechRaw = await geotechResponse.text();
+                    let payload = null;
+                    try { payload = JSON.parse(geotechRaw); } catch (_) { /* raw CSV fallthrough */ }
+
+                    if (payload === null) {
+                        // Raw CSV without JSON envelope
+                        geotechData = parseGeotechCSV(geotechRaw);
+                    } else if (Array.isArray(payload) && payload.length && payload[0].data && typeof payload[0].data === 'string') {
+                        // n8n envelope: [{ data: "<csv-or-json>" }]
+                        const inner = payload[0].data;
+                        let innerJson = null;
+                        try { innerJson = JSON.parse(inner); } catch (_) { /* CSV */ }
+                        geotechData = Array.isArray(innerJson) ? parseGeotechJSON(innerJson) : parseGeotechCSV(inner);
+                    } else if (payload && payload.data && typeof payload.data === 'string') {
+                        // { data: "<csv-or-json>" }
+                        const inner = payload.data;
+                        let innerJson = null;
+                        try { innerJson = JSON.parse(inner); } catch (_) {}
+                        geotechData = Array.isArray(innerJson) ? parseGeotechJSON(innerJson) : parseGeotechCSV(inner);
+                    } else if (Array.isArray(payload)) {
+                        // Direct JSON array
+                        geotechData = parseGeotechJSON(payload);
+                    }
+                    console.log('Loaded', geotechData.length, 'geotech events');
+                } else {
+                    console.warn('Geotech URL responded with status', geotechResponse.status);
+                }
+            } catch (e) {
+                console.warn('Failed to load geotech data:', e);
+            }
+        } else {
+            console.log('No GEOTECH_URL configured — analyse géotechnique tile will show 0.');
         }
 
         // Load Expert BTP Consultants data
