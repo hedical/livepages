@@ -525,6 +525,27 @@ async function loadAgencyPopulation() {
                 const json = JSON.parse(csvText);
                 if (Array.isArray(json) && json.length > 0 && json[0].data) {
                     csvText = json[0].data;
+                } else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object' && !json[0].data) {
+                    // New direct JSON array from Metabase card 136 (DR, Agence, Effectif)
+                    const population = {};
+                    const drMapping = {};
+                    const keys0 = Object.keys(json[0]);
+                    const kDR  = keys0.find(k => k.toLowerCase() === 'dr' || k.toLowerCase().includes('management'));
+                    const kAg  = keys0.find(k => k.toLowerCase() === 'agence' || k.toLowerCase() === 'agency');
+                    const kEff = keys0.find(k => k.toLowerCase() === 'effectif');
+                    json.forEach(row => {
+                        const dr = (row[kDR] || '').toString().trim();
+                        const agencyCode = (row[kAg] || '').toString().trim();
+                        const effectif = parseInt(row[kEff]);
+                        if (agencyCode && !isNaN(effectif)) {
+                            population[agencyCode] = effectif;
+                            drMapping[agencyCode] = dr;
+                        }
+                    });
+                    if (Object.keys(population).length > 0) {
+                        console.log('Population loaded from Metabase JSON:', Object.keys(population).length, 'agencies');
+                        return { population, drMapping };
+                    }
                 }
             } catch(e) {
                 csvText = extractCSVFromDataField(csvText);
@@ -716,19 +737,99 @@ function parseCSVData(csvString) {
     return data;
 }
 
-// Transform data from JSON array format
+// Transform data from JSON array format (legacy: [{data:"csv..."}])
 function transformData(jsonArray) {
     const allRows = [];
-    
+
     jsonArray.forEach((item, index) => {
         if (item.data && typeof item.data === 'string') {
             const rows = parseCSVData(item.data);
             allRows.push(...rows);
         }
     });
-    
+
     console.log('Transformed data, total rows:', allRows.length);
     return allRows;
+}
+
+// Helper: find a key matching lowercase substring patterns
+// (patterns are tried in order — pattern priority > key order)
+function findKeyComparateur(keys, ...patterns) {
+    for (const pattern of patterns) {
+        for (const key of keys) {
+            const lk = (key || '').toLowerCase();
+            let ok = true;
+            for (const sub of pattern) {
+                if (sub.startsWith('!')) {
+                    if (lk.includes(sub.substring(1))) { ok = false; break; }
+                } else {
+                    if (!lk.includes(sub)) { ok = false; break; }
+                }
+            }
+            if (ok) return key;
+        }
+    }
+    return null;
+}
+
+// Parse direct Metabase JSON array (array of objects). Same output shape as parseCSVData.
+function parseMetabaseJSONComparateur(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) return [];
+
+    const keys = Object.keys(jsonArray[0] || {});
+    const kContract   = findKeyComparateur(keys, ['contractnumber'], ['subaffairdetailid']);
+    const kCreatedAt  = findKeyComparateur(keys, ['createdat'], ['created_at']);
+    const kEmail      = findKeyComparateur(keys, ['user', 'email']);
+    const kAgency     = findKeyComparateur(keys, ['productionservice']);
+    const kManagement = findKeyComparateur(keys, ['management']);
+    const kItems      = findKeyComparateur(keys, ['indexcomparator', 'items']);
+    const kLongResult = findKeyComparateur(keys, ['longresult', '!indexcomparator']);
+
+    console.log('Comparateur standalone JSON keys map:', { kContract, kCreatedAt, kEmail, kAgency, kManagement, kItems, kLongResult });
+
+    if (!kContract) {
+        console.warn('Missing required column: contractNumber');
+        return [];
+    }
+
+    return jsonArray.map(item => {
+        const contractNumber = ((kContract && item[kContract]) || '').toString().trim();
+        const agency = ((kAgency && item[kAgency]) || '').toString().trim();
+        const agencyCode = (typeof extractAgency === 'function') ? extractAgency(contractNumber) : agency;
+
+        // Compute max page: prefer IndexComparator items, else fallback on longResult
+        let maxPage = 0;
+        if (kItems && item[kItems]) {
+            try {
+                const raw = item[kItems];
+                const items = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+                if (Array.isArray(items)) {
+                    items.forEach(it => {
+                        if (it && it.page !== undefined && it.page !== null) {
+                            const p = typeof it.page === 'number' ? it.page : parseInt(it.page);
+                            if (!isNaN(p)) maxPage = Math.max(maxPage, p);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to parse IndexComparator Items:', e.message);
+            }
+        }
+        if (maxPage === 0 && kLongResult && item[kLongResult] && typeof extractMaxPage === 'function') {
+            const lr = item[kLongResult];
+            const lrStr = typeof lr === 'string' ? lr : JSON.stringify(lr);
+            maxPage = extractMaxPage(lrStr);
+        }
+
+        return {
+            contractNumber: contractNumber,
+            createdAt:      ((kCreatedAt && item[kCreatedAt]) || '').toString().trim(),
+            email:          ((kEmail && item[kEmail]) || '').toString().trim(),
+            agency:         agency,
+            agencyCode:     agencyCode,
+            maxPage:        maxPage
+        };
+    });
 }
 
 // Filter functions

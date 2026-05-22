@@ -313,6 +313,81 @@ function parseFullCSV(csvString) {
 /**
  * Parse CSV data from string
  */
+// Helper: find a key in an object matching given lowercase substring patterns
+// (patterns are tried in order — pattern priority > key order)
+function findKeyExplorer(keys, ...patterns) {
+    for (const pattern of patterns) {
+        for (const key of keys) {
+            const lk = (key || '').toLowerCase();
+            let ok = true;
+            for (const sub of pattern) {
+                if (sub.startsWith('!')) {
+                    if (lk.includes(sub.substring(1))) { ok = false; break; }
+                } else {
+                    if (!lk.includes(sub)) { ok = false; break; }
+                }
+            }
+            if (ok) return key;
+        }
+    }
+    return null;
+}
+
+// Parse direct Metabase JSON array (array of objects with column keys).
+// Same output shape as parseCSVData(): { all, descriptifs }.
+function parseMetabaseJSONExplorer(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
+        return { all: [], descriptifs: [] };
+    }
+
+    const keys = Object.keys(jsonArray[0]);
+    const kType        = findKeyExplorer(keys, ['aideliver', 'type'], ['reporttype'], ['report', 'type', '!diffusedat']);
+    const kContract    = findKeyExplorer(keys, ['contractnumber']);
+    const kDiffusedAt  = findKeyExplorer(keys, ['report', 'diffusedat']);
+    const kEmail       = findKeyExplorer(keys, ['user', 'email']);
+    const kDescription = findKeyExplorer(keys, ['description', '!complement', '!wordcount']);
+    const kAiResult    = findKeyExplorer(keys, ['longresult', 'description'], ['longresult'], ['result', '!wordcount']);
+    const kAgency      = findKeyExplorer(keys, ['productionservice']);
+    const kDirection   = findKeyExplorer(keys, ['management'], ['direction']);
+
+    console.log('Explorer JSON keys map:', { kType, kContract, kDiffusedAt, kEmail, kDescription, kAiResult, kAgency, kDirection });
+
+    if (!kContract) {
+        console.warn('Missing required column: contractNumber');
+        return { all: [], descriptifs: [] };
+    }
+
+    const allDataRows = [];
+    const descriptifDataRows = [];
+
+    jsonArray.forEach(item => {
+        const type = ((kType && item[kType]) || '').toString().trim();
+        const contractNumber = ((kContract && item[kContract]) || '').toString().trim();
+        const rowData = {
+            type:            type,
+            contractNumber:  contractNumber,
+            createdAt:       ((kDiffusedAt && item[kDiffusedAt]) || '').toString().trim(),
+            email:           ((kEmail && item[kEmail]) || '').toString().trim(),
+            agency:          ((kAgency && item[kAgency]) || '').toString().trim(),
+            direction:       ((kDirection && item[kDirection]) || '').toString().trim(),
+            agencyCode:      (typeof extractAgency === 'function') ? extractAgency(contractNumber) : '',
+            description:     (kDescription && item[kDescription]) || '',
+            aiResult:        (kAiResult && item[kAiResult]) || ''
+        };
+
+        allDataRows.push(rowData);
+
+        if (type === DESCRIPTIF_TYPE || type === '') {
+            descriptifDataRows.push(rowData);
+        }
+    });
+
+    console.log('Parsed', allDataRows.length, 'total rows from JSON');
+    console.log('Parsed', descriptifDataRows.length, 'descriptif rows from JSON');
+
+    return { all: allDataRows, descriptifs: descriptifDataRows };
+}
+
 function parseCSVData(csvString) {
     if (!csvString || typeof csvString !== 'string') {
         console.warn('Invalid CSV string');
@@ -820,56 +895,32 @@ async function authenticateAndGetFiles() {
             },
             body: storedPassword
         });
-        
+
         if (!response.ok) {
             localStorage.removeItem('roi_password');
             window.location.href = 'index.html';
             return null;
         }
-        
+
         const result = await response.text();
-        
+
         // Parse the body to extract file URLs from the JavaScript constants
         const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
-        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
-        const comparateurMatch = result.match(/COMPARATEUR_URL = '([^']+)'/);
-        const chatBTPMatch = result.match(/CHAT_BTP_URL = "([^"]+)"/);
-        const chatCitaeMatch = result.match(/CHAT_CITAE_URL = "([^"]+)"/);
-        const expertBTPMatch = result.match(/EXPERT_BTP_URL = "([^"]+)"/);
-        const expertCitaeMatch = result.match(/EXPERT_CITAE_URL = "([^"]+)"/);
-        const populationCibleMatch = result.match(/POPULATION_CIBLE_URL = "([^"]+)"/);
-        
+
         if (!descriptifMatch) {
             console.error('DESCRIPTIF_URL not found in webhook response');
             window.location.href = 'index.html';
             return null;
         }
-        
-        // Fetch all files in parallel
-        const filePromises = [];
-        
-        if (descriptifMatch) {
-            filePromises.push(
-                fetch(descriptifMatch[1])
-                    .then(r => r.ok ? r.text() : Promise.reject(new Error(`Failed to fetch descriptif: ${r.status}`)))
-                    .then(data => ({ name: 'descriptif', data }))
-                    .catch(err => {
-                        console.error('Error fetching descriptif:', err);
-                        return { name: 'descriptif', data: null, error: err };
-                    })
-            );
+
+        const fileResponse = await fetch(descriptifMatch[1]);
+        if (!fileResponse.ok) {
+            throw new Error(`Failed to fetch descriptif: ${fileResponse.status}`);
         }
-        
-        // Wait for descriptif file (required)
-        const results = await Promise.all(filePromises);
-        const descriptifResult = results.find(r => r.name === 'descriptif');
-        
-        if (!descriptifResult || !descriptifResult.data) {
-            throw new Error('Failed to load descriptif file');
-        }
-        
+        const data = await fileResponse.text();
+
         return {
-            descriptif: descriptifResult.data
+            descriptif: data
         };
     } catch (error) {
         console.error('Authentication error:', error);
@@ -890,24 +941,28 @@ async function init() {
         
         const rawText = files.descriptif;
         console.log('Response received, length:', rawText.length);
-        
+
         let csvData = null;
-        
+        let parsedData = null;
+
         try {
             const jsonData = JSON.parse(rawText);
-            
-            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].data) {
-                console.log('Found JSON array with data field');
+
+            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].data && typeof jsonData[0].data === 'string') {
+                console.log('Found JSON array with data field (legacy CSV-in-JSON)');
                 csvData = jsonData[0].data;
-            } else if (jsonData.data && typeof jsonData.data === 'string') {
-                console.log('Found JSON object with data field');
+            } else if (jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && jsonData.data && typeof jsonData.data === 'string') {
+                console.log('Found JSON object with data field (legacy)');
                 csvData = jsonData.data;
+            } else if (Array.isArray(jsonData) && jsonData.length > 0) {
+                console.log('Found new direct JSON array format (Metabase native), rows:', jsonData.length);
+                parsedData = parseMetabaseJSONExplorer(jsonData);
             }
         } catch (jsonError) {
             console.log('Standard JSON parsing failed:', jsonError.message);
         }
-        
-        if (!csvData && rawText.includes('{data:')) {
+
+        if (!parsedData && !csvData && rawText.includes('{data:')) {
             console.log('Detected malformed JSON format, extracting CSV manually');
             const dataStart = rawText.indexOf('{data:') + 6;
             const dataEnd = rawText.lastIndexOf('}');
@@ -915,13 +970,15 @@ async function init() {
                 csvData = rawText.substring(dataStart, dataEnd).trim();
             }
         }
-        
-        if (!csvData) {
+
+        if (!parsedData && !csvData) {
             console.log('No CSV data found, trying raw text as CSV');
             csvData = rawText;
         }
-        
-        const parsedData = parseCSVData(csvData);
+
+        if (!parsedData) {
+            parsedData = parseCSVData(csvData);
+        }
         
         if (!parsedData.descriptifs || parsedData.descriptifs.length === 0) {
             throw new Error('No descriptif data found in file');

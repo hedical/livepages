@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse Rétention — KPIs IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Header -->
+            <div class="mb-8">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <a href="index.html" class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                                </svg>
+                                Retour au dashboard
+                            </a>
+                        </div>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Analyse Rétention</h1>
+                        <p class="text-gray-500 text-sm">Cohortes, activation, segmentation — utilisateurs IA toutes fonctionnalités confondues</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="loading" class="min-h-[60vh] flex items-center justify-center">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                    <p class="mt-4 text-gray-600" id="loading-text">Chargement des données…</p>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="error" class="hidden min-h-[60vh] flex items-center justify-center">
+                <div class="text-center max-w-md">
+                    <p class="text-red-600 text-lg font-bold mb-2">Erreur de chargement</p>
+                    <p class="text-gray-700 text-sm" id="error-message">—</p>
+                    <a href="index.html" class="inline-block mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Retour</a>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <div id="main-content" class="hidden">
+
+                <!-- Scope info -->
+                <div class="mb-6 bg-purple-50 border border-purple-200 rounded-lg px-4 py-3">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div class="text-xs text-gray-700 leading-relaxed">
+                            <p><strong>Périmètre :</strong> tous les utilisateurs ayant fait au moins 1 event IA depuis le 1er janvier 2025, toutes organisations confondues (BTP Consultants, Citae, BTP Diagnostics). <strong>Aucun filtre par population cible</strong> — un utilisateur Citae avec email <code class="bg-white px-1 py-0.5 rounded">@citae.fr</code> compte au même titre qu'un employé BTP avec <code class="bg-white px-1 py-0.5 rounded">@btp-consultants.fr</code>.</p>
+                            <p class="mt-1"><strong>Dédup :</strong> par email (insensible à la casse). Si un même user a 2 comptes/2 emails distincts, il sera compté 2 fois.</p>
+                            <p class="mt-1"><strong>Sources prises en compte :</strong> Descriptif sommaire, Autocontact, Comparateur d'indices, Chat projet (BTP/Citae/Diag), Expert technique (BTP/Citae/Diag) — soit 9 sources agrégées.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="mb-10">
+                    <div class="flex items-end justify-between mb-3">
+                        <h2 class="text-xl font-semibold text-gray-700">Indicateurs synthétiques</h2>
+                        <p class="text-xs text-gray-400">Convention : « signup » = date du 1er event IA. Base totale = users ayant fait ≥1 event IA depuis le 1er janvier 2025.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-start justify-between mb-2">
+                                <p class="text-sm font-medium text-gray-500">Users actifs (30j)</p>
+                                <span class="text-[10px] uppercase tracking-wide text-purple-600 bg-purple-50 px-2 py-0.5 rounded">MAU</span>
+                            </div>
+                            <p class="text-3xl font-bold text-purple-700 mb-1" id="kpi-active-users">—</p>
+                            <p class="text-xs text-gray-500"><span id="kpi-active-pct">—</span> de la base IA totale</p>
+                            <p class="text-[11px] text-gray-400 mt-3 leading-snug">
+                                <strong class="text-gray-600">Comment lire :</strong> nombre d'utilisateurs uniques qui ont fait au moins un event IA dans les 30 derniers jours.
+                                Sert à mesurer l'engagement <em>immédiat</em> et à suivre le ratio actifs / base totale (érosion ou croissance).
+                            </p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-start justify-between mb-2">
+                                <p class="text-sm font-medium text-gray-500">Taux d'activation J+7</p>
+                                <span class="text-[10px] uppercase tracking-wide text-purple-600 bg-purple-50 px-2 py-0.5 rounded">Onboarding</span>
+                            </div>
+                            <p class="text-3xl font-bold text-purple-700 mb-1" id="kpi-activation-pct">—</p>
+                            <p class="text-xs text-gray-500">Sur les nouveaux des 7-30 derniers jours (<span id="kpi-activation-num">—</span>)</p>
+                            <p class="text-[11px] text-gray-400 mt-3 leading-snug">
+                                <strong class="text-gray-600">Comment lire :</strong> parmi les users dont le 1er event IA est récent (7 à 30j),
+                                quelle proportion a fait <strong>au moins 2 events</strong> dans sa première semaine. Signal qu'ils ont « pris en main » l'IA et pas juste fait un test.
+                                Un taux faible = onboarding à retravailler.
+                            </p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-start justify-between mb-2">
+                                <p class="text-sm font-medium text-gray-500">Rétention Day 30</p>
+                                <span class="text-[10px] uppercase tracking-wide text-purple-600 bg-purple-50 px-2 py-0.5 rounded">Fidélité</span>
+                            </div>
+                            <p class="text-3xl font-bold text-purple-700 mb-1" id="kpi-retention-pct">—</p>
+                            <p class="text-xs text-gray-500">Présents en fenêtre J+25 → J+35 (<span id="kpi-retention-num">—</span>)</p>
+                            <p class="text-[11px] text-gray-400 mt-3 leading-snug">
+                                <strong class="text-gray-600">Comment lire :</strong> sur les users de plus de 30 jours, combien sont revenus dans la fenêtre <strong>±5 jours autour de J+30</strong> après leur premier event.
+                                C'est le KPI majeur de fidélité long terme : un user qui revient un mois plus tard est ancré dans l'outil.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graph 1: cohort curve -->
+                <div class="mb-10 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-1">Courbe de rétention par cohorte mensuelle</h3>
+                    <p class="text-xs text-gray-400 mb-2">% d'utilisateurs encore actifs à J0 / J7 / J14 / J30, par mois de premier event IA</p>
+                    <p class="text-[12px] text-gray-500 mb-4 leading-relaxed bg-gray-50 border border-gray-100 rounded px-3 py-2">
+                        <strong>Comment lire ce graphique :</strong> chaque courbe représente une « promotion » mensuelle de nouveaux users IA. Une fenêtre de ±3 jours autour de chaque jalon permet de détecter la présence.
+                        <br><span class="text-gray-400">→ J0 est toujours à 100% (par définition : signup = 1er event).
+                        → Si les courbes récentes se rapprochent du haut (= meilleure rétention) : le produit s'améliore.
+                        → Si l'écart se creuse entre cohortes anciennes et récentes : régression à investiguer.
+                        → Cohortes de moins de 5 users ignorées (bruit statistique).</span>
+                    </p>
+                    <div style="height: 380px;"><canvas id="chart-cohort"></canvas></div>
+                </div>
+
+                <!-- Graph 2: activation per month -->
+                <div class="mb-10 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-1">Taux d'activation par mois</h3>
+                    <p class="text-xs text-gray-400 mb-2">Combien de nouveaux users IA chaque mois, et quelle proportion s'est « activée » (≥2 events dans les 7 premiers jours)</p>
+                    <p class="text-[12px] text-gray-500 mb-4 leading-relaxed bg-gray-50 border border-gray-100 rounded px-3 py-2">
+                        <strong>Comment lire ce graphique :</strong> hauteur totale = volume de nouveaux users IA arrivés ce mois-là.
+                        La partie violette foncée = ceux qui ont fait au moins 2 events dans les 7 jours suivant leur arrivée (= utilisateurs activés).
+                        Le tooltip affiche le taux d'activation précis du mois.
+                        <br><span class="text-gray-400">→ Un mois avec beaucoup de nouveaux mais peu d'activés = effort de communication mais friction à l'usage.
+                        → Sert à mesurer l'effet d'une formation ou d'un changement d'UX.</span>
+                    </p>
+                    <div style="height: 320px;"><canvas id="chart-activation"></canvas></div>
+                </div>
+
+                <!-- Source breakdown table -->
+                <div class="mb-10 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-1">Détail par source</h3>
+                    <p class="text-xs text-gray-400 mb-4">Décompte des events et users uniques par fonctionnalité (utile pour vérifier qu'aucune source ne manque)</p>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-200">
+                                    <th class="text-left py-2 px-3 font-semibold text-gray-600">Source</th>
+                                    <th class="text-right py-2 px-3 font-semibold text-gray-600">Events</th>
+                                    <th class="text-right py-2 px-3 font-semibold text-gray-600">Users uniques</th>
+                                    <th class="text-left py-2 px-3 font-semibold text-gray-600">Période couverte</th>
+                                </tr>
+                            </thead>
+                            <tbody id="source-breakdown-body"></tbody>
+                            <tfoot>
+                                <tr class="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                                    <td class="py-2 px-3 text-gray-700">Agrégé (dédup par email)</td>
+                                    <td class="py-2 px-3 text-right text-purple-700" id="total-events">—</td>
+                                    <td class="py-2 px-3 text-right text-purple-700" id="total-unique-users">—</td>
+                                    <td class="py-2 px-3 text-gray-500"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Graph 3: segmentation -->
+                <div class="mb-10 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-1">Segmentation des users</h3>
+                    <p class="text-xs text-gray-400 mb-2">Photo instantanée de la base IA — chaque user est classé dans une seule catégorie selon son volume d'usage et son dernier event</p>
+                    <p class="text-[12px] text-gray-500 mb-4 leading-relaxed bg-gray-50 border border-gray-100 rounded px-3 py-2">
+                        <strong>Comment lire ce graphique :</strong> on définit « actif » comme <strong class="text-purple-700">dernier event IA dans les 14 derniers jours</strong> — ce seuil de 14j fait que la segmentation reflète exactement les comportements <strong>du mois en cours</strong>.
+                        <br><span class="text-gray-400">→ <strong class="text-emerald-600">Champions</strong> : utilisateurs power, à valoriser et faire témoigner. → <strong class="text-purple-600">Engagés</strong> : à pousser vers Champions via formations avancées. → <strong class="text-amber-600">À risque</strong> : ré-engagement (last event 14-60j, ils décrochent). → <strong class="text-red-600">Fantômes</strong> : abandon (>60j sans event), à relancer ou nettoyer.</span>
+                    </p>
+                    <div style="height: 280px;"><canvas id="chart-segmentation"></canvas></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="retention.js"></script>
+</body>
+</html>

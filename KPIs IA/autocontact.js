@@ -453,6 +453,27 @@ function _parseUserDirectoryAutocontact(rawData) {
         if (Array.isArray(json) && json.length > 0 && json[0].data) {
             csvText = json[0].data;
         } else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object') {
+            // Detect aggregated 3-column format (DR/Agence/Effectif) from Metabase card 136
+            const keys0 = Object.keys(json[0]).map(k => k.toLowerCase());
+            const isAggregated = keys0.some(k => k === 'effectif') &&
+                                 keys0.some(k => k === 'agence' || k === 'agency') &&
+                                 keys0.some(k => k === 'dr' || k.includes('management'));
+            if (isAggregated) {
+                const kDR  = Object.keys(json[0]).find(k => k.toLowerCase() === 'dr' || k.toLowerCase().includes('management'));
+                const kAg  = Object.keys(json[0]).find(k => k.toLowerCase() === 'agence' || k.toLowerCase() === 'agency');
+                const kEff = Object.keys(json[0]).find(k => k.toLowerCase() === 'effectif');
+                json.forEach(row => {
+                    const dr = (row[kDR] || '').toString().trim();
+                    const agencyCode = (row[kAg] || '').toString().trim().toUpperCase();
+                    const effectif = parseInt(row[kEff]);
+                    if (agencyCode && !isNaN(effectif)) {
+                        population[agencyCode] = effectif;
+                        if (dr) drMapping[agencyCode] = dr;
+                    }
+                });
+                return { population, drMapping, emailMap };
+            }
+            // Otherwise, user-directory format
             const userAssignments = {};
             json.forEach(user => {
                 const email = (user.Email || user.email || '').toLowerCase().trim();
@@ -624,6 +645,63 @@ async function loadGoogleSheetMapping() {
         console.warn('Error loading Google Sheet:', error);
         return {};
     }
+}
+
+// Helper: find a key matching given lowercase substring patterns
+// (patterns are tried in order — pattern priority > key order)
+function findKeyAutocontact(keys, ...patterns) {
+    for (const pattern of patterns) {
+        for (const key of keys) {
+            const lk = (key || '').toLowerCase();
+            let ok = true;
+            for (const sub of pattern) {
+                if (sub.startsWith('!')) {
+                    if (lk.includes(sub.substring(1))) { ok = false; break; }
+                } else {
+                    if (!lk.includes(sub)) { ok = false; break; }
+                }
+            }
+            if (ok) return key;
+        }
+    }
+    return null;
+}
+
+// Parse new direct Metabase JSON array format (array of plain objects)
+function parseMetabaseJSONAutocontact(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) return [];
+
+    const keys = Object.keys(jsonArray[0] || {});
+    const kContract   = findKeyAutocontact(keys, ['contractnumber']);
+    const kCreatedAt  = findKeyAutocontact(keys, ['contact', 'createdat'], ['createdat'], ['created_at']);
+    const kFromAI     = findKeyAutocontact(keys, ['fromai'], ['from_ai']);
+    const kEmail      = findKeyAutocontact(keys, ['user', 'email']);
+    const kAgency     = findKeyAutocontact(keys, ['productionservice']);
+    const kDirection  = findKeyAutocontact(keys, ['management']);
+    const kAiProject  = findKeyAutocontact(keys, ['aiproject', 'id']);
+
+    console.log('Autocontact standalone JSON keys map:', { kContract, kCreatedAt, kFromAI, kEmail, kAgency, kDirection, kAiProject });
+
+    if (!kContract) {
+        console.warn('Missing required column: contractNumber');
+        return [];
+    }
+
+    return jsonArray.map(item => {
+        const fromAIVal = kFromAI ? item[kFromAI] : null;
+        const fromAI = fromAIVal === true || fromAIVal === 'true' || fromAIVal === 'TRUE';
+        const agency = ((kAgency && item[kAgency]) || '').toString().trim();
+        return {
+            contractNumber: ((kContract && item[kContract]) || '').toString().trim(),
+            createdAt:      ((kCreatedAt && item[kCreatedAt]) || '').toString().trim(),
+            fromAI:         fromAI,
+            email:          ((kEmail && item[kEmail]) || '').toString().trim(),
+            agency:         agency,
+            agencyCode:     agency,
+            direction:      ((kDirection && item[kDirection]) || '').toString().trim(),
+            aiProjectId:    ((kAiProject && item[kAiProject]) || '').toString().trim()
+        };
+    });
 }
 
 // Parse CSV data from string
@@ -1754,32 +1832,38 @@ async function init() {
         console.log('Response received, length:', rawText.length);
         console.log('First 200 chars:', rawText.substring(0, 200));
         
-        // Parse JSON array format: [{"data":"CSV content"}]
+        // Detect format: legacy CSV-wrapped-in-JSON vs new direct Metabase JSON array
         let csvData = null;
-        
+        let parsedDirectly = false;
+
         try {
             const jsonData = JSON.parse(rawText);
-            
-            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].data) {
-                console.log('Found JSON array with data field in first element');
+
+            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].data && typeof jsonData[0].data === 'string') {
+                console.log('Found JSON array with data field (legacy CSV-in-JSON)');
                 csvData = jsonData[0].data;
-            } else if (jsonData.data && typeof jsonData.data === 'string') {
-                console.log('Found JSON object with data field');
+            } else if (jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData) && jsonData.data && typeof jsonData.data === 'string') {
+                console.log('Found JSON object with data field (legacy)');
                 csvData = jsonData.data;
+            } else if (Array.isArray(jsonData) && jsonData.length > 0) {
+                console.log('Found new direct JSON array format (Metabase native), rows:', jsonData.length);
+                allData = parseMetabaseJSONAutocontact(jsonData);
+                parsedDirectly = true;
             }
         } catch (jsonError) {
             console.log('Standard JSON parsing failed:', jsonError.message);
         }
-        
-        if (!csvData) {
+
+        if (!parsedDirectly && !csvData) {
             console.log('No CSV data found, trying raw text as CSV');
             csvData = rawText;
         }
-        
-        console.log('CSV data length:', csvData.length);
-        console.log('First 200 chars of CSV:', csvData.substring(0, 200));
-        
-        allData = parseCSVData(csvData);
+
+        if (!parsedDirectly) {
+            console.log('CSV data length:', csvData.length);
+            console.log('First 200 chars of CSV:', csvData.substring(0, 200));
+            allData = parseCSVData(csvData);
+        }
         
         if (allData.length === 0) {
             throw new Error('No data parsed from CSV');

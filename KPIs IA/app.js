@@ -334,23 +334,42 @@ function parseDescriptifCSV(csvString) {
     let descriptionIndex = -1;
     let aiResultIndex = -1;
 
+    // Pass 1: pre-scan for typeIndex with pattern priority
+    // (AIDeliverable__type wins over Report__reportType regardless of column order)
+    for (let i = 0; i < headers.length && typeIndex === -1; i++) {
+        const header = headers[i].toLowerCase();
+        if (header.includes('aideliver') && header.includes('type')) { typeIndex = i; }
+    }
+    if (typeIndex === -1) {
+        for (let i = 0; i < headers.length && typeIndex === -1; i++) {
+            const header = headers[i].toLowerCase();
+            if (header.includes('reporttype') || (header.includes('report') && header.includes('type') && !header.includes('diffusedat'))) {
+                typeIndex = i;
+            }
+        }
+    }
+    // Pass 2: other columns (no priority conflict, first match wins)
+    // Precomputed lean columns scanned BEFORE the generic description/result patterns
+    let descWcIndex = -1;
+    let aiWcIndex = -1;
+    let hasAiIndex = -1;
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
-        if (typeIndex === -1 && (
-            (header.includes('aideliver') && header.includes('type')) ||
-            header.includes('reporttype') ||
-            (header.includes('report') && header.includes('type') && !header.includes('diffusedat'))
-        )) { typeIndex = i; }
         if (contractIndex === -1 && header.includes('contractnumber')) { contractIndex = i; }
         if (diffusedAtIndex === -1 && header.includes('report') && header.includes('diffusedat')) { diffusedAtIndex = i; }
         if (emailIndex === -1 && header.includes('user') && header.includes('email')) { emailIndex = i; }
         if (agencyIndex === -1 && header.includes('productionservice')) { agencyIndex = i; }
         if (managementIndex === -1 && header.includes('management')) { managementIndex = i; }
-        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement')) { descriptionIndex = i; }
-        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) { aiResultIndex = i; }
+        if (descWcIndex === -1 && header.includes('description') && header.includes('wordcount')) { descWcIndex = i; }
+        if (aiWcIndex === -1 && header.includes('airesult') && header.includes('wordcount')) { aiWcIndex = i; }
+        if (hasAiIndex === -1 && header.includes('hasai')) { hasAiIndex = i; }
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement') && !header.includes('wordcount')) { descriptionIndex = i; }
+        if (aiResultIndex === -1 && ((header.includes('longresult') && !header.includes('indexcomparator')) || (header.includes('result') && !header.includes('wordcount')))) { aiResultIndex = i; }
     }
 
     if (contractIndex === -1) return [];
+
+    console.log('Descriptif CSV column indices:', { typeIndex, contractIndex, diffusedAtIndex, emailIndex, agencyIndex, managementIndex, descriptionIndex, aiResultIndex, descWcIndex, aiWcIndex, hasAiIndex });
 
     // Parse data rows
     const data = [];
@@ -366,6 +385,9 @@ function parseDescriptifCSV(csvString) {
         const direction = (managementIndex >= 0 ? values[managementIndex] : '') || '';
         const description = descriptionIndex >= 0 ? values[descriptionIndex] : '';
         const aiResult = aiResultIndex >= 0 ? values[aiResultIndex] : '';
+        const descWcRaw = descWcIndex >= 0 ? values[descWcIndex] : '';
+        const aiWcRaw  = aiWcIndex >= 0 ? values[aiWcIndex] : '';
+        const hasAiRaw = hasAiIndex >= 0 ? (values[hasAiIndex] || '').toLowerCase().trim() : '';
 
         data.push({
             type: (type || '').trim(),
@@ -375,7 +397,10 @@ function parseDescriptifCSV(csvString) {
             agency: (agency || '').trim(),
             direction: (direction || '').trim(),
             description: description,
-            aiResult: aiResult
+            aiResult: aiResult,
+            descriptionWordCount: (descWcRaw !== '' && !isNaN(parseInt(descWcRaw))) ? parseInt(descWcRaw) : undefined,
+            aiResultWordCount:    (aiWcRaw  !== '' && !isNaN(parseInt(aiWcRaw)))  ? parseInt(aiWcRaw)  : undefined,
+            hasAi: hasAiRaw === 'true'
         });
     }
 
@@ -522,6 +547,108 @@ function extractMaxPage(longResultString) {
     }
     
     return 0;
+}
+
+/**
+ * Helper: find an object-key matching one of several patterns.
+ * Each pattern is an array of substrings that must ALL be present (lowercase).
+ * Substrings prefixed with '!' must be ABSENT.
+ * Patterns are tried in order — pattern priority beats key order, so a more
+ * specific pattern listed first wins even if a less specific one would also
+ * match a key earlier in the object.
+ */
+function findKey(keys, ...patterns) {
+    for (const pattern of patterns) {
+        for (const key of keys) {
+            const lk = (key || '').toLowerCase();
+            let ok = true;
+            for (const sub of pattern) {
+                if (sub.startsWith('!')) {
+                    if (lk.includes(sub.substring(1))) { ok = false; break; }
+                } else {
+                    if (!lk.includes(sub)) { ok = false; break; }
+                }
+            }
+            if (ok) return key;
+        }
+    }
+    return null;
+}
+
+/**
+ * Parse new direct JSON array format for descriptif (from Metabase JSON download).
+ * Output shape mirrors parseDescriptifCSV().
+ */
+function parseDescriptifJSON(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) return [];
+
+    const keys = Object.keys(jsonArray[0] || {});
+    const kType        = findKey(keys, ['aideliver', 'type'], ['reporttype'], ['report', 'type', '!diffusedat']);
+    const kContract    = findKey(keys, ['contractnumber']);
+    const kDiffusedAt  = findKey(keys, ['report', 'diffusedat']);
+    const kEmail       = findKey(keys, ['user', 'email']);
+    const kAgency      = findKey(keys, ['productionservice']);
+    const kManagement  = findKey(keys, ['management']);
+    // Precomputed (lean format) — must be checked BEFORE the HTML "description" pattern
+    const kDescWC      = findKey(keys, ['description', 'wordcount']);
+    const kAiWC        = findKey(keys, ['airesult', 'wordcount']);
+    const kHasAi       = findKey(keys, ['hasai']);
+    const kDescription = findKey(keys, ['description', '!complement', '!wordcount']);
+    const kAiResult    = findKey(keys, ['longresult', 'description'], ['longresult'], ['airesult', '!wordcount'], ['result', '!wordcount']);
+
+    console.log('Descriptif JSON keys map:', { kType, kContract, kDiffusedAt, kEmail, kAgency, kManagement, kDescWC, kAiWC, kHasAi, kDescription, kAiResult });
+
+    if (!kContract) return [];
+
+    return jsonArray.map(item => {
+        const hasAiVal = kHasAi ? item[kHasAi] : null;
+        return {
+            type:                  ((kType && item[kType]) || '').toString().trim(),
+            contractNumber:        ((kContract && item[kContract]) || '').toString().trim(),
+            createdAt:             ((kDiffusedAt && item[kDiffusedAt]) || '').toString().trim(),
+            email:                 ((kEmail && item[kEmail]) || '').toString().trim(),
+            agency:                ((kAgency && item[kAgency]) || '').toString().trim(),
+            direction:             ((kManagement && item[kManagement]) || '').toString().trim(),
+            description:           (kDescription && item[kDescription]) || '',
+            aiResult:              (kAiResult && item[kAiResult]) || '',
+            descriptionWordCount:  (kDescWC && typeof item[kDescWC] === 'number') ? item[kDescWC] : (kDescWC && item[kDescWC] != null ? parseInt(item[kDescWC]) : undefined),
+            aiResultWordCount:     (kAiWC && typeof item[kAiWC] === 'number') ? item[kAiWC] : (kAiWC && item[kAiWC] != null ? parseInt(item[kAiWC]) : undefined),
+            hasAi:                 hasAiVal === true || hasAiVal === 'true' || hasAiVal === 'TRUE'
+        };
+    });
+}
+
+/**
+ * Parse new direct JSON array format for autocontact (from Metabase JSON download).
+ * Output shape mirrors parseAutocontactCSV().
+ */
+function parseAutocontactJSON(jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) return [];
+
+    const keys = Object.keys(jsonArray[0] || {});
+    const kContract   = findKey(keys, ['contractnumber']);
+    const kFromAI     = findKey(keys, ['fromai'], ['from_ai']);
+    const kEmail      = findKey(keys, ['user', 'email']);
+    const kCreatedAt  = findKey(keys, ['contact', 'createdat'], ['createdat'], ['created_at']);
+    const kAgency     = findKey(keys, ['productionservice']);
+    const kManagement = findKey(keys, ['management']);
+
+    console.log('Autocontact JSON keys map:', { kContract, kFromAI, kEmail, kCreatedAt, kAgency, kManagement });
+
+    if (!kContract) return [];
+
+    return jsonArray.map(item => {
+        const fromAIVal = kFromAI ? item[kFromAI] : null;
+        const fromAI = fromAIVal === true || fromAIVal === 'true' || fromAIVal === 'TRUE';
+        return {
+            contractNumber: ((kContract && item[kContract]) || '').toString().trim(),
+            fromAI: fromAI,
+            email:          ((kEmail && item[kEmail]) || '').toString().trim(),
+            createdAt:      ((kCreatedAt && item[kCreatedAt]) || '').toString().trim(),
+            agency:         ((kAgency && item[kAgency]) || '').toString().trim(),
+            direction:      ((kManagement && item[kManagement]) || '').toString().trim()
+        };
+    });
 }
 
 /**
@@ -772,16 +899,49 @@ function extractCSVFromDataField(csvText) {
 
 function parsePopulationData(csvString) {
     if (!csvString || typeof csvString !== 'string') return;
-    
+
     console.log('=== Parsing Population Data ===');
-    
+
+    // First try: new direct Metabase JSON array format ([{"DR":"...","Agence":"...","Effectif":N}, ...])
+    const trimmed = csvString.trim();
+    if (trimmed.startsWith('[') && !trimmed.startsWith('[{"data"')) {
+        try {
+            const arr = JSON.parse(trimmed);
+            if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === 'object' && !arr[0].data) {
+                console.log('Found new direct JSON array format for population, rows:', arr.length);
+                agencyPopulation = {};
+                populationRows = [];
+                let total = 0;
+                const keys = Object.keys(arr[0]);
+                const kDR  = keys.find(k => k.toLowerCase() === 'dr' || k.toLowerCase().includes('management'));
+                const kAg  = keys.find(k => k.toLowerCase() === 'agence' || k.toLowerCase().includes('productionservice'));
+                const kEff = keys.find(k => k.toLowerCase() === 'effectif' || k.toLowerCase() === 'count');
+                arr.forEach(row => {
+                    const dr = (row[kDR] || '').toString().trim();
+                    const agencyCode = (row[kAg] || '').toString().trim().toUpperCase();
+                    const effectif = parseInt(row[kEff]);
+                    if (agencyCode && !isNaN(effectif)) {
+                        agencyPopulation[agencyCode] = effectif;
+                        populationRows.push({ dr, agencyCode, effectif });
+                        total += effectif;
+                    }
+                });
+                console.log('Parsed', Object.keys(agencyPopulation).length, 'agencies, total effectif:', total);
+                if (total > 0) TOTAL_EFFECTIF = total;
+                return;
+            }
+        } catch (e) {
+            console.log('Not a direct JSON array, falling back to CSV path:', e.message);
+        }
+    }
+
     let csvText = fixEncoding(csvString);
-    
+
     // Extract CSV from "data" field if present
     csvText = extractCSVFromDataField(csvText);
-    
+
     console.log('After extraction, first 200 chars:', csvText.substring(0, 200));
-    
+
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     
     if (lines.length < 2) {
@@ -1310,10 +1470,11 @@ function processDescriptifData(data) {
     const uniqueOperations = new Set();
     descriptifFiltered.forEach(item => {
         if (item.contractNumber && item.contractNumber.trim() !== '') {
-            // Compter les mots dans le résultat de l'IA
-            const processedAI = extractText(item.description || '');
-            const wordCount = countWords(processedAI);
-            
+            // Compter les mots dans la description (utilise précalculé si dispo)
+            const wordCount = (typeof item.descriptionWordCount === 'number')
+                ? item.descriptionWordCount
+                : countWords(extractText(item.description || ''));
+
             // Ne compter que les RICT avec au moins 100 mots
             if (wordCount >= 100) {
                 uniqueOperations.add(item.contractNumber);
@@ -2012,16 +2173,23 @@ async function loadData() {
         let descriptifCSV = null;
         try {
             const descriptifJson = JSON.parse(descriptifRaw);
-            if (Array.isArray(descriptifJson) && descriptifJson[0] && descriptifJson[0].data) {
+            if (Array.isArray(descriptifJson) && descriptifJson.length > 0 && descriptifJson[0].data) {
+                // Legacy format: [{ data: "csv..." }]
                 descriptifCSV = descriptifJson[0].data;
+            } else if (Array.isArray(descriptifJson) && descriptifJson.length > 0) {
+                // New direct JSON array format from Metabase
+                console.log('Found direct JSON array format for descriptif');
+                descriptifData = parseDescriptifJSON(descriptifJson);
+                console.log('Loaded', descriptifData.length, 'descriptif records (JSON)');
+                descriptifCSV = null;
             }
         } catch (e) {
             console.warn('Failed to parse descriptif JSON:', e);
         }
-        
+
         if (descriptifCSV) {
             descriptifData = parseDescriptifCSV(descriptifCSV);
-            console.log('Loaded', descriptifData.length, 'descriptif records');
+            console.log('Loaded', descriptifData.length, 'descriptif records (CSV)');
         }
 
         console.log('Loading autocontact data...');
@@ -2034,16 +2202,23 @@ async function loadData() {
         let autocontactCSV = null;
         try {
             const autocontactJson = JSON.parse(autocontactRaw);
-            if (Array.isArray(autocontactJson) && autocontactJson[0] && autocontactJson[0].data) {
+            if (Array.isArray(autocontactJson) && autocontactJson.length > 0 && autocontactJson[0].data) {
+                // Legacy format: [{ data: "csv..." }]
                 autocontactCSV = autocontactJson[0].data;
+            } else if (Array.isArray(autocontactJson) && autocontactJson.length > 0) {
+                // New direct JSON array format from Metabase
+                console.log('Found direct JSON array format for autocontact');
+                autocontactData = parseAutocontactJSON(autocontactJson);
+                console.log('Loaded', autocontactData.length, 'autocontact records (JSON)');
+                autocontactCSV = null;
             }
         } catch (e) {
             console.warn('Failed to parse autocontact JSON:', e);
         }
-        
+
         if (autocontactCSV) {
             autocontactData = parseAutocontactCSV(autocontactCSV);
-            console.log('Loaded', autocontactData.length, 'autocontact records');
+            console.log('Loaded', autocontactData.length, 'autocontact records (CSV)');
         }
 
         console.log('Loading comparateur data...');
@@ -3090,7 +3265,9 @@ function calculateMonthlyGains() {
         .forEach(item => {
             const key = getMonthKey(item.createdAt);
             if (!key) return;
-            const wordCount = countWords(extractText(item.description || ''));
+            const wordCount = (typeof item.descriptionWordCount === 'number')
+                ? item.descriptionWordCount
+                : countWords(extractText(item.description || ''));
             if (wordCount < 100) return;
             const prev = descriptifFirstMonth.get(item.contractNumber);
             if (!prev || key < prev) {
@@ -3293,8 +3470,8 @@ function updateGaugeSVG(arcId, valueId, subId, badgeId, labelId, value, target, 
         const angle = Math.PI * (1 + capped);
         const x = cx + r * Math.cos(angle);
         const y = cy + r * Math.sin(angle);
-        const largeArc = capped > 0.5 ? 1 : 0;
-        arcPath = `M ${cx - r} ${cy} A ${r} ${r} 0 ${largeArc} 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
+        // Always small arc: a 180° gauge never spans more than half a circle
+        arcPath = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
     }
 
     const arcEl = document.getElementById(arcId);
