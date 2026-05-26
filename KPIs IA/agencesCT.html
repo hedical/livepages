@@ -249,13 +249,25 @@
                                             <span id="sort-icon-chat-btp" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
+                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('geotech')">
+                                        <div class="flex items-center justify-center">
+                                            Taux Géotech
+                                            <div class="relative group ml-1">
+                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
+                                                    Taux d'adoption : (Utilisateurs uniques ayant lancé une analyse géotechnique IA) / (Effectif de l'agence) × 100. Dédup par DeliverableId.
+                                                </div>
+                                            </div>
+                                            <span id="sort-icon-geotech" class="ml-1 text-gray-400">↕</span>
+                                        </div>
+                                    </th>
                                     <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('total')">
                                         <div class="flex items-center justify-center">
                                             Total Utilisations
                                             <div class="relative group ml-1">
                                                 <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
                                                 <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Somme de toutes les utilisations : Descriptif + Auto Contact + Comparateur + Expert BTP + Chat BTP
+                                                    Somme de toutes les utilisations : Descriptif + Auto Contact + Comparateur + Expert BTP + Chat BTP + Géotech
                                                 </div>
                                             </div>
                                             <span id="sort-icon-total" class="ml-1 text-blue-600">↓</span>

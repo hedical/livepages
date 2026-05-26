@@ -9,11 +9,25 @@ let COMPARATEUR_URL = '';
 const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
 // Chat BTP Consultants URL (public)
 const CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
+// Analyse Géotechnique URL (public, Card 139)
+const GEOTECH_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/analyse_geotechnique.json';
 // Default Population URL (public)
 const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
 // Constants
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
+
+// Date à partir de laquelle on compte les RICT dans le taux de pénétration du descriptif IA.
+// Avant juin 2025 il n'y a que ~56 usages IA dispersés (phase de test, jan-mai 2025),
+// inclure les RICT de cette période fausse l'assiette et tasse le taux artificiellement.
+// Le démarrage pilote réel = 2025-06 (88 usages, puis ramp-up à 150-300/mois).
+const DESCRIPTIF_AI_START_DATE = new Date(2025, 5, 1); // 2025-06-01 local time
+
+// Returns true if the RICT was diffused on or after the AI pilot start date.
+function isAfterDescriptifAIStart(item) {
+    const d = parseFrenchDate(item.createdAt);
+    return d && d >= DESCRIPTIF_AI_START_DATE;
+}
 
 // State
 let allRictData = []; // All RICT data for calculating relevance rate
@@ -22,6 +36,7 @@ let autocontactData = [];
 let comparateurData = [];
 let expertBTPData = [];
 let chatBTPData = [];
+let geotechData = [];
 let agencyPopulation = {}; // {agencyCode: effectif}
 let agencyToDR = {}; // {agencyCode: DR}
 let emailToAgency = {}; // {email (lowercase): agencyCode (uppercase)} — home agency from user directory
@@ -269,6 +284,7 @@ function parseDescriptifCSV(csvString) {
     const headers = rows[0];
     let typeIndex = -1, contractIndex = -1, diffusedAtIndex = -1, emailIndex = -1;
     let agencyIndex = -1, managementIndex = -1, descriptionIndex = -1, aiResultIndex = -1;
+    let descWcIndex = -1, aiWcIndex = -1, hasAiIndex = -1;
     for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase();
         if (typeIndex === -1 && header.includes('aideliver') && header.includes('type')) typeIndex = i;
@@ -277,14 +293,20 @@ function parseDescriptifCSV(csvString) {
         if (emailIndex === -1 && header.includes('user') && header.includes('email')) emailIndex = i;
         if (agencyIndex === -1 && header.includes('productionservice')) agencyIndex = i;
         if (managementIndex === -1 && header.includes('management')) managementIndex = i;
-        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement') && !header.includes('longresult')) descriptionIndex = i;
-        if (aiResultIndex === -1 && (header.includes('longresult') || header.includes('result'))) aiResultIndex = i;
+        if (descWcIndex === -1 && header.includes('description') && header.includes('wordcount')) descWcIndex = i;
+        if (aiWcIndex === -1 && header.includes('airesult') && header.includes('wordcount')) aiWcIndex = i;
+        if (hasAiIndex === -1 && header.includes('hasai')) hasAiIndex = i;
+        if (descriptionIndex === -1 && header.includes('description') && !header.includes('complement') && !header.includes('longresult') && !header.includes('wordcount')) descriptionIndex = i;
+        if (aiResultIndex === -1 && ((header.includes('longresult') || header.includes('result')) && !header.includes('wordcount'))) aiResultIndex = i;
     }
     if (typeIndex === -1 || contractIndex === -1) return [];
     const data = [];
     for (let i = 1; i < rows.length; i++) {
         const values = rows[i];
         if (values.length < headers.length / 2) continue;
+        const descWcRaw = descWcIndex >= 0 ? (values[descWcIndex] || '').toString().trim() : '';
+        const aiWcRaw  = aiWcIndex  >= 0 ? (values[aiWcIndex]  || '').toString().trim() : '';
+        const hasAiRaw = hasAiIndex >= 0 ? (values[hasAiIndex] || '').toString().toLowerCase().trim() : '';
         data.push({
             type: (values[typeIndex] || '').trim(),
             contractNumber: (values[contractIndex] || '').trim(),
@@ -293,10 +315,20 @@ function parseDescriptifCSV(csvString) {
             agency: ((agencyIndex >= 0 ? values[agencyIndex] : '') || '').trim(),
             direction: ((managementIndex >= 0 ? values[managementIndex] : '') || '').trim(),
             description: descriptionIndex >= 0 ? (values[descriptionIndex] || '') : '',
-            aiResult: aiResultIndex >= 0 ? (values[aiResultIndex] || '') : ''
+            aiResult: aiResultIndex >= 0 ? (values[aiResultIndex] || '') : '',
+            descriptionWordCount: (descWcRaw !== '' && !isNaN(parseInt(descWcRaw))) ? parseInt(descWcRaw) : undefined,
+            aiResultWordCount:    (aiWcRaw  !== '' && !isNaN(parseInt(aiWcRaw)))  ? parseInt(aiWcRaw)  : undefined,
+            hasAi: hasAiRaw === 'true'
         });
     }
     return data;
+}
+
+// Returns the description word count: precomputed (Card 138 LEAN) if available,
+// otherwise falls back to counting words from the raw HTML (Card 134 full).
+function getDescWordCount(item) {
+    if (typeof item.descriptionWordCount === 'number') return item.descriptionWordCount;
+    return countWords(extractText(item.description || ''));
 }
 
 function parseAutocontactCSV(csvString) {
@@ -406,6 +438,58 @@ function parseComparateurCSV(csvString) {
             direction: ((managementIndex >= 0 ? values[managementIndex] : '') || '').trim(),
             createdAt: (createdAtIndex >= 0 ? (values[createdAtIndex] || '') : '').trim(),
             maxPage: maxPage
+        });
+    }
+    return data;
+}
+
+// Parse Analyse Géotechnique (Card 139). Source = AnalyticEvent — 1 opération IA
+// génère 2 events (Notice + Report) avec le même DeliverableId. On déduplique ici
+// pour ne compter qu'une opération IA par déclencheur côté frontend.
+function parseGeotechCSV(csvString) {
+    if (!csvString || typeof csvString !== 'string') return [];
+    let csvText = csvString.trim();
+    while (csvText.startsWith('[') || csvText.startsWith('{')) {
+        csvText = csvText.substring(1).trim();
+    }
+    while (csvText.endsWith(']') || csvText.endsWith('}')) {
+        csvText = csvText.substring(0, csvText.length - 1).trim();
+    }
+    const rows = parseCSVFull(csvText);
+    if (rows.length === 0) return [];
+    const headers = rows[0];
+    const idx = (name) => {
+        for (let i = 0; i < headers.length; i++) {
+            if (headers[i].trim().toLowerCase() === name.toLowerCase()) return i;
+        }
+        return -1;
+    };
+    const eventNameIdx = idx('EventName');
+    const eventDateIdx = idx('EventDate');
+    const deliverableIdx = idx('DeliverableId');
+    const contractIdx = idx('ContractNumber');
+    const emailIdx = idx('UserEmail');
+    const agenceIdx = idx('Agence');
+    const drIdx = idx('DR');
+    const data = [];
+    const seenDeliverables = new Set();
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        if (values.length < headers.length / 2) continue;
+        const deliverableId = (deliverableIdx >= 0 ? values[deliverableIdx] : '').trim();
+        // Dédup par DeliverableId — 1 op IA = 1 Notice + 1 Report, même DeliverableId
+        if (deliverableId) {
+            if (seenDeliverables.has(deliverableId)) continue;
+            seenDeliverables.add(deliverableId);
+        }
+        data.push({
+            eventName: (eventNameIdx >= 0 ? values[eventNameIdx] : '').trim(),
+            deliverableId: deliverableId,
+            createdAt: (eventDateIdx >= 0 ? values[eventDateIdx] : '').trim(),
+            contractNumber: (contractIdx >= 0 ? values[contractIdx] : '').trim(),
+            email: (emailIdx >= 0 ? values[emailIdx] : '').trim(),
+            agency: ((agenceIdx >= 0 ? values[agenceIdx] : '') || '').trim(),
+            direction: ((drIdx >= 0 ? values[drIdx] : '') || '').trim()
         });
     }
     return data;
@@ -591,6 +675,7 @@ function extractDirectionsAndAgencies() {
     processItems(comparateurData);
     processItems(expertBTPData);
     processItems(chatBTPData);
+    processItems(geotechData);
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
 }
@@ -669,11 +754,13 @@ function calculateAgencyStatistics() {
                 usersComparateur: new Set(),
                 usersExpertBTP: new Set(),
                 usersChatBTP: new Set(),
+                usersGeotech: new Set(),
                 descriptifCount: 0,
                 autocontactCount: 0,
                 comparateurCount: 0,
                 expertBTPCount: 0,
-                chatBTPCount: 0
+                chatBTPCount: 0,
+                geotechCount: 0
             };
         }
         return statsMap[key];
@@ -684,10 +771,14 @@ function calculateAgencyStatistics() {
     // numerator basis (AI descriptifs ≥ 100 words).
     const allRictFiltered = getFilteredData(allRictData);
     allRictFiltered.forEach(item => {
+        // Exclure les RICT diffusés avant le démarrage pilote IA (jan-mai 2025) :
+        // ils faussent l'assiette du taux de pénétration sans avoir eu d'opportunité
+        // significative d'utiliser l'IA.
+        if (!isAfterDescriptifAIStart(item)) return;
         const projectAgency = (item.agency || '').trim().toUpperCase();
         if (!projectAgency) return;
         const stats = getOrCreate(projectAgency);
-        const descWordCount = countWords(extractText(item.description || ''));
+        const descWordCount = getDescWordCount(item);
         if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount >= 100) {
             stats.contractsWithRICT100Plus.add(item.contractNumber);
         }
@@ -708,13 +799,16 @@ function calculateAgencyStatistics() {
     };
 
     descriptifFiltered.forEach(item => {
+        // Même cadrage temporel que le dénominateur : on ignore les usages IA d'avant
+        // le démarrage pilote (jan-mai 2025, ~56 usages dispersés en phase de test).
+        if (!isAfterDescriptifAIStart(item)) return;
         // User adoption metrics → home agency (person's agency, not project's)
         const homeStats = getOrCreate(homeAgency(item));
         // Contract relevance metrics → project agency (same basis as contractsWithRICT100Plus)
         const projectAgency = (item.agency || '').trim().toUpperCase();
         const contractStats = projectAgency ? getOrCreate(projectAgency) : homeStats;
 
-        const descWordCount = countWords(extractText(item.description || ''));
+        const descWordCount = getDescWordCount(item);
         // Numérateur : affaires IA parmi celles du dénominateur (description ≥ 100 mots)
         // contractsWithRICT100Plus garantit déjà que la description est ≥ 100 mots
         if (item.contractNumber && item.contractNumber.trim() !== ''
@@ -775,6 +869,17 @@ function calculateAgencyStatistics() {
             stats.usersChatBTP.add(item.email.toLowerCase().trim());
         }
     });
+
+    // Process Géotech data — attribution par homeAgency (l'utilisateur),
+    // cohérent avec expertBTP/chatBTP. Déjà dédupliqué par DeliverableId au parse.
+    const geotechFiltered = getFilteredData(geotechData);
+    geotechFiltered.forEach(item => {
+        const stats = getOrCreate(homeAgency(item));
+        stats.geotechCount++;
+        if (isKnownUser(item.email)) {
+            stats.usersGeotech.add(item.email.toLowerCase().trim());
+        }
+    });
     
     // Convert to array and calculate rates
     const statsArray = Object.values(statsMap).map(stats => {
@@ -801,9 +906,10 @@ function calculateAgencyStatistics() {
         const adoptionComparateur = effectif > 0 ? Math.min(100, (stats.usersComparateur.size  / effectif) * 100) : null;
         const adoptionExpertBTP   = effectif > 0 ? Math.min(100, (stats.usersExpertBTP.size    / effectif) * 100) : null;
         const adoptionChatBTP     = effectif > 0 ? Math.min(100, (stats.usersChatBTP.size      / effectif) * 100) : null;
-        
-        const total = stats.descriptifCount + stats.autocontactCount + stats.comparateurCount + stats.expertBTPCount + stats.chatBTPCount;
-        
+        const adoptionGeotech     = effectif > 0 ? Math.min(100, (stats.usersGeotech.size      / effectif) * 100) : null;
+
+        const total = stats.descriptifCount + stats.autocontactCount + stats.comparateurCount + stats.expertBTPCount + stats.chatBTPCount + stats.geotechCount;
+
         return {
             direction: finalDirection,
             agency: stats.agency,
@@ -813,6 +919,7 @@ function calculateAgencyStatistics() {
             adoptionComparateur: adoptionComparateur,
             adoptionExpertBTP: adoptionExpertBTP,
             adoptionChatBTP: adoptionChatBTP,
+            adoptionGeotech: adoptionGeotech,
             total: total
         };
     });
@@ -834,6 +941,7 @@ function updateAgencyTable() {
         'comparateur': 'adoptionComparateur',
         'expert-btp': 'adoptionExpertBTP',
         'chat-btp': 'adoptionChatBTP',
+        'geotech': 'adoptionGeotech',
         'total': 'total'
     };
     
@@ -860,7 +968,7 @@ function updateAgencyTable() {
     if (stats.length === 0) {
         agencyTableBodyEl.innerHTML = `
             <tr>
-                <td colspan="8" class="px-6 py-4 text-center text-gray-500">
+                <td colspan="9" class="px-6 py-4 text-center text-gray-500">
                     Aucune donnée disponible
                 </td>
             </tr>
@@ -896,7 +1004,8 @@ function updateAgencyTable() {
         const comparateurBadge = getBadgeStyle(stat.adoptionComparateur);
         const expertBTPBadge = getBadgeStyle(stat.adoptionExpertBTP);
         const chatBTPBadge = getBadgeStyle(stat.adoptionChatBTP);
-        
+        const geotechBadge = getBadgeStyle(stat.adoptionGeotech);
+
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${escapeHtml(stat.direction)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(stat.agency)}</td>
@@ -915,6 +1024,9 @@ function updateAgencyTable() {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
                 ${chatBTPBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${chatBTPBadge.bg} ${chatBTPBadge.text}">${chatBTPBadge.content}</span>` : '-'}
             </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                ${geotechBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${geotechBadge.bg} ${geotechBadge.text}">${geotechBadge.content}</span>` : '-'}
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600 text-center">${formatNumber(stat.total)}</td>
         `;
         agencyTableBodyEl.appendChild(tr);
@@ -925,7 +1037,7 @@ function updateAgencyTable() {
 }
 
 function updateSortIcons() {
-    ['direction', 'agency', 'descriptif', 'autocontact', 'comparateur', 'expert-btp', 'chat-btp', 'total'].forEach(col => {
+    ['direction', 'agency', 'descriptif', 'autocontact', 'comparateur', 'expert-btp', 'chat-btp', 'geotech', 'total'].forEach(col => {
         const icon = document.getElementById(`sort-icon-${col}`);
         if (icon) {
             if (tableSortState.column === col) {
@@ -987,11 +1099,16 @@ function updateChart() {
     
     // Process all data sources and group by month (cumulative)
     const allSources = [
-        { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && countWords(extractText(item.description || '')) >= 100 },
+        // Descriptif = users qui ont produit au moins un AI deliverable de type descriptif.
+        // descriptifData est déjà filtré aux rows IA au load, mais on garde le check
+        // type pour rester safe en cas de legacy export.
+        { data: descriptifData, tool: 'descriptif', filter: (item) => !item.type || item.type === DESCRIPTIF_TYPE },
         { data: autocontactData, tool: 'autocontact', filter: (item) => item.fromAI && !item.contractNumber.toUpperCase().includes('YIELD') },
         { data: comparateurData, tool: 'comparateur', filter: () => true },
         { data: expertBTPData, tool: 'expertBTP', filter: () => true },
-        { data: chatBTPData, tool: 'chatBTP', filter: () => true }
+        { data: chatBTPData, tool: 'chatBTP', filter: () => true },
+        // Geotech déjà dédupliqué par DeliverableId au parse → tout passe ici.
+        { data: geotechData, tool: 'geotech', filter: () => true }
     ];
     
     // Get all dates and sort them
@@ -1049,16 +1166,16 @@ function updateChart() {
     // Calculate cumulative adoption rates month by month
     const sortedMonths = Object.keys(monthlyGroups).sort();
     const chartData = [];
+    // Chart = taux d'adoption homogène pour tous les outils (% users / effectif).
+    // Le taux de pertinence du descriptif reste calculé dans la table (colonne dédiée).
     const cumulativeUsers = {
+        descriptif: new Set(),
         autocontact: new Set(),
         comparateur: new Set(),
         expertBTP: new Set(),
-        chatBTP: new Set()
+        chatBTP: new Set(),
+        geotech: new Set()
     };
-    
-    // For descriptif, we need to track contracts with RICT > 100 mots (relevance rate)
-    const cumulativeContractsWithRICT100Plus = new Set();
-    const cumulativeContractsWithAIOrRICT100Plus = new Set();
     
     // Calculate filtered effectif based on current filters
     let filteredEffectif = 0;
@@ -1101,7 +1218,7 @@ function updateChart() {
         filteredEffectif = Object.values(agencyPopulation).reduce((sum, eff) => sum + eff, 0);
     }
     
-    const tools = ['descriptif', 'autocontact', 'comparateur', 'expertBTP', 'chatBTP'];
+    const tools = ['descriptif', 'autocontact', 'comparateur', 'expertBTP', 'chatBTP', 'geotech'];
     
     // Helper function to check if item matches current filters (for descriptif calculation)
     const matchesFilters = (item) => {
@@ -1136,82 +1253,12 @@ function updateChart() {
         return true;
     };
     
-    // For descriptif calculation, we need ALL RICT data (not filtered by date) to calculate cumulative rates correctly
-    // But we still filter by direction/agency if selected
-    let allRictForCalculation = allRictData;
-    if (selectedDirection || selectedAgency) {
-        allRictForCalculation = allRictData.filter(item => {
-            if (selectedDirection) {
-                const itemDirection = getDirectionForItem(item);
-                if (itemDirection !== selectedDirection) return false;
-            }
-            if (selectedAgency) {
-                const itemAgency = item.agency || 'Non spécifiée';
-                if (itemAgency !== selectedAgency) return false;
-            }
-            return true;
-        });
-    }
-    
     sortedMonths.forEach(monthKey => {
         const monthDate = monthlyGroups[monthKey];
         const [year, month] = monthKey.split('-').map(Number);
-        
-        // For monthly calculation (not cumulative): count only contracts from THIS month
-        const monthContractsWithRICT100Plus = new Set();
-        const monthContractsWithAIOrRICT100Plus = new Set();
-        
-        // Process RICT data for descriptif relevance rate (CE MOIS → accumulation cumulative)
-        allRictForCalculation.forEach(item => {
-            if (!item.createdAt) return;
-            const date = parseFrenchDate(item.createdAt);
-            if (!date) return;
-            if (date.getFullYear() === year && date.getMonth() === month - 1) {
-                if (item.contractNumber && item.contractNumber.trim() !== '') {
-                    const processedDesc = extractText(item.description || '');
-                    const descWordCount = countWords(processedDesc);
-                    if (descWordCount >= 100) {  // >= comme dans calculateAgencyStatistics
-                        monthContractsWithRICT100Plus.add(item.contractNumber);       // mensuel (non utilisé pour taux)
-                        cumulativeContractsWithRICT100Plus.add(item.contractNumber);  // cumulatif ← utilisé pour taux
-                    }
-                }
-            }
-        });
 
-        // Process descriptif data for relevance rate (CE MOIS → accumulation cumulative)
-        let descriptifForCalculation = descriptifData;
-        if (selectedDirection || selectedAgency) {
-            descriptifForCalculation = descriptifData.filter(item => {
-                if (selectedDirection) {
-                    const itemDirection = getDirectionForItem(item);
-                    if (itemDirection !== selectedDirection) return false;
-                }
-                if (selectedAgency) {
-                    const itemAgency = item.agency || 'Non spécifiée';
-                    if (itemAgency !== selectedAgency) return false;
-                }
-                return true;
-            });
-        }
-
-        descriptifForCalculation.forEach(item => {
-            if (!item.createdAt) return;
-            const date = parseFrenchDate(item.createdAt);
-            if (!date) return;
-            if (date.getFullYear() === year && date.getMonth() === month - 1) {
-                // Numérateur : affaire IA parmi celles du dénominateur (description ≥ 100 mots)
-                if (item.type === DESCRIPTIF_TYPE && item.contractNumber && item.contractNumber.trim() !== ''
-                        && cumulativeContractsWithRICT100Plus.has(item.contractNumber)) {
-                    monthContractsWithAIOrRICT100Plus.add(item.contractNumber);       // mensuel
-                    cumulativeContractsWithAIOrRICT100Plus.add(item.contractNumber);  // cumulatif ← utilisé pour taux
-                }
-            }
-        });
-        
-        // Add users from this month for other tools
+        // Add users from this month for each tool (descriptif inclus — taux d'adoption homogène)
         allSources.forEach(source => {
-            if (source.tool === 'descriptif') return; // Skip descriptif, handled separately
-            
             const filtered = getFilteredData(source.data);
             filtered.forEach(item => {
                 if (!source.filter(item)) return;
@@ -1224,30 +1271,13 @@ function updateChart() {
                 }
             });
         });
-        
-        // Calculate rates for this month (cumulative)
-        // Initialize all rates to 0 first
-        const rates = {
-            descriptif: 0,
-            autocontact: 0,
-            comparateur: 0,
-            expertBTP: 0,
-            chatBTP: 0
-        };
-        
-        // Descriptif: taux de couverture CUMULATIF (comme les autres outils)
-        // → cohérent avec la table qui montre le cumul all-time
-        rates.descriptif = cumulativeContractsWithRICT100Plus.size > 0
-            ? Math.min(100, (cumulativeContractsWithAIOrRICT100Plus.size / cumulativeContractsWithRICT100Plus.size) * 100)
-            : 0;
-        
-        // Other tools: adoption rates
+
+        // Calculate cumulative adoption rate (% users / effectif) for all tools
+        const rates = {};
         tools.forEach(tool => {
-            if (tool !== 'descriptif') {
-                rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0;
-            }
+            rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0;
         });
-        
+
         chartData.push({
             date: monthDate,
             ...rates
@@ -1364,15 +1394,17 @@ function updateChart() {
         autocontact: '#10B981',
         comparateur: '#F59E0B',
         expertBTP: '#EF4444',
-        chatBTP: '#8B5CF6'
+        chatBTP: '#8B5CF6',
+        geotech: '#0EA5E9'
     };
-    
+
     const toolLabels = {
         descriptif: 'Descriptif',
         autocontact: 'Auto Contact',
         comparateur: 'Comparateur',
         expertBTP: 'Expert BTP',
-        chatBTP: 'Chat BTP'
+        chatBTP: 'Chat BTP',
+        geotech: 'Géotech'
     };
     
     // Track visibility state for each tool
@@ -1846,11 +1878,16 @@ async function loadData() {
         } catch (e) {}
         if (descriptifCSV) {
             allRictData = parseDescriptifCSV(descriptifCSV);
-            // Align with descriptif.js filterByType logic: if export is pre-filtered,
-            // some items may have empty type — include them too
+            // Card 138 (LEAN) returns ALL RICT — including those WITHOUT an AI deliverable
+            // (type is empty/NULL). For the descriptif relevance rate, the numerator must
+            // only count contracts where AI was actually used, so we filter descriptifData
+            // to AI rows only. The denominator (contracts with RICT ≥ 100 mots) still uses
+            // allRictData since it's based on the source description, not the AI output.
+            // Legacy fallback: if NO row has a type at all, the export was pre-filtered
+            // upstream (old metabase format) → keep everything.
             const anyHasType = allRictData.some(item => item.type && item.type.trim() !== '');
             descriptifData = anyHasType
-                ? allRictData.filter(item => !item.type || item.type === DESCRIPTIF_TYPE)
+                ? allRictData.filter(item => item.type === DESCRIPTIF_TYPE)
                 : allRictData;
             
             // Enrich with direction from population mapping
@@ -1973,7 +2010,36 @@ async function loadData() {
         } catch (e) {
             console.warn('Error loading Chat BTP data:', e);
         }
-        
+
+        // Load Analyse Géotechnique data (Card 139)
+        try {
+            const geotechResponse = await fetch(GEOTECH_URL);
+            if (geotechResponse.ok) {
+                const geotechRaw = await geotechResponse.text();
+                let geotechCSV = null;
+                try {
+                    const geotechJson = JSON.parse(geotechRaw);
+                    if (Array.isArray(geotechJson) && geotechJson[0] && geotechJson[0].data) {
+                        geotechCSV = geotechJson[0].data;
+                    }
+                } catch (e) {}
+                if (geotechCSV) {
+                    geotechData = parseGeotechCSV(geotechCSV);
+                    // Enrich direction from population mapping if missing
+                    geotechData.forEach(item => {
+                        if (!item.direction || item.direction.trim() === '') {
+                            const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
+                            if (agencyCode && agencyToDR[agencyCode]) {
+                                item.direction = agencyToDR[agencyCode];
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('Error loading Geotech data:', e);
+        }
+
         // Extract directions and agencies
         extractDirectionsAndAgencies();
         populateFilters();
