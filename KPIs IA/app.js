@@ -7,6 +7,7 @@ let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
+let AO_URL = ''; // exposée par le webhook passwordROI sous le nom ANALYSE_AO_URL ; pas de fallback hardcodé
 // Expert BTP Consultants URL (public)
 const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
 // Chat BTP Consultants URL (public)
@@ -57,6 +58,7 @@ let expertBTPDiagData = [];
 let chatBTPDiagData = [];
 let nfHabitatData = [];
 let geotechData = [];
+let aoMarches = []; // [{marcheId, refMarche, typeAvis, dateDetection, leads:[...]}]
 let agencyPopulation = {}; // {agencyCode: effectif}
 let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
 let availableAgencies = [];
@@ -150,6 +152,12 @@ const analyseGeoOpsEl = document.getElementById('analyse-geo-ops');
 const analyseGeoNoticesEl = document.getElementById('analyse-geo-notices');
 const analyseGeoReportsEl = document.getElementById('analyse-geo-reports');
 const analyseGeoUsersEl = document.getElementById('analyse-geo-users');
+
+// Analyse AO (BTP Consultants) elements
+const analyseAoCaptesEl   = document.getElementById('analyse-ao-captes');
+const analyseAoFiltresEl  = document.getElementById('analyse-ao-filtres');
+const analyseAoAnalysesEl = document.getElementById('analyse-ao-analyses');
+const analyseAoOppEl      = document.getElementById('analyse-ao-opp');
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -772,6 +780,63 @@ function parseGeotechCSV(csvString) {
         rows.push(row);
     }
     return parseGeotechJSON(rows);
+}
+
+/**
+ * Parse XPL Funnel API payload {count, data:[{marcheId, refMarche, typeAvis, dateDetection, leads:[...]}]}.
+ * Returns an array of marchés (each with its leads).
+ */
+function parseAOPayload(payload) {
+    if (!payload || !Array.isArray(payload.data)) {
+        console.warn('Invalid AO payload — expected {count, data:[]}');
+        return [];
+    }
+    return payload.data.map(m => ({
+        marcheId: m.marcheId || '',
+        refMarche: m.refMarche || '',
+        typeAvis: m.typeAvis || '',
+        dateDetection: m.dateDetection || '',
+        leads: Array.isArray(m.leads) ? m.leads : [],
+    }));
+}
+
+/**
+ * Compute the 4 funnel KPIs from a list of marchés.
+ * Applies the dashboard's date filter on dateDetection.
+ *   - captes       = total marchés
+ *   - filtres      = marchés with ≥1 lead (passed the AI filter)
+ *   - analyses     = total leads (= AO ouverts par un commercial)
+ *   - opportunites = leads with opportunity != null
+ */
+function processAOData(marches) {
+    const filtered = marches.filter(m => {
+        if (!dateFilter.startDate && !dateFilter.endDate) return true;
+        const d = parseFrenchDate(m.dateDetection);
+        if (!d) return false;
+        if (dateFilter.startDate) {
+            const s = new Date(dateFilter.startDate);
+            s.setHours(0, 0, 0, 0);
+            if (d < s) return false;
+        }
+        if (dateFilter.endDate) {
+            const e = new Date(dateFilter.endDate);
+            e.setHours(23, 59, 59, 999);
+            if (d > e) return false;
+        }
+        return true;
+    });
+
+    const captes = filtered.length;
+    const filtres = filtered.filter(m => (m.leads || []).length > 0).length;
+    let analyses = 0;
+    let opportunites = 0;
+    filtered.forEach(m => {
+        (m.leads || []).forEach(l => {
+            analyses++;
+            if (l.opportunity) opportunites++;
+        });
+    });
+    return { captes, filtres, analyses, opportunites };
 }
 
 /**
@@ -2044,6 +2109,13 @@ function updateKPIs() {
     if (analyseGeoNoticesEl) analyseGeoNoticesEl.textContent = formatNumber(geotechStats.totalNotices);
     if (analyseGeoReportsEl) analyseGeoReportsEl.textContent = formatNumber(geotechStats.totalReports);
     if (analyseGeoUsersEl) analyseGeoUsersEl.textContent = formatNumber(geotechStats.uniqueUsers);
+
+    // Analyse AO stats (funnel : captés → filtrés → analysés → opportunité)
+    const aoStats = processAOData(aoMarches);
+    if (analyseAoCaptesEl)   analyseAoCaptesEl.textContent   = formatNumber(aoStats.captes);
+    if (analyseAoFiltresEl)  analyseAoFiltresEl.textContent  = formatNumber(aoStats.filtres);
+    if (analyseAoAnalysesEl) analyseAoAnalysesEl.textContent = formatNumber(aoStats.analyses);
+    if (analyseAoOppEl)      analyseAoOppEl.textContent      = formatNumber(aoStats.opportunites);
     
     // Expert BTP stats
     if (expertTechBTPCountEl) expertTechBTPCountEl.textContent = formatNumber(expertBTPStats.totalSessions);
@@ -2196,6 +2268,7 @@ async function authenticateWithPassword(password) {
         const comparateurMatch = urlRegex('COMPARATEUR_URL');
         const nfHabitatMatch   = urlRegex('NF_HABITAT_URL');
         const geotechMatch     = urlRegex('GEOTECH_URL');
+        const aoMatch          = urlRegex('ANALYSE_AO_URL');
 
         if (descriptifMatch && autocontactMatch && comparateurMatch) {
             DESCRIPTIF_URL = descriptifMatch[1];
@@ -2203,6 +2276,7 @@ async function authenticateWithPassword(password) {
             COMPARATEUR_URL = comparateurMatch[1];
             if (nfHabitatMatch) NF_HABITAT_URL = nfHabitatMatch[1];
             if (geotechMatch) GEOTECH_URL = geotechMatch[1];
+            if (aoMatch) AO_URL = aoMatch[1];
 
             // Cache the full webhook response so other pages (nfhabitat.js, etc.)
             // can reuse it without re-calling the webhook
@@ -2396,6 +2470,44 @@ async function loadData() {
             }
         } else {
             console.log('No GEOTECH_URL configured — analyse géotechnique tile will show 0.');
+        }
+
+        // Load Analyse AO data (optional — depends on n8n exposing ANALYSE_AO_URL)
+        if (AO_URL) {
+            console.log('Loading AO data from:', AO_URL);
+            try {
+                const aoResponse = await fetch(AO_URL);
+                if (aoResponse.ok) {
+                    const aoRaw = await aoResponse.text();
+                    let payload = null;
+                    try { payload = JSON.parse(aoRaw); } catch (_) {}
+
+                    // n8n envelope variants:
+                    //   [{ data: "json-string" }]      → ancien format n8n
+                    //   [{ data: [...], count: N }]    → n8n upload direct sans unwrap (cas actuel)
+                    //   { data: "json-string" }        → flatten single
+                    //   { count, data: [...] }         → format API SF natif
+                    if (Array.isArray(payload) && payload.length && payload[0] && typeof payload[0] === 'object') {
+                        const first = payload[0];
+                        if (typeof first.data === 'string') {
+                            try { payload = JSON.parse(first.data); } catch (_) {}
+                        } else if (first.data !== undefined) {
+                            payload = first;
+                        }
+                    } else if (payload && typeof payload.data === 'string') {
+                        try { payload = JSON.parse(payload.data); } catch (_) {}
+                    }
+
+                    aoMarches = parseAOPayload(payload);
+                    console.log('Loaded', aoMarches.length, 'AO marchés');
+                } else {
+                    console.warn('AO URL responded with status', aoResponse.status);
+                }
+            } catch (e) {
+                console.warn('Failed to load AO data:', e);
+            }
+        } else {
+            console.log('No ANALYSE_AO_URL configured — analyse AO tile will show 0.');
         }
 
         // Load Expert BTP Consultants data

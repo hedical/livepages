@@ -415,21 +415,38 @@
                         </a>
 
                         <!-- Analyse Géotechnique (BTP Consultants) -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                        <a href="analyse-geotechnique.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
                             <div class="flex items-start justify-between mb-3">
                                 <h3 class="text-base font-semibold text-gray-700">Analyse géotechnique</h3>
                                 <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-gray-400" id="analyse-geo-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                                <span class="text-4xl font-bold text-blue-600" id="analyse-geo-count">0</span>
+                                <span class="text-sm text-gray-400 ml-2">opérations IA</span>
                             </div>
                             <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="analyse-geo-ops">0</strong> opérations</p>
-                                <p>&nbsp;</p>
-                                <p>&nbsp;</p>
+                                <p>Avec <strong id="analyse-geo-notices">0</strong> notices générées</p>
+                                <p>Et <strong id="analyse-geo-reports">0</strong> rapports créés</p>
+                                <p>Par <strong id="analyse-geo-users">0</strong> utilisateurs uniques</p>
                             </div>
-                        </div>
+                        </a>
+
+                        <!-- Analyse AO (BTP Consultants) -->
+                        <a href="analyse-ao.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-base font-semibold text-gray-700">Analyse AO</h3>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                            </div>
+                            <div class="flex items-baseline space-x-2 mb-3">
+                                <span class="text-4xl font-bold text-blue-600" id="analyse-ao-captes">0</span>
+                                <span class="text-sm text-gray-400 ml-2">AO captés</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-gray-600">
+                                <p><strong id="analyse-ao-filtres">0</strong> filtrés &nbsp;·&nbsp; <strong id="analyse-ao-analyses">0</strong> analysés</p>
+                                <p><strong id="analyse-ao-opp">0</strong> passés en opportunité</p>
+                                <p>Funnel IA AO : détection → IA → commercial → opp</p>
+                            </div>
+                        </a>
 
                         <!-- Chat Projet (Citae) -->
                         <a href="chat-citae.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse AO - AnalyzTech</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Header -->
+            <div class="mb-10">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <a href="index.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                            Analyse AO - Funnel de conversion
+                        </h1>
+                        <p class="text-gray-500 text-sm">Suivi du funnel d'analyse des Appels d'Offres : détection → filtrage IA → analyse commerciale → opportunité</p>
+                        <p class="text-gray-400 text-xs mt-1" id="first-date-text">-</p>
+                    </div>
+                    <div class="px-3 py-1.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 self-start">
+                        BTP Consultants
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="flex items-center justify-center py-20">
+                <div class="text-center">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-6">
+                <div class="flex items-start">
+                    <svg class="w-6 h-6 text-red-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <h3 class="text-red-800 font-medium mb-1">Erreur de chargement</h3>
+                        <p class="text-red-700 text-sm" id="error-message">Impossible de charger les données. Veuillez réessayer.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div id="main-content" class="hidden">
+                <!-- Banner: explication funnel -->
+                <div class="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                        <svg class="w-5 h-5 text-indigo-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p class="text-sm text-indigo-900">
+                            Funnel <strong>Détection → IA → Commercial → Opportunité</strong>.
+                            <strong>Captés</strong> = marchés détectés par le scraper.
+                            <strong>Filtrés</strong> = marchés où l'IA a créé au moins un lead.
+                            <strong>Analysés</strong> = leads ouverts par un commercial.
+                            <strong>Opportunité</strong> = leads convertis en opportunité Salesforce.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="mb-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                        <!-- Date Range Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <div class="flex items-center justify-between mb-4">
+                                <label class="block text-sm font-medium text-gray-700">
+                                    Filtrer par période
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-600">Plage</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="cumul-toggle" class="sr-only peer">
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                    <span class="text-xs text-gray-600">Depuis le début</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    id="start-date-filter"
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <span class="text-gray-400 text-xs font-medium">→</span>
+                                <input
+                                    type="date"
+                                    id="end-date-filter"
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Type Avis Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par type d'avis
+                            </label>
+                            <select
+                                id="type-avis-filter"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tous les types</option>
+                            </select>
+                        </div>
+
+                        <!-- Agency Filter -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                                Filtrer par agence (leads)
+                            </label>
+                            <select
+                                id="agency-filter"
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Toutes les agences</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button
+                        id="reset-filters"
+                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                        Réinitialiser les filtres
+                    </button>
+                </div>
+
+                <!-- KPIs Funnel -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Funnel de conversion</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- AO Captés -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">1</span>
+                                        <p class="text-sm font-medium text-gray-500">AO Captés</p>
+                                    </div>
+                                    <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="kpi-captes" title="Nombre total de marchés détectés par le scraper XPL">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Marchés détectés (scraper)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AO Filtrés -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">2</span>
+                                        <p class="text-sm font-medium text-gray-500">AO Filtrés</p>
+                                    </div>
+                                    <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="kpi-filtres" title="Marchés où l'IA a créé au moins un lead">0</p>
+                                    <p class="text-xs text-gray-400 mt-1"><span id="kpi-filtres-rate">—</span> des captés</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AO Analysés -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">3</span>
+                                        <p class="text-sm font-medium text-gray-500">AO Analysés</p>
+                                    </div>
+                                    <p class="text-3xl font-bold text-amber-600 mb-1 cursor-help" id="kpi-analyses" title="Nombre total de leads créés (= AO analysés par un commercial)">0</p>
+                                    <p class="text-xs text-gray-400 mt-1">Leads créés</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AO Opportunité -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">4</span>
+                                        <p class="text-sm font-medium text-gray-500">AO Opportunité</p>
+                                    </div>
+                                    <p class="text-3xl font-bold text-purple-600 mb-1 cursor-help" id="kpi-opportunites" title="Leads convertis en opportunité Salesforce">0</p>
+                                    <p class="text-xs text-gray-400 mt-1"><span id="kpi-opp-rate">—</span> des analysés</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Funnel visuel -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Visualisation du funnel</h2>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div style="height: 300px;">
+                            <canvas id="funnelChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agency Stats Table -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Répartition par agence</h2>
+                    <p class="text-xs text-gray-500 mb-3">Agrégation par l'agence du <strong>lead</strong> (= où l'AO a été analysé). Les marchés sans lead ne sont pas comptés ici.</p>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
+                                            <div class="flex items-center">
+                                                Agence
+                                                <span id="sort-icon-agency" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('analyses')">
+                                            <div class="flex items-center">
+                                                AO Analysés
+                                                <span id="sort-icon-analyses" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('opportunites')">
+                                            <div class="flex items-center">
+                                                Opportunités
+                                                <span id="sort-icon-opportunites" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('owners')">
+                                            <div class="flex items-center">
+                                                Commerciaux
+                                                <span id="sort-icon-owners" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('rate')">
+                                            <div class="flex items-center">
+                                                Taux conv.
+                                                <span id="sort-icon-rate" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="agency-table-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- Rows will be inserted here by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart évolution -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Évolution mensuelle</h2>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div style="height: 450px;">
+                            <canvas id="dateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="analyse-ao.js"></script>
+</body>
+</html>
