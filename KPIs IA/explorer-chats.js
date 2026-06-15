@@ -5,6 +5,9 @@ const DATA_URLS = {
     'chat-citae': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json',
     'expert-citae': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json'
 };
+// Liste maître des agences (toutes filiales) — utilisée pour peupler le filtre même
+// si certaines agences n'ont aucun chat dans la source sélectionnée.
+const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
 // Global state
 let allRecords = [];
@@ -12,6 +15,7 @@ let userGroups = []; // Grouped by user: [{email, sessions: [], stats: {}}]
 let filteredUserGroups = [];
 let currentIndex = 0;
 let currentDataSource = 'chat-btp';
+let allKnownAgencies = []; // toutes les agences connues (population_cible.csv) — chargée une seule fois
 
 // Filters
 let filters = {
@@ -194,36 +198,111 @@ function transformData(jsonArray) {
 
 // ==================== DATA LOADING ====================
 
+// Charge la liste des agences depuis population_cible.csv.
+// Formats supportés :
+//   - JSON array Metabase : [{"DR":"...","Agence":"<CODE>","Effectif":N}, ...]
+//   - CSV avec wrapper n8n "data" : data\n"DR,Agence,Effectif\n...\n"
+//   - CSV brut : DR;Agence;Effectif (ou virgules)
+async function loadKnownAgencies() {
+    try {
+        const response = await fetch(POPULATION_URL);
+        if (!response.ok) {
+            console.warn('Could not load population_cible.csv, status:', response.status);
+            return [];
+        }
+        let text = await response.text();
+        // Strip BOM si présent
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const trimmed = text.trim();
+
+        // Format 1 : JSON array direct
+        if (trimmed.startsWith('[') && !trimmed.startsWith('[{"data"')) {
+            try {
+                const arr = JSON.parse(trimmed);
+                if (Array.isArray(arr)) {
+                    const set = new Set();
+                    arr.forEach(row => {
+                        const ag = row.Agence || row.agence || row.AGENCE;
+                        if (ag && typeof ag === 'string') set.add(ag.trim());
+                    });
+                    return Array.from(set).sort();
+                }
+            } catch (_) { /* fall through to CSV */ }
+        }
+
+        // Format 2 : wrapper n8n "data\n\"...\""
+        let csvBody = text;
+        const lines0 = text.split('\n');
+        if (lines0.length > 0 && lines0[0].trim() === 'data') {
+            const inner = lines0.slice(1);
+            if (inner.length && inner[0].startsWith('"')) inner[0] = inner[0].substring(1);
+            const last = inner.length - 1;
+            if (last >= 0) {
+                if (inner[last].trim() === '"') inner.pop();
+                else if (inner[last].endsWith('"')) inner[last] = inner[last].slice(0, -1);
+            }
+            csvBody = inner.join('\n');
+        }
+
+        // Format 3 : CSV brut (avec header sur ligne 0)
+        const lines = csvBody.split('\n').filter(l => l.trim() !== '');
+        if (lines.length < 2) return [];
+        const separator = lines[0].includes(';') ? ';' : ',';
+        const set = new Set();
+        for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(separator);
+            if (parts.length >= 2) {
+                const ag = parts[1].trim();
+                if (ag && ag.toLowerCase() !== 'agence') set.add(ag);
+            }
+        }
+        return Array.from(set).sort();
+    } catch (e) {
+        console.warn('Failed to load population_cible.csv:', e);
+        return [];
+    }
+}
+
 async function loadData() {
     try {
         loadingOverlay.classList.remove('hidden');
-        
+
+        // Charge la liste maître des agences en parallèle (1 seule fois, mis en cache)
+        const knownAgenciesPromise = allKnownAgencies.length === 0
+            ? loadKnownAgencies()
+            : Promise.resolve(allKnownAgencies);
+
         const url = DATA_URLS[currentDataSource];
         console.log('Loading data from:', url);
-        
-        const response = await fetch(url);
+
+        const [response, knownAgencies] = await Promise.all([
+            fetch(url),
+            knownAgenciesPromise,
+        ]);
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
-        
+
         const jsonData = await response.json();
         console.log('Response received, items:', jsonData.length);
-        
+
         allRecords = transformData(jsonData);
-        
+        allKnownAgencies = knownAgencies;
+        console.log(`Loaded ${allKnownAgencies.length} known agencies from population_cible.csv`);
+
         if (allRecords.length === 0) {
             throw new Error('No data parsed');
         }
-        
+
         console.log(`Loaded ${allRecords.length} chat sessions`);
-        
+
         // Group by user
         groupByUser();
-        
+
         populateFilters();
         applyFilters();
         updateSummary();
-        
+
         loadingOverlay.classList.add('hidden');
     } catch (error) {
         console.error('Error loading data:', error);
@@ -295,22 +374,38 @@ function populateFilters() {
         option.textContent = userGroup.email;
         userFilterEl.appendChild(option);
     });
-    
-    // Populate agency filter
-    const agencies = new Set();
+
+    // Agences avec au moins 1 chat dans la source actuelle
+    const agenciesWithChats = new Set();
     userGroups.forEach(userGroup => {
         userGroup.agencies.forEach(agency => {
-            if (agency) agencies.add(agency);
+            if (agency && agency !== 'Non spécifié') agenciesWithChats.add(agency);
         });
     });
-    
+
+    // Union avec la liste maître (population_cible.csv) — comme ça toutes les
+    // agences connues sont sélectionnables, même celles sans chat dans la source.
+    const unionAgencies = new Set([...agenciesWithChats, ...allKnownAgencies]);
+    const sortedAgencies = Array.from(unionAgencies).sort();
+
     agencyFilterEl.innerHTML = '<option value="all">Toutes les agences</option>';
-    Array.from(agencies).sort().forEach(agency => {
+    sortedAgencies.forEach(agency => {
         const option = document.createElement('option');
         option.value = agency;
-        option.textContent = agency;
+        // Marque visuellement les agences qui n'ont aucun chat dans la source actuelle
+        const hasChats = agenciesWithChats.has(agency);
+        option.textContent = hasChats ? agency : `${agency} (0)`;
         agencyFilterEl.appendChild(option);
     });
+
+    // Si des records ont une agence "Non spécifié", l'ajouter en fin de liste
+    const hasNonSpec = userGroups.some(ug => ug.agencies.includes('Non spécifié'));
+    if (hasNonSpec) {
+        const option = document.createElement('option');
+        option.value = 'Non spécifié';
+        option.textContent = 'Non spécifié';
+        agencyFilterEl.appendChild(option);
+    }
 }
 
 // ==================== FILTERING & SORTING ====================

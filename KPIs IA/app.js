@@ -34,6 +34,7 @@ const SECONDS_PER_PAGE = 20; // Default value for comparateur
 const MINUTES_PER_MESSAGE = 2.8125; // For chat tools (BTP and Citae)
 const MINUTES_PER_MESSAGE_EXPERT = 5; // For expert technique tools (BTP and Citae)
 const HOURS_PER_POINT_NF = 0.02816; // NF Habitat: hours gained per point checked
+const MINUTES_PER_AO_ANALYSE = 15; // Analyse AO: minutes gagnées par AO analysé (lead créé)
 const NF_HABITAT_REVENUE = 7000000; // NF Habitat specific revenue base
 const EURO_PER_MESSAGE = 1.5; // For chat and expert tools (BTP and Citae)
 const ANNUAL_HOURS = 1607;
@@ -1740,7 +1741,7 @@ function processGeotechData(data) {
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
@@ -1780,10 +1781,14 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     // Gain en temps pour NF Habitat (heures par point)
     const timeGainHoursNFHabitat = (nfHabitatPoints || 0) * HOURS_PER_POINT_NF;
 
+    // Gain en temps pour Analyse AO (minutes → heures)
+    const timeGainMinutesAO = (aoAnalyses || 0) * MINUTES_PER_AO_ANALYSE;
+    const timeGainHoursAO = timeGainMinutesAO / 60;
+
     // Total time gain
     const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur
         + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae
-        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursNFHabitat;
+        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursNFHabitat + timeGainHoursAO;
 
     // Gain en % volume d'affaire (BTP Consultants scope: 44M€)
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
@@ -1803,6 +1808,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
         timeGainHoursChatBTPDiag,
         timeGainHoursExpertBTPDiag,
         timeGainHoursNFHabitat,
+        timeGainHoursAO,
         percentGain,
         euroGain
     };
@@ -2199,13 +2205,14 @@ function updateKPIs() {
         expertCitaeStats.totalMessages,
         chatBTPDiagStats.totalMessages,
         expertBTPDiagStats.totalMessages,
-        nfHabitatStats.totalPoints
+        nfHabitatStats.totalPoints,
+        aoStats.analyses
     );
 
     gainHeuresEl.textContent = formatNumber(gains.timeGainHours);
     gainSubtitleEl.innerHTML = `
         <div class="space-y-1">
-            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h + NF Habitat: ${formatNumber(gains.timeGainHoursNFHabitat)}h)</div>
+            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h + NF Habitat: ${formatNumber(gains.timeGainHoursNFHabitat)}h + Analyse AO: ${formatNumber(gains.timeGainHoursAO)}h)</div>
             <div class="text-xs">≈ ${gains.percentGain.toFixed(4)}% du volume d'affaires</div>
             <div class="text-xs">≈ ${formatNumber(gains.euroGain)} €</div>
         </div>
@@ -3507,6 +3514,7 @@ function calculateMonthlyGains() {
                 chatBTPDiagMessages: 0,
                 expertBTPDiagMessages: 0,
                 nfHabitatPoints: 0,
+                aoAnalyses: 0,
             };
         }
     };
@@ -3616,6 +3624,18 @@ function calculateMonthlyGains() {
         monthlyData[key].nfHabitatPoints += (item.pointCount || 0);
     });
 
+    // ── Analyse AO ───────────────────────────────────────────────────────────────
+    // Une "analyse" = un lead créé. On l'attribue au mois de détection du marché,
+    // cohérent avec le funnel mensuel de analyse-ao.html.
+    aoMarches.forEach(m => {
+        const key = getMonthKey(m.dateDetection);
+        if (!key) return;
+        const leads = (m.leads || []).length;
+        if (leads === 0) return;
+        ensureMonth(key);
+        monthlyData[key].aoAnalyses += leads;
+    });
+
     // ── Build sorted result ──────────────────────────────────────────────────────
     const sortedMonths = Object.keys(monthlyData).sort();
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -3632,7 +3652,8 @@ function calculateMonthlyGains() {
             d.expertCitaeMessages,
             d.chatBTPDiagMessages,
             d.expertBTPDiagMessages,
-            d.nfHabitatPoints
+            d.nfHabitatPoints,
+            d.aoAnalyses
         );
         const [year, month] = key.split('-');
         return {
@@ -3650,6 +3671,7 @@ function calculateMonthlyGains() {
             hoursChatBTPDiag:   gains.timeGainHoursChatBTPDiag,
             hoursExpertBTPDiag: gains.timeGainHoursExpertBTPDiag,
             hoursNFHabitat:     gains.timeGainHoursNFHabitat,
+            hoursAO:            gains.timeGainHoursAO,
         };
     });
 }
@@ -3821,6 +3843,7 @@ function buildGainChart() {
         { key: 'hoursChatBTPDiag',   label: 'Chat BTP Diag',       color: 'rgba(244, 63, 94, 0.85)'   },
         { key: 'hoursExpertBTPDiag', label: 'Expert BTP Diag',     color: 'rgba(251, 146, 60, 0.85)'  },
         { key: 'hoursNFHabitat',     label: 'NF Habitat',          color: 'rgba(52, 211, 153, 0.85)'  },
+        { key: 'hoursAO',            label: 'Analyse AO',          color: 'rgba(217, 70, 239, 0.85)'  },
     ];
 
     // Build cumulative or monthly series per feature + euros line

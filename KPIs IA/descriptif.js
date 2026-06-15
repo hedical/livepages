@@ -1178,8 +1178,10 @@ function updateAgencyTable(allRictData, descriptifData) {
         if (!agencyKey) return;
         initAgency(agencyKey, agencyKey);
 
-        if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
-            agencyStats[agencyKey].users.add(item.email);
+        // Pour le taux d'adoption, ne compter que les utilisateurs présents dans
+        // l'annuaire actuel (sinon le numérateur > dénominateur en mode "Depuis le début")
+        if (email && emailToAgency[email]) {
+            agencyStats[agencyKey].users.add(email);
         }
         
         // Exclure les RICT avec moins de 100 mots dans le résultat de l'IA
@@ -1765,8 +1767,11 @@ function updateRatesChart(data) {
         if (item.contractNumber && item.contractNumber.trim() !== '') {
             monthGroups.operations[monthKey].add(item.contractNumber);
         }
-        if (item.email && item.email.trim() !== '') {
-            monthGroups.users[monthKey].add(item.email);
+        // Pour le taux d'adoption, ne compter que les utilisateurs présents dans
+        // l'annuaire actuel (sinon le numérateur > dénominateur en mode "Depuis le début")
+        const emailLower = (item.email || '').toLowerCase();
+        if (emailLower && emailToAgency[emailLower]) {
+            monthGroups.users[monthKey].add(emailLower);
         }
     });
     

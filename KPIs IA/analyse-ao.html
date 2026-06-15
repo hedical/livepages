@@ -202,6 +202,32 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Gain de temps estimé -->
+                    <div class="mt-6 bg-gradient-to-r from-fuchsia-50 to-pink-50 border border-fuchsia-200 rounded-lg p-6">
+                        <div class="flex items-center justify-between flex-wrap gap-4">
+                            <div class="flex items-start gap-3">
+                                <div class="bg-fuchsia-100 rounded-lg p-3">
+                                    <svg class="w-6 h-6 text-fuchsia-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-600 mb-1">Gain de temps estimé grâce à l'IA</p>
+                                    <p class="text-3xl font-bold text-fuchsia-700" id="kpi-gain-heures">0 h</p>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        Base : <strong>15 min</strong> économisées par AO analysé
+                                        (<span id="kpi-gain-minutes">0</span> min cumulées)
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs font-medium text-fuchsia-700 uppercase tracking-wide mb-1">≈ équivalent</p>
+                                <p class="text-2xl font-bold text-fuchsia-900" id="kpi-gain-jours">0 j</p>
+                                <p class="text-xs text-gray-500">journées de 7 h</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Funnel visuel -->

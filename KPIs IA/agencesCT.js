@@ -816,9 +816,14 @@ function calculateAgencyStatistics() {
             contractStats.contractsWithAIOrRICT100Plus.add(item.contractNumber);
         }
         if (!item.type || item.type === DESCRIPTIF_TYPE) {
-            if (descWordCount >= 100) homeStats.descriptifCount++;
-            if (isKnownUser(item.email)) {
-                homeStats.usersDescriptif.add(item.email.toLowerCase().trim());
+            // Filtre 100 mots : on ne compte un user comme "adoptant le descriptif IA"
+            // que s'il l'a utilisé au moins une fois sur une description source ≥ 100 mots.
+            // Cohérent avec le tooltip et le KPI métier (cf. table colonne descriptif).
+            if (descWordCount >= 100) {
+                homeStats.descriptifCount++;
+                if (isKnownUser(item.email)) {
+                    homeStats.usersDescriptif.add(item.email.toLowerCase().trim());
+                }
             }
         }
     });
@@ -1099,10 +1104,10 @@ function updateChart() {
     
     // Process all data sources and group by month (cumulative)
     const allSources = [
-        // Descriptif = users qui ont produit au moins un AI deliverable de type descriptif.
-        // descriptifData est déjà filtré aux rows IA au load, mais on garde le check
-        // type pour rester safe en cas de legacy export.
-        { data: descriptifData, tool: 'descriptif', filter: (item) => !item.type || item.type === DESCRIPTIF_TYPE },
+        // Descriptif = users qui ont produit au moins un AI deliverable de type descriptif
+        // SUR UNE DESCRIPTION SOURCE ≥ 100 MOTS. Cohérent avec le KPI métier et avec le
+        // taux de pertinence de la colonne descriptif du tableau.
+        { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && getDescWordCount(item) >= 100 },
         { data: autocontactData, tool: 'autocontact', filter: (item) => item.fromAI && !item.contractNumber.toUpperCase().includes('YIELD') },
         { data: comparateurData, tool: 'comparateur', filter: () => true },
         { data: expertBTPData, tool: 'expertBTP', filter: () => true },

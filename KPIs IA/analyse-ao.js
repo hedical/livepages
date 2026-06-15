@@ -1,6 +1,9 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 
+// Gain de temps : minutes économisées par AO analysé (= lead créé)
+const MINUTES_PER_AO_ANALYSE = 15;
+
 // Data URL : ANALYSE_AO_URL est exposée par le webhook passwordROI APRÈS auth.
 // Pas de fallback hardcodé — sinon l'URL fuiterait dans le JS et bypasserait le mot de passe.
 let DATA_URL = '';
@@ -43,6 +46,9 @@ const kpiAnalysesEl = document.getElementById('kpi-analyses');
 const kpiOpportunitesEl = document.getElementById('kpi-opportunites');
 const kpiFiltresRateEl = document.getElementById('kpi-filtres-rate');
 const kpiOppRateEl = document.getElementById('kpi-opp-rate');
+const kpiGainHeuresEl = document.getElementById('kpi-gain-heures');
+const kpiGainMinutesEl = document.getElementById('kpi-gain-minutes');
+const kpiGainJoursEl = document.getElementById('kpi-gain-jours');
 
 // ==================== UTILS ====================
 
@@ -472,6 +478,14 @@ function updateKPIs() {
     const oppRate = kpis.analyses > 0 ? (kpis.opportunites / kpis.analyses) * 100 : 0;
     kpiFiltresRateEl.textContent = formatPercent(filtresRate);
     kpiOppRateEl.textContent = formatPercent(oppRate);
+
+    // Gain de temps : 15 min × nb AO analysés
+    const totalMinutes = kpis.analyses * MINUTES_PER_AO_ANALYSE;
+    const totalHours = totalMinutes / 60;
+    const totalDays = totalHours / 7;
+    if (kpiGainHeuresEl)  kpiGainHeuresEl.textContent  = `${formatNumber(totalHours)} h`;
+    if (kpiGainMinutesEl) kpiGainMinutesEl.textContent = formatNumber(totalMinutes);
+    if (kpiGainJoursEl)   kpiGainJoursEl.textContent   = `${formatNumber(totalDays)} j`;
 
     const firstDate = getFirstDate(allMarches);
     if (firstDate) firstDateTextEl.textContent = formatFirstDate(firstDate);
