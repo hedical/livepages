@@ -20,6 +20,10 @@ const CHAT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/obje
 const EXPERT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpdiagnostics.json';
 // Chat BTP Diagnostics URL (public)
 const CHAT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
+// Expert BTP Consultants SPS URL (public) — même domaine email que BTP Consultants mais BU distincte
+const EXPERT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
+// Chat BTP Consultants SPS URL (public)
+const CHAT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json';
 // Default Population URL (public)
 const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
@@ -57,6 +61,8 @@ let expertCitaeData = [];
 let chatCitaeData = [];
 let expertBTPDiagData = [];
 let chatBTPDiagData = [];
+let expertBtpSpsData = []; // BTP Consultants SPS — BU distincte, emails @btp-consultants.fr
+let chatBtpSpsData = [];
 let nfHabitatData = [];
 let geotechData = [];
 let aoMarches = []; // [{marcheId, refMarche, typeAvis, dateDetection, leads:[...]}]
@@ -146,6 +152,18 @@ const chatProjetBTPDiagCountEl = document.getElementById('chat-projet-btpdiag-co
 const chatProjetBTPDiagUsersEl = document.getElementById('chat-projet-btpdiag-users');
 const chatProjetBTPDiagMessagesEl = document.getElementById('chat-projet-btpdiag-messages');
 const chatProjetBTPDiagCostEl = document.getElementById('chat-projet-btpdiag-cost');
+
+// Expert BTP Consultants SPS elements
+const expertTechSpsCountEl = document.getElementById('expert-tech-sps-count');
+const expertTechSpsUsersEl = document.getElementById('expert-tech-sps-users');
+const expertTechSpsMessagesEl = document.getElementById('expert-tech-sps-messages');
+const expertTechSpsCostEl = document.getElementById('expert-tech-sps-cost');
+
+// Chat BTP Consultants SPS elements
+const chatProjetSpsCountEl = document.getElementById('chat-projet-sps-count');
+const chatProjetSpsUsersEl = document.getElementById('chat-projet-sps-users');
+const chatProjetSpsMessagesEl = document.getElementById('chat-projet-sps-messages');
+const chatProjetSpsCostEl = document.getElementById('chat-projet-sps-cost');
 
 // Analyse géotechnique (BTP Consultants) elements
 const analyseGeoCountEl = document.getElementById('analyse-geo-count');
@@ -1217,10 +1235,18 @@ function getFilteredData(data) {
     const agency = agencyFilterEl.value;
     
     return data.filter(item => {
-        // Filiale filter (based on email)
-        if (filiale === 'BTP Consultants' && !item.email.includes('@btp-consultants.fr')) return false;
+        // SPS (BTP Consultants SPS) partage le domaine @btp-consultants.fr mais constitue une BU distincte.
+        // On le reconnaît via le marqueur item.bu posé au chargement (source = fichiers _btp_sps).
+        const isSPS = item.bu === 'SPS';
+
+        // Filiale filter (based on email / BU)
+        if (filiale === 'BTP Consultants') {
+            if (!item.email.includes('@btp-consultants.fr')) return false;
+            if (isSPS) return false; // ne pas compter les utilisateurs SPS dans BTP Consultants
+        }
         if (filiale === 'Citae' && !item.email.includes('@citae.fr')) return false;
-        
+        if (filiale === 'BTP Consultants SPS' && !isSPS) return false;
+
         // Direction filter
         if (direction && item.direction !== direction) return false;
         
@@ -1741,7 +1767,7 @@ function processGeotechData(data) {
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses, chatBtpSpsMessages, expertBtpSpsMessages) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
@@ -1778,6 +1804,14 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainMinutesExpertBTPDiag = (expertBTPDiagMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertBTPDiag = timeGainMinutesExpertBTPDiag / 60;
 
+    // Gain en temps pour chat BTP Consultants SPS (minutes → heures)
+    const timeGainMinutesChatBtpSps = (chatBtpSpsMessages || 0) * MINUTES_PER_MESSAGE;
+    const timeGainHoursChatBtpSps = timeGainMinutesChatBtpSps / 60;
+
+    // Gain en temps pour expert BTP Consultants SPS (minutes → heures)
+    const timeGainMinutesExpertBtpSps = (expertBtpSpsMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
+    const timeGainHoursExpertBtpSps = timeGainMinutesExpertBtpSps / 60;
+
     // Gain en temps pour NF Habitat (heures par point)
     const timeGainHoursNFHabitat = (nfHabitatPoints || 0) * HOURS_PER_POINT_NF;
 
@@ -1788,7 +1822,8 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     // Total time gain
     const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur
         + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae
-        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursNFHabitat + timeGainHoursAO;
+        + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursChatBtpSps + timeGainHoursExpertBtpSps
+        + timeGainHoursNFHabitat + timeGainHoursAO;
 
     // Gain en % volume d'affaire (BTP Consultants scope: 44M€)
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
@@ -1807,6 +1842,8 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
         timeGainHoursExpertCitae,
         timeGainHoursChatBTPDiag,
         timeGainHoursExpertBTPDiag,
+        timeGainHoursChatBtpSps,
+        timeGainHoursExpertBtpSps,
         timeGainHoursNFHabitat,
         timeGainHoursAO,
         percentGain,
@@ -1967,6 +2004,32 @@ function processChatBTPDiagData(data) {
     return { totalSessions, uniqueUsers: uniqueUsers.size, totalMessages, totalCost };
 }
 
+// Expert / Chat BTP Consultants SPS : données déjà isolées par source (fichiers _btp_sps).
+// Pas de re-filtre par email (le domaine @btp-consultants.fr est partagé avec BTP Consultants).
+function processExpertBtpSpsData(data) {
+    const filtered = getFilteredData(data);
+    const totalSessions = filtered.length;
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') uniqueUsers.add(item.email);
+    });
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    return { totalSessions, uniqueUsers: uniqueUsers.size, totalMessages, totalCost };
+}
+
+function processChatBtpSpsData(data) {
+    const filtered = getFilteredData(data);
+    const totalSessions = filtered.length;
+    const uniqueUsers = new Set();
+    filtered.forEach(item => {
+        if (item.email && item.email.trim() !== '') uniqueUsers.add(item.email);
+    });
+    const totalMessages = filtered.reduce((sum, item) => sum + (item.messagesLength || 0), 0);
+    const totalCost = filtered.reduce((sum, item) => sum + (item.totalCostInDollars || 0), 0);
+    return { totalSessions, uniqueUsers: uniqueUsers.size, totalMessages, totalCost };
+}
+
 /**
  * NF Habitat filter: controlName contains "NF" AND "Habitat" (case-insensitive), status === "COMPLETED"
  */
@@ -2006,12 +2069,14 @@ function updateKPIs() {
     const chatCitaeStats = processChatCitaeData(chatCitaeData);
     const expertBTPDiagStats = processExpertBTPDiagData(expertBTPDiagData);
     const chatBTPDiagStats = processChatBTPDiagData(chatBTPDiagData);
+    const expertBtpSpsStats = processExpertBtpSpsData(expertBtpSpsData);
+    const chatBtpSpsStats = processChatBtpSpsData(chatBtpSpsData);
     const nfHabitatStats = processNFHabitatData(nfHabitatData);
 
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
     // For geotech, use totalOperations (distinct DeliverableId) — one operation = 1 notice + 1 report, so we dedup.
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => (!item.type || item.type === DESCRIPTIF_TYPE)).forEach(item => {
@@ -2070,6 +2135,15 @@ function updateKPIs() {
         if (item.email && item.email.includes('@btp-diagnostics.fr')) {
             allUsers.add(item.email);
         }
+    });
+
+    // Expert / Chat BTP Consultants SPS users — comptés dans le total Groupe,
+    // mais pas dans la filiale BTP Consultants (cf. getFilteredData).
+    getFilteredData(expertBtpSpsData).forEach(item => {
+        if (item.email && item.email.trim() !== '') allUsers.add(item.email);
+    });
+    getFilteredData(chatBtpSpsData).forEach(item => {
+        if (item.email && item.email.trim() !== '') allUsers.add(item.email);
     });
 
     // NF Habitat users
@@ -2188,7 +2262,29 @@ function updateKPIs() {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(chatBTPDiagStats.totalCost);
-    
+
+    // Expert BTP Consultants SPS stats
+    if (expertTechSpsCountEl) expertTechSpsCountEl.textContent = formatNumber(expertBtpSpsStats.totalSessions);
+    if (expertTechSpsUsersEl) expertTechSpsUsersEl.textContent = formatNumber(expertBtpSpsStats.uniqueUsers);
+    if (expertTechSpsMessagesEl) expertTechSpsMessagesEl.textContent = formatNumber(expertBtpSpsStats.totalMessages);
+    if (expertTechSpsCostEl) expertTechSpsCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(expertBtpSpsStats.totalCost);
+
+    // Chat BTP Consultants SPS stats
+    if (chatProjetSpsCountEl) chatProjetSpsCountEl.textContent = formatNumber(chatBtpSpsStats.totalSessions);
+    if (chatProjetSpsUsersEl) chatProjetSpsUsersEl.textContent = formatNumber(chatBtpSpsStats.uniqueUsers);
+    if (chatProjetSpsMessagesEl) chatProjetSpsMessagesEl.textContent = formatNumber(chatBtpSpsStats.totalMessages);
+    if (chatProjetSpsCostEl) chatProjetSpsCostEl.textContent = new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(chatBtpSpsStats.totalCost);
+
     // Calculate and display gains - USE SAME VALUES AS IN DETAIL PAGES
     // Descriptif page uses: totalOperations (unique operations)
     // Autocontact page uses: aiContacts (total AI contacts, not operations)
@@ -2206,13 +2302,15 @@ function updateKPIs() {
         chatBTPDiagStats.totalMessages,
         expertBTPDiagStats.totalMessages,
         nfHabitatStats.totalPoints,
-        aoStats.analyses
+        aoStats.analyses,
+        chatBtpSpsStats.totalMessages,
+        expertBtpSpsStats.totalMessages
     );
 
     gainHeuresEl.textContent = formatNumber(gains.timeGainHours);
     gainSubtitleEl.innerHTML = `
         <div class="space-y-1">
-            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h + NF Habitat: ${formatNumber(gains.timeGainHoursNFHabitat)}h + Analyse AO: ${formatNumber(gains.timeGainHoursAO)}h)</div>
+            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h + Chat SPS: ${formatNumber(gains.timeGainHoursChatBtpSps)}h + Expert SPS: ${formatNumber(gains.timeGainHoursExpertBtpSps)}h + NF Habitat: ${formatNumber(gains.timeGainHoursNFHabitat)}h + Analyse AO: ${formatNumber(gains.timeGainHoursAO)}h)</div>
             <div class="text-xs">≈ ${gains.percentGain.toFixed(4)}% du volume d'affaires</div>
             <div class="text-xs">≈ ${formatNumber(gains.euroGain)} €</div>
         </div>
@@ -2744,6 +2842,72 @@ async function loadData() {
             console.warn('Error loading Chat BTP Diagnostics data:', e);
         }
 
+        // Load Expert BTP Consultants SPS data — BU distincte, marquée bu:'SPS'
+        console.log('Loading Expert BTP Consultants SPS data...');
+        try {
+            const expertBtpSpsResponse = await fetch(EXPERT_BTP_SPS_URL);
+            if (expertBtpSpsResponse.ok) {
+                const expertBtpSpsJson = await expertBtpSpsResponse.json();
+                expertBtpSpsData = expertBtpSpsJson.map(item => {
+                    const metadata = item.metadata || {};
+                    const productionService = metadata.productionService || '';
+                    const management = metadata.management || '';
+                    return {
+                        id: item.id,
+                        title: item.title || '',
+                        email: item.email || '',
+                        createdAt: item.createdAt || '',
+                        updatedAt: item.updatedAt || '',
+                        messagesLength: item.messagesLength || item._count?.messages || 0,
+                        totalCostInDollars: item.totalCostInDollars || 0,
+                        agency: productionService || 'Non spécifié',
+                        agencyCode: productionService || '',
+                        direction: management || '',
+                        bu: 'SPS',
+                        metadata: metadata
+                    };
+                });
+                console.log('Loaded', expertBtpSpsData.length, 'Expert BTP Consultants SPS records');
+            } else {
+                console.warn('Failed to load Expert BTP Consultants SPS data:', expertBtpSpsResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Expert BTP Consultants SPS data:', e);
+        }
+
+        // Load Chat BTP Consultants SPS data
+        console.log('Loading Chat BTP Consultants SPS data...');
+        try {
+            const chatBtpSpsResponse = await fetch(CHAT_BTP_SPS_URL);
+            if (chatBtpSpsResponse.ok) {
+                const chatBtpSpsJson = await chatBtpSpsResponse.json();
+                chatBtpSpsData = chatBtpSpsJson.map(item => {
+                    const metadata = item.metadata || {};
+                    const productionService = metadata.productionService || '';
+                    const management = metadata.management || '';
+                    return {
+                        id: item.id,
+                        title: item.title || '',
+                        email: item.email || '',
+                        createdAt: item.createdAt || '',
+                        updatedAt: item.updatedAt || '',
+                        messagesLength: item.messagesLength || item._count?.messages || 0,
+                        totalCostInDollars: item.totalCostInDollars || 0,
+                        agency: productionService || 'Non spécifié',
+                        agencyCode: productionService || '',
+                        direction: management || '',
+                        bu: 'SPS',
+                        metadata: metadata
+                    };
+                });
+                console.log('Loaded', chatBtpSpsData.length, 'Chat BTP Consultants SPS records');
+            } else {
+                console.warn('Failed to load Chat BTP Consultants SPS data:', chatBtpSpsResponse.status);
+            }
+        } catch (e) {
+            console.warn('Error loading Chat BTP Consultants SPS data:', e);
+        }
+
         // Load NF Habitat data
         if (NF_HABITAT_URL) {
             console.log('Loading NF Habitat data...');
@@ -2829,7 +2993,9 @@ const featureCards = [
     { id: 'expert-tech-citae', filiale: 'Citae', element: null },
     { id: 'nf-habitat', filiale: 'Citae', element: null },
     { id: 'chat-projet-btpdiag', filiale: 'BTP Diagnostics', element: null },
-    { id: 'expert-tech-btpdiag', filiale: 'BTP Diagnostics', element: null }
+    { id: 'expert-tech-btpdiag', filiale: 'BTP Diagnostics', element: null },
+    { id: 'chat-projet-sps', filiale: 'BTP Consultants SPS', element: null },
+    { id: 'expert-tech-sps', filiale: 'BTP Consultants SPS', element: null }
 ];
 
 /**
@@ -2956,6 +3122,8 @@ function collectActiveUsers() {
         chatCitae:    'Chat (Citae)',
         expertDiag:   'Expert (Diag)',
         chatDiag:     'Chat (Diag)',
+        expertSps:    'Expert (SPS)',
+        chatSps:      'Chat (SPS)',
     };
 
     const upsert = (email, filiale, featureKey, dateString) => {
@@ -3028,15 +3196,22 @@ function collectActiveUsers() {
     chatBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Diagnostics', 'chatDiag', item.createdAt));
 
+    // Expert / Chat BTP Consultants SPS — filiale dédiée (données isolées par source)
+    expertBtpSpsData.filter(item => item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
+        .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'expertSps', item.createdAt));
+    chatBtpSpsData.filter(item => item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
+        .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'chatSps', item.createdAt));
+
     return Array.from(usersMap.values())
         .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
 }
 
 const FILIALE_BADGE = {
-    'BTP Consultants': 'bg-blue-100 text-blue-800',
-    'Citae':           'bg-green-100 text-green-800',
-    'BTP Diagnostics': 'bg-orange-100 text-orange-800',
-    'Autre':           'bg-gray-100 text-gray-600',
+    'BTP Consultants':    'bg-blue-100 text-blue-800',
+    'Citae':              'bg-green-100 text-green-800',
+    'BTP Diagnostics':    'bg-orange-100 text-orange-800',
+    'BTP Consultants SPS': 'bg-cyan-100 text-cyan-800',
+    'Autre':              'bg-gray-100 text-gray-600',
 };
 
 let activeUsersCache = null;
@@ -3212,6 +3387,10 @@ function calculateMonthlyUsers() {
     // Expert / Chat BTP Diagnostics
     getFilteredData(expertBTPDiagData).forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
     getFilteredData(chatBTPDiagData).forEach(item => addUser(item.createdAt, item.email, '@btp-diagnostics.fr'));
+
+    // Expert / Chat BTP Consultants SPS — données isolées par source, pas de filtre domaine
+    getFilteredData(expertBtpSpsData).forEach(item => addUser(item.createdAt, item.email));
+    getFilteredData(chatBtpSpsData).forEach(item => addUser(item.createdAt, item.email));
 
     const sortedMonths = Object.keys(monthlyUserSets).sort();
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -3513,6 +3692,8 @@ function calculateMonthlyGains() {
                 expertCitaeMessages: 0,
                 chatBTPDiagMessages: 0,
                 expertBTPDiagMessages: 0,
+                chatBtpSpsMessages: 0,
+                expertBtpSpsMessages: 0,
                 nfHabitatPoints: 0,
                 aoAnalyses: 0,
             };
@@ -3616,6 +3797,21 @@ function calculateMonthlyGains() {
         monthlyData[key].expertBTPDiagMessages += (item.messagesLength || 0);
     });
 
+    // ── Chat / Expert BTP Consultants SPS ───────────────────────────────────
+    getFilteredData(chatBtpSpsData).forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].chatBtpSpsMessages += (item.messagesLength || 0);
+    });
+
+    getFilteredData(expertBtpSpsData).forEach(item => {
+        const key = getMonthKey(item.createdAt);
+        if (!key) return;
+        ensureMonth(key);
+        monthlyData[key].expertBtpSpsMessages += (item.messagesLength || 0);
+    });
+
     // ── NF Habitat ───────────────────────────────────────────────────────────────
     getFilteredData(nfHabitatData).filter(isNFHabitatItem).forEach(item => {
         const key = getMonthKey(item.createdAt);
@@ -3653,7 +3849,9 @@ function calculateMonthlyGains() {
             d.chatBTPDiagMessages,
             d.expertBTPDiagMessages,
             d.nfHabitatPoints,
-            d.aoAnalyses
+            d.aoAnalyses,
+            d.chatBtpSpsMessages,
+            d.expertBtpSpsMessages
         );
         const [year, month] = key.split('-');
         return {
@@ -3670,6 +3868,8 @@ function calculateMonthlyGains() {
             hoursExpertCitae:   gains.timeGainHoursExpertCitae,
             hoursChatBTPDiag:   gains.timeGainHoursChatBTPDiag,
             hoursExpertBTPDiag: gains.timeGainHoursExpertBTPDiag,
+            hoursChatBtpSps:    gains.timeGainHoursChatBtpSps,
+            hoursExpertBtpSps:  gains.timeGainHoursExpertBtpSps,
             hoursNFHabitat:     gains.timeGainHoursNFHabitat,
             hoursAO:            gains.timeGainHoursAO,
         };
@@ -3842,6 +4042,8 @@ function buildGainChart() {
         { key: 'hoursExpertCitae',   label: 'Expert Citae',        color: 'rgba(6, 182, 212, 0.85)'   },
         { key: 'hoursChatBTPDiag',   label: 'Chat BTP Diag',       color: 'rgba(244, 63, 94, 0.85)'   },
         { key: 'hoursExpertBTPDiag', label: 'Expert BTP Diag',     color: 'rgba(251, 146, 60, 0.85)'  },
+        { key: 'hoursChatBtpSps',    label: 'Chat SPS',            color: 'rgba(14, 165, 233, 0.85)'  },
+        { key: 'hoursExpertBtpSps',  label: 'Expert SPS',          color: 'rgba(2, 132, 199, 0.85)'   },
         { key: 'hoursNFHabitat',     label: 'NF Habitat',          color: 'rgba(52, 211, 153, 0.85)'  },
         { key: 'hoursAO',            label: 'Analyse AO',          color: 'rgba(217, 70, 239, 0.85)'  },
     ];
