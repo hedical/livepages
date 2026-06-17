@@ -220,16 +220,28 @@
 
                 <!-- Adoption : évolution temporelle -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Évolution du taux d'adoption dans le temps</h3>
-                    <p class="text-sm text-gray-500 mb-4">Taux cumulé (% utilisateurs uniques / effectif). Cliquer sur la légende pour isoler un outil.</p>
+                    <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
+                        <h3 class="text-lg font-semibold text-gray-900">Évolution du taux d'adoption dans le temps</h3>
+                        <div id="adoption-mode-toggle" class="flex items-center bg-gray-100 rounded-lg p-1 cursor-pointer select-none gap-1">
+                            <span data-mode="monthly" class="px-3 py-1 rounded-md text-sm font-medium bg-white text-emerald-700 shadow-sm transition-all">Mensuel</span>
+                            <span data-mode="cumul" class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
+                        </div>
+                    </div>
+                    <p id="adoption-chart-subtitle" class="text-sm text-gray-500 mb-4">Taux mensuel (% d'utilisateurs uniques actifs sur le mois / effectif). Cliquer sur la légende pour isoler un outil.</p>
                     <div id="adoption-chart" style="width: 100%; min-height: 400px; height: 400px;"></div>
                 </div>
 
-                <!-- Adoption : classement des agences -->
+                <!-- Adoption : volume d'utilisations par fonctionnalité -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Classement des agences par adoption globale</h3>
-                    <p class="text-sm text-gray-500 mb-4">Part des collaborateurs ayant utilisé au moins un outil IA. Agences avec effectif connu uniquement.</p>
-                    <div id="adoption-rank-chart" style="width: 100%; min-height: 360px;"></div>
+                    <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
+                        <h3 class="text-lg font-semibold text-gray-900">Évolution du nombre d'utilisations par fonctionnalité</h3>
+                        <div id="usage-mode-toggle" class="flex items-center bg-gray-100 rounded-lg p-1 cursor-pointer select-none gap-1">
+                            <span data-mode="monthly" class="px-3 py-1 rounded-md text-sm font-medium bg-white text-emerald-700 shadow-sm transition-all">Mensuel</span>
+                            <span data-mode="cumul" class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
+                        </div>
+                    </div>
+                    <p id="usage-chart-subtitle" class="text-sm text-gray-500 mb-4">Nombre d'utilisations enregistrées sur le mois, par fonctionnalité. Cliquer sur la légende pour isoler un outil.</p>
+                    <div id="usage-chart" style="width: 100%; min-height: 400px; height: 400px;"></div>
                 </div>
 
                 <!-- Adoption : tableau -->

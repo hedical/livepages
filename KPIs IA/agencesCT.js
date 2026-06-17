@@ -55,6 +55,8 @@ let availableDirections = [];
 let adoptionSort = { column: 'adoptionGlobale', ascending: false };
 let pertinenceSort = { column: 'couverture', ascending: false };
 let dateFilter = { startDate: null, endDate: null };
+let adoptionChartMode = 'monthly'; // 'monthly' (actifs sur le mois) | 'cumul' (cumulé depuis le début)
+let usageChartMode = 'monthly';    // idem pour le graphe du nombre d'utilisations par fonctionnalité
 
 // Cache des stats calculées (recalculé à chaque changement de filtre)
 let currentStats = [];
@@ -845,7 +847,7 @@ function refreshAll() {
     renderAdoptionTable();
     renderPertinenceTable();
     updateAdoptionTimeChart();
-    updateAdoptionRankChart();
+    updateUsageTimeChart();
     updateDescriptifCompareChart();
     updateQuadrantChart();
 }
@@ -919,7 +921,6 @@ function updateAdoptionTimeChart() {
 
     const sortedMonths = Object.keys(monthlyGroups).sort();
     const chartData = [];
-    const cumulativeUsers = { descriptif: new Set(), autocontact: new Set(), comparateur: new Set(), expertBTP: new Set(), chatBTP: new Set(), geotech: new Set() };
 
     // Effectif filtré (selon direction/agence sélectionnée)
     let filteredEffectif = 0;
@@ -938,20 +939,32 @@ function updateAdoptionTimeChart() {
     }
 
     const tools = ['descriptif', 'autocontact', 'comparateur', 'expertBTP', 'chatBTP', 'geotech'];
+    // Mode 'cumul' : un Set persistant par outil, qui accumule les utilisateurs depuis le début.
+    // Mode 'monthly' : un Set neuf à chaque mois (utilisateurs actifs sur ce mois seulement).
+    const cumulMode = adoptionChartMode === 'cumul';
+    const cumulativeUsers = {};
+    tools.forEach(t => cumulativeUsers[t] = new Set());
     sortedMonths.forEach(monthKey => {
         const monthDate = monthlyGroups[monthKey];
         const [year, month] = monthKey.split('-').map(Number);
+        const monthUsers = {};
+        tools.forEach(t => monthUsers[t] = new Set());
         allSources.forEach(source => {
             getFilteredData(source.data).forEach(item => {
                 if (!source.filter(item) || !item.createdAt) return;
                 const date = parseFrenchDate(item.createdAt);
                 if (date && date.getFullYear() === year && date.getMonth() === month - 1 && isCountable(item.email)) {
-                    cumulativeUsers[source.tool].add(item.email.toLowerCase().trim());
+                    const e = item.email.toLowerCase().trim();
+                    monthUsers[source.tool].add(e);
+                    if (cumulMode) cumulativeUsers[source.tool].add(e);
                 }
             });
         });
         const rates = {};
-        tools.forEach(tool => { rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0; });
+        tools.forEach(tool => {
+            const count = cumulMode ? cumulativeUsers[tool].size : monthUsers[tool].size;
+            rates[tool] = filteredEffectif > 0 ? (count / filteredEffectif) * 100 : 0;
+        });
         chartData.push({ date: monthDate, ...rates });
     });
 
@@ -1033,39 +1046,155 @@ function updateAdoptionTimeChart() {
     });
 }
 
-// ==================== CHART 2 : CLASSEMENT ADOPTION GLOBALE ====================
+// ==================== CHART 2 : NOMBRE D'UTILISATIONS PAR FONCTIONNALITÉ ====================
+// Volume d'usages (pas d'utilisateurs uniques) par outil et par mois. Mode mensuel | cumulé.
+// SPS exclu. Mêmes filtres par outil que la courbe d'adoption.
 
-function updateAdoptionRankChart() {
-    const el = document.getElementById('adoption-rank-chart');
+function updateUsageTimeChart() {
+    const el = document.getElementById('usage-chart');
     if (!el) return;
     d3.select(el).selectAll('*').remove();
 
-    const data = currentStats.filter(s => s.effectif > 0 && s.adoptionGlobale != null && s.agencyCode !== '__NONE__')
-        .sort((a, b) => b.adoptionGlobale - a.adoptionGlobale);
-    if (data.length === 0) { el.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Aucune agence à effectif connu.</p>'; return; }
+    const tools = ['descriptif', 'autocontact', 'comparateur', 'expertBTP', 'chatBTP', 'geotech'];
+    const allSources = [
+        { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && getDescWordCount(item) >= 100 },
+        { data: autocontactData, tool: 'autocontact', filter: (item) => item.fromAI && !item.contractNumber.toUpperCase().includes('YIELD') },
+        { data: comparateurData, tool: 'comparateur', filter: () => true },
+        { data: expertBTPData, tool: 'expertBTP', filter: () => true },
+        { data: chatBTPData, tool: 'chatBTP', filter: () => true },
+        { data: geotechData, tool: 'geotech', filter: () => true }
+    ];
 
-    const rowH = 26;
-    const margin = { top: 10, right: 60, bottom: 30, left: 150 };
+    // Dates filtrées (hors SPS) → bornes des mois
+    const allDates = [];
+    allSources.forEach(source => {
+        getFilteredData(source.data).forEach(item => {
+            if (!source.filter(item) || !item.createdAt || isSpsEmail(item.email)) return;
+            const date = parseFrenchDate(item.createdAt);
+            if (date) allDates.push(date);
+        });
+    });
+    if (allDates.length === 0) { el.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Aucune utilisation sur la période.</p>'; return; }
+
+    const monthlyGroups = {};
+    let minDate = null, maxDate = null;
+    allDates.forEach(date => {
+        const y = date.getFullYear(), m = date.getMonth();
+        const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+        if (!monthlyGroups[key]) monthlyGroups[key] = new Date(y, m, 1);
+        if (!minDate || date < minDate) minDate = date;
+        if (!maxDate || date > maxDate) maxDate = date;
+    });
+    if (minDate && maxDate) {
+        const current = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+        const end = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+        while (current <= end) {
+            const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthlyGroups[key]) monthlyGroups[key] = new Date(current.getFullYear(), current.getMonth(), 1);
+            current.setMonth(current.getMonth() + 1);
+        }
+    }
+
+    const sortedMonths = Object.keys(monthlyGroups).sort();
+    const chartData = [];
+    const cumulMode = usageChartMode === 'cumul';
+    const running = {}; tools.forEach(t => running[t] = 0);
+    sortedMonths.forEach(monthKey => {
+        const monthDate = monthlyGroups[monthKey];
+        const [year, month] = monthKey.split('-').map(Number);
+        const monthCounts = {}; tools.forEach(t => monthCounts[t] = 0);
+        allSources.forEach(source => {
+            getFilteredData(source.data).forEach(item => {
+                if (!source.filter(item) || !item.createdAt || isSpsEmail(item.email)) return;
+                const date = parseFrenchDate(item.createdAt);
+                if (date && date.getFullYear() === year && date.getMonth() === month - 1) monthCounts[source.tool]++;
+            });
+        });
+        const vals = {};
+        tools.forEach(tool => {
+            if (cumulMode) { running[tool] += monthCounts[tool]; vals[tool] = running[tool]; }
+            else vals[tool] = monthCounts[tool];
+        });
+        chartData.push({ date: monthDate, ...vals });
+    });
+
+    el.style.width = '100%';
+    void el.offsetHeight;
     let containerWidth = el.offsetWidth || el.clientWidth || 800;
+    const margin = { top: 20, right: 150, bottom: 60, left: 60 };
     const width = Math.max(400, containerWidth - margin.left - margin.right);
-    const height = data.length * rowH;
+    const height = 320;
     const svg = d3.select(el).append('svg').attr('width', width + margin.left + margin.right).attr('height', height + margin.top + margin.bottom);
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const x = d3.scaleLinear().domain([0, Math.max(10, d3.max(data, d => d.adoptionGlobale) * 1.1)]).range([0, width]);
-    const yb = d3.scaleBand().domain(data.map(d => d.agency)).range([0, height]).padding(0.18);
+    const x = d3.scaleTime().domain(d3.extent(chartData, d => d.date)).range([0, width]);
+    let maxValue = 0;
+    tools.forEach(tool => { const tm = d3.max(chartData, d => d[tool] || 0); if (tm > maxValue) maxValue = tm; });
+    const y = d3.scaleLinear().domain([0, Math.max(5, Math.ceil(maxValue * 1.1))]).nice().range([height, 0]);
 
-    g.append('g').attr('transform', `translate(0,${height})`).attr('class', 'axis').call(d3.axisBottom(x).ticks(6).tickFormat(d => d + '%'));
-    g.append('g').attr('class', 'axis').call(d3.axisLeft(yb)).selectAll('text').style('font-size', '11px');
+    const colors = { descriptif: '#3B82F6', autocontact: '#10B981', comparateur: '#F59E0B', expertBTP: '#EF4444', chatBTP: '#8B5CF6', geotech: '#0EA5E9' };
+    const toolLabels = { descriptif: 'Descriptif', autocontact: 'Auto Contact', comparateur: 'Comparateur', expertBTP: 'Expert BTP', chatBTP: 'Chat BTP', geotech: 'Géotech' };
+    const visibility = {}; tools.forEach(t => visibility[t] = true);
 
-    const color = (r) => r >= 50 ? '#22c55e' : r >= 30 ? '#eab308' : r >= 20 ? '#f97316' : '#ef4444';
-    g.selectAll('.bar').data(data).enter().append('rect')
-        .attr('x', 0).attr('y', d => yb(d.agency)).attr('height', yb.bandwidth()).attr('width', d => x(d.adoptionGlobale))
-        .attr('fill', d => color(d.adoptionGlobale)).attr('rx', 3)
-        .append('title').text(d => `${d.agency} — ${d.adoptionGlobale.toFixed(1)}% (effectif ${d.effectif})`);
-    g.selectAll('.lbl').data(data).enter().append('text')
-        .attr('x', d => x(d.adoptionGlobale) + 6).attr('y', d => yb(d.agency) + yb.bandwidth() / 2).attr('dy', '.35em')
-        .style('font-size', '11px').style('fill', '#374151').text(d => d.adoptionGlobale.toFixed(0) + '%');
+    // Graduations Y entières (le nombre d'utilisations est un entier → pas de 0.5)
+    const yTop = y.domain()[1];
+    const yStep = Math.max(1, Math.ceil(yTop / 8));
+    const yTicks = d3.range(0, yTop + 0.0001, yStep);
+    g.append('g').attr('class', 'grid').call(d3.axisLeft(y).tickValues(yTicks).tickSize(-width).tickFormat('')).selectAll('line').style('stroke', '#e5e7eb').style('stroke-dasharray', '3,3');
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%m/%Y')));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).tickValues(yTicks).tickFormat(d3.format('d')));
+    g.append('text').attr('transform', 'rotate(-90)').attr('y', -margin.left).attr('x', -(height / 2)).attr('dy', '1em').style('text-anchor', 'middle').style('font-size', '12px').text("Nombre d'utilisations");
+
+    const tooltip = g.append('g').style('opacity', 0).style('pointer-events', 'none');
+    const tooltipText = tooltip.append('text').style('font-size', '13px').style('font-weight', 'bold').style('text-anchor', 'middle');
+    const highlight = g.append('circle').attr('r', 6).attr('fill', 'none').attr('stroke-width', 2).style('opacity', 0);
+
+    tools.forEach(tool => {
+        const line = d3.line().x(d => x(d.date)).y(d => y(d[tool] || 0)).curve(d3.curveMonotoneX);
+        g.append('path').datum(chartData).attr('class', `line uline-${tool}`).attr('d', line).attr('stroke', colors[tool]).attr('stroke-width', 2).attr('fill', 'none').style('pointer-events', 'none');
+        g.selectAll(`.udot-${tool}`).data(chartData).enter().append('circle').attr('class', `udot-${tool}`).attr('cx', d => x(d.date)).attr('cy', d => y(d[tool] || 0)).attr('r', 3.5).attr('fill', colors[tool]).style('pointer-events', 'none');
+    });
+
+    const findClosest = (mx, my) => {
+        let best = null, bestDist = Infinity;
+        tools.forEach(tool => {
+            if (!visibility[tool]) return;
+            chartData.forEach(d => {
+                const dx = mx - x(d.date), dy = my - y(d[tool] || 0);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < bestDist) { bestDist = dist; best = { tool, point: d }; }
+            });
+        });
+        return (best && bestDist < 30) ? best : null;
+    };
+    g.append('rect').attr('width', width).attr('height', height).attr('fill', 'transparent').style('cursor', 'crosshair')
+        .on('mousemove', function (event) {
+            const [mx, my] = d3.pointer(event, g.node());
+            const c = findClosest(mx, my);
+            if (!c) { tooltip.style('opacity', 0); highlight.style('opacity', 0); return; }
+            const px = x(c.point.date), py = y(c.point[c.tool] || 0);
+            tooltipText.selectAll('tspan').remove();
+            tooltipText.append('tspan').attr('x', 0).attr('dy', '-1.2em').style('font-size', '11px').style('font-weight', 'normal').style('fill', '#6b7280').text(d3.timeFormat('%m/%Y')(c.point.date));
+            tooltipText.append('tspan').attr('x', 0).attr('dy', '1.2em').style('fill', colors[c.tool]).text(`${toolLabels[c.tool]}: ${formatNumber(c.point[c.tool] || 0)}`);
+            tooltip.attr('transform', `translate(${Math.max(50, Math.min(px, width - 50))}, ${py < 30 ? py + 25 : py - 25})`).style('opacity', 1);
+            highlight.attr('cx', px).attr('cy', py).attr('stroke', colors[c.tool]).style('opacity', 1);
+        })
+        .on('mouseleave', () => { tooltip.style('opacity', 0); highlight.style('opacity', 0); });
+
+    const legend = g.append('g').attr('transform', `translate(${width + 20}, 0)`);
+    tools.forEach((tool, i) => {
+        const row = legend.append('g').attr('transform', `translate(0, ${i * 24})`).style('cursor', 'pointer')
+            .on('click', () => {
+                visibility[tool] = !visibility[tool];
+                const op = visibility[tool] ? 1 : 0.15;
+                g.selectAll(`.uline-${tool}`).style('opacity', op);
+                g.selectAll(`.udot-${tool}`).style('opacity', op);
+                row.style('opacity', visibility[tool] ? 1 : 0.4);
+            });
+        row.append('line').attr('x1', 0).attr('x2', 18).attr('y1', 9).attr('y2', 9).attr('stroke', colors[tool]).attr('stroke-width', 2);
+        row.append('circle').attr('cx', 9).attr('cy', 9).attr('r', 3.5).attr('fill', colors[tool]);
+        row.append('text').attr('x', 24).attr('y', 9).attr('dy', '.35em').style('font-size', '12px').text(toolLabels[tool]);
+    });
 }
 
 // ==================== CHART 3 : ADOPTION vs COUVERTURE (DESCRIPTIF) ====================
@@ -1161,6 +1290,64 @@ resetFiltersBtn.addEventListener('click', () => {
     populateAgencyFilter(); refreshAll();
 });
 logoutBtn.addEventListener('click', () => { localStorage.removeItem('roi_password'); window.location.reload(); });
+
+// Toggle Mensuel / Cumulé du graphique d'adoption
+const adoptionModeToggle = document.getElementById('adoption-mode-toggle');
+function syncAdoptionModeToggle() {
+    if (!adoptionModeToggle) return;
+    adoptionModeToggle.querySelectorAll('span[data-mode]').forEach(span => {
+        const active = span.getAttribute('data-mode') === adoptionChartMode;
+        span.className = active
+            ? 'px-3 py-1 rounded-md text-sm font-medium bg-white text-emerald-700 shadow-sm transition-all'
+            : 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+    });
+    const subtitle = document.getElementById('adoption-chart-subtitle');
+    if (subtitle) {
+        subtitle.textContent = adoptionChartMode === 'cumul'
+            ? "Taux cumulé (% d'utilisateurs uniques depuis le début / effectif). Cliquer sur la légende pour isoler un outil."
+            : "Taux mensuel (% d'utilisateurs uniques actifs sur le mois / effectif). Cliquer sur la légende pour isoler un outil.";
+    }
+}
+if (adoptionModeToggle) {
+    adoptionModeToggle.addEventListener('click', (e) => {
+        const span = e.target.closest('span[data-mode]');
+        if (!span) return;
+        const mode = span.getAttribute('data-mode');
+        if (mode === adoptionChartMode) return;
+        adoptionChartMode = mode;
+        syncAdoptionModeToggle();
+        updateAdoptionTimeChart();
+    });
+}
+
+// Toggle Mensuel / Cumulé du graphique du nombre d'utilisations
+const usageModeToggle = document.getElementById('usage-mode-toggle');
+function syncUsageModeToggle() {
+    if (!usageModeToggle) return;
+    usageModeToggle.querySelectorAll('span[data-mode]').forEach(span => {
+        const active = span.getAttribute('data-mode') === usageChartMode;
+        span.className = active
+            ? 'px-3 py-1 rounded-md text-sm font-medium bg-white text-emerald-700 shadow-sm transition-all'
+            : 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+    });
+    const subtitle = document.getElementById('usage-chart-subtitle');
+    if (subtitle) {
+        subtitle.textContent = usageChartMode === 'cumul'
+            ? "Nombre cumulé d'utilisations depuis le début, par fonctionnalité. Cliquer sur la légende pour isoler un outil."
+            : "Nombre d'utilisations enregistrées sur le mois, par fonctionnalité. Cliquer sur la légende pour isoler un outil.";
+    }
+}
+if (usageModeToggle) {
+    usageModeToggle.addEventListener('click', (e) => {
+        const span = e.target.closest('span[data-mode]');
+        if (!span) return;
+        const mode = span.getAttribute('data-mode');
+        if (mode === usageChartMode) return;
+        usageChartMode = mode;
+        syncUsageModeToggle();
+        updateUsageTimeChart();
+    });
+}
 
 let resizeTimeout;
 window.addEventListener('resize', () => { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(refreshAll, 250); });
