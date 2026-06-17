@@ -9,6 +9,12 @@ const CHAT_BTPDIAG_URL  = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/o
 
 const DAY = 24 * 3600 * 1000;
 const HISTORY_START = new Date('2025-01-01').getTime();
+// Type des "vrais" descriptifs IA. Les lignes au type vide (RICT sans génération
+// IA, hasAi=false) ne sont PAS des usages et ne doivent pas compter en rétention.
+const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
+// Mise en place effective du module Analyse AO (UTC minuit) : les marchés détectés
+// avant cette date (test / backfill) ne comptent pas. Cf. app.js / analyse-ao.js.
+const AO_MODULE_START = new Date('2026-06-06');
 
 const loadingEl = document.getElementById('loading');
 const errorEl   = document.getElementById('error');
@@ -84,10 +90,27 @@ function findIdx(headers, ...patterns) {
     return -1;
 }
 
+// Like findIdx but returns the matching KEY name (for JSON objects). null if none.
+function findKey(keys, ...patterns) {
+    for (const pat of patterns) {
+        for (const k of keys) {
+            const lk = k.toLowerCase();
+            let ok = true;
+            for (const sub of pat) {
+                if (sub.startsWith('!')) { if (lk.includes(sub.substring(1))) { ok = false; break; } }
+                else if (!lk.includes(sub)) { ok = false; break; }
+            }
+            if (ok) return k;
+        }
+    }
+    return null;
+}
+
 // ==================== EVENT EXTRACTION ====================
 // Each source returns an array of { email, date } events.
 
-function extractCSVEvents(csvText, datePatterns) {
+function extractCSVEvents(csvText, datePatterns, opts = {}) {
+    const { typeMatch, truthyPatterns } = opts;
     if (!csvText) return [];
     const lines = csvText.split('\n').filter(l => l.trim() !== '');
     if (lines.length < 2) return [];
@@ -98,18 +121,32 @@ function extractCSVEvents(csvText, datePatterns) {
         console.warn('Missing email/date column. Headers sample:', headers.slice(0, 8));
         return [];
     }
-    const events = [];
+    // Filtre de type optionnel (ex. descriptif : ne garder que AIDeliverable_type = DESCRIPTIF_TYPE)
+    const typeIdx = typeMatch ? findIdx(headers, ['aideliver','type'], ['reporttype'], ['report','type','!diffusedat']) : -1;
+    // Filtre booléen optionnel (ex. autocontact : ne garder que fromAI = true)
+    const boolIdx = truthyPatterns ? findIdx(headers, ...truthyPatterns) : -1;
+    if (truthyPatterns && boolIdx === -1) console.warn('Truthy column not found, no filter applied. Headers:', headers.slice(0, 8));
+    const rows = [];
     for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i]);
         if (vals.length < 2) continue;
+        rows.push(vals);
+    }
+    // Garde-fou : si aucune ligne n'a de type renseigné, on ne filtre pas (query déjà filtrée en amont).
+    const anyHasType = typeIdx !== -1 && rows.some(v => (v[typeIdx] || '').trim() !== '');
+    const events = [];
+    rows.forEach(vals => {
+        if (typeMatch && anyHasType && !(vals[typeIdx] || '').includes(typeMatch)) return;
+        if (boolIdx !== -1 && (vals[boolIdx] || '').trim().toLowerCase() !== 'true') return;
         const email = (vals[emailIdx] || '').trim().toLowerCase();
         const d = parseDate(vals[dateIdx]);
         if (email && d) events.push({ email, date: d });
-    }
+    });
     return events;
 }
 
-function extractJSONArrayEvents(arr, datePatterns) {
+function extractJSONArrayEvents(arr, datePatterns, opts = {}) {
+    const { typeMatch, truthyPatterns } = opts;
     if (!Array.isArray(arr) || arr.length === 0) return [];
     const keys = Object.keys(arr[0]);
     const kEmail = (function(){
@@ -137,8 +174,17 @@ function extractJSONArrayEvents(arr, datePatterns) {
         console.warn('Missing email/date keys. Sample keys:', keys.slice(0, 8));
         return [];
     }
+    // Clé de type optionnelle pour filtrer (ex. descriptif : AIDeliverable_type)
+    const kType = typeMatch ? findKey(keys, ['aideliver','type'], ['reporttype'], ['report','type','!diffusedat']) : null;
+    // Clé booléenne optionnelle (ex. autocontact : fromAI)
+    const kBool = truthyPatterns ? findKey(keys, ...truthyPatterns) : null;
+    if (truthyPatterns && !kBool) console.warn('Truthy key not found, no filter applied. Keys:', keys.slice(0, 8));
+    // Garde-fou : si aucune ligne n'a de type renseigné, on ne filtre pas.
+    const anyHasType = kType ? arr.some(it => ((it[kType] || '') + '').trim() !== '') : false;
     const events = [];
     arr.forEach(item => {
+        if (typeMatch && anyHasType && !((item[kType] || '') + '').includes(typeMatch)) return;
+        if (kBool) { const v = item[kBool]; if (!(v === true || v === 'true' || v === 'TRUE')) return; }
         const email = ((item[kEmail] || '') + '').trim().toLowerCase();
         const d = parseDate(item[kDate]);
         if (email && d) events.push({ email, date: d });
@@ -147,14 +193,14 @@ function extractJSONArrayEvents(arr, datePatterns) {
 }
 
 // Generic file → events (handles legacy CSV-in-JSON + new direct JSON)
-function eventsFromMixedFile(rawText, datePatterns) {
+function eventsFromMixedFile(rawText, datePatterns, opts) {
     let csv = null;
     try {
         const j = JSON.parse(rawText);
         if (Array.isArray(j) && j.length > 0 && j[0].data && typeof j[0].data === 'string') {
             csv = j[0].data;
         } else if (Array.isArray(j) && j.length > 0) {
-            return extractJSONArrayEvents(j, datePatterns);
+            return extractJSONArrayEvents(j, datePatterns, opts);
         }
     } catch(e) {}
     if (!csv && rawText.includes('{data:')) {
@@ -167,7 +213,27 @@ function eventsFromMixedFile(rawText, datePatterns) {
     csv = csv.trim();
     while (csv.startsWith('[') || csv.startsWith('{')) csv = csv.substring(1).trim();
     while (csv.endsWith(']') || csv.endsWith('}')) csv = csv.substring(0, csv.length - 1).trim();
-    return extractCSVEvents(csv, datePatterns);
+    return extractCSVEvents(csv, datePatterns, opts);
+}
+
+// Analyse AO : payload {count, data:[{dateDetection, leads:[{ownerName, dateCreation, ...}]}]}.
+// Les leads n'ont pas d'email → on identifie l'utilisateur par ownerName.
+// Floor de mise en place : on ignore les marchés détectés avant le go-live (cf. AO_MODULE_START).
+function eventsFromAO(rawText) {
+    let payload;
+    try { payload = JSON.parse(rawText); } catch(e) { return []; }
+    if (!payload || !Array.isArray(payload.data)) return [];
+    const events = [];
+    payload.data.forEach(m => {
+        const det = parseDate(m.dateDetection);
+        if (det && det < AO_MODULE_START) return; // marché détecté avant le go-live → ignoré
+        (Array.isArray(m.leads) ? m.leads : []).forEach(l => {
+            const owner = ((l.ownerName || '') + '').trim().toLowerCase();
+            const d = parseDate(l.dateCreation);
+            if (owner && d) events.push({ email: owner, date: d });
+        });
+    });
+    return events;
 }
 
 // Chat/Expert JSON dumps from BTP S+ — direct array of {email, createdAt}
@@ -212,21 +278,22 @@ async function loadAllData() {
         urls = {
             DESCRIPTIF:   (body.match(/DESCRIPTIF_URL = '([^']+)'/)   || [])[1],
             AUTOCONTACT:  (body.match(/AUTOCONTACT_URL = '([^']+)'/)  || [])[1],
-            COMPARATEUR:  (body.match(/COMPARATEUR_URL = '([^']+)'/)  || [])[1]
+            COMPARATEUR:  (body.match(/COMPARATEUR_URL = '([^']+)'/)  || [])[1],
+            ANALYSE_AO:   (body.match(/ANALYSE_AO_URL = '([^']+)'/)   || [])[1]
         };
     } catch(e) {
         showError('Échec authentification webhook : ' + e.message);
         return null;
     }
 
-    loadingTextEl.textContent = 'Chargement des données IA (8 sources en parallèle)…';
+    loadingTextEl.textContent = 'Chargement des données IA (9 sources en parallèle)…';
 
     const fetchText = url => url
         ? fetch(url).then(r => r.ok ? r.text() : '').catch(() => '')
         : Promise.resolve('');
 
     const [
-        descRaw, autoRaw, compRaw,
+        descRaw, autoRaw, compRaw, aoRaw,
         expBtpRaw, chatBtpRaw,
         expCitaeRaw, chatCitaeRaw,
         expBtpDiagRaw, chatBtpDiagRaw
@@ -234,6 +301,7 @@ async function loadAllData() {
         fetchText(urls.DESCRIPTIF),
         fetchText(urls.AUTOCONTACT),
         fetchText(urls.COMPARATEUR),
+        fetchText(urls.ANALYSE_AO),
         fetchText(EXPERT_BTP_URL),
         fetchText(CHAT_BTP_URL),
         fetchText(EXPERT_CITAE_URL),
@@ -245,12 +313,14 @@ async function loadAllData() {
     loadingTextEl.textContent = 'Parsing et agrégation…';
 
     const events = [];
-    // Descriptif: date = Report__diffusedAt
-    events.push(...eventsFromMixedFile(descRaw, [['report','diffusedat'], ['diffusedat'], ['createdat']]).map(e => ({...e, feature: 'descriptif'})));
-    // Autocontact: date = Contact → CreatedAt or createdat
-    events.push(...eventsFromMixedFile(autoRaw, [['contact','createdat'], ['createdat'], ['created_at']]).map(e => ({...e, feature: 'autocontact'})));
+    // Descriptif: date = Report__diffusedAt ; ne compter que les vraies générations IA (AIDeliverable_type)
+    events.push(...eventsFromMixedFile(descRaw, [['report','diffusedat'], ['diffusedat'], ['createdat']], { typeMatch: DESCRIPTIF_TYPE }).map(e => ({...e, feature: 'descriptif'})));
+    // Autocontact: date = Contact → CreatedAt or createdat ; ne compter que les contacts générés par IA (fromAI)
+    events.push(...eventsFromMixedFile(autoRaw, [['contact','createdat'], ['createdat'], ['created_at']], { truthyPatterns: [['fromai'], ['from_ai']] }).map(e => ({...e, feature: 'autocontact'})));
     // Comparateur: date = AIDeliverable → CreatedAt or createdat
     events.push(...eventsFromMixedFile(compRaw, [['aideliverable','createdat'], ['createdat'], ['created_at']]).map(e => ({...e, feature: 'comparateur'})));
+    // Analyse AO: 1 événement par lead (date = lead.dateCreation, utilisateur = ownerName)
+    events.push(...eventsFromAO(aoRaw).map(e => ({...e, feature: 'analyse-ao'})));
     // Chat/Expert
     events.push(...eventsFromChatExpert(expBtpRaw).map(e => ({...e, feature: 'expert-btp'})));
     events.push(...eventsFromChatExpert(chatBtpRaw).map(e => ({...e, feature: 'chat-btp'})));
@@ -449,6 +519,7 @@ const FEATURE_LABELS = {
     'descriptif':      { label: 'Descriptif sommaire des travaux', org: 'BTP Consultants' },
     'autocontact':     { label: 'Auto Contacts',                    org: 'BTP Consultants' },
     'comparateur':     { label: 'Comparateur d\'indices',           org: 'BTP Consultants' },
+    'analyse-ao':      { label: 'Analyse AO',                       org: 'BTP Consultants' },
     'expert-btp':      { label: 'Expert technique',                 org: 'BTP Consultants' },
     'chat-btp':        { label: 'Chat projet',                      org: 'BTP Consultants' },
     'expert-citae':    { label: 'Expert technique',                 org: 'Citae' },
