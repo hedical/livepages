@@ -861,7 +861,10 @@ function filterByType(data, type) {
     // Si aucun item n'a de type (query Metabase déjà filtrée), on passe tout
     const anyHasType = data.some(item => item.type && item.type.trim() !== '');
     if (!anyHasType) return data;
-    return data.filter((item) => !item.type || item.type === type);
+    // Ne garder QUE les lignes dont AIDeliverable_type contient le type recherché.
+    // Les lignes au type vide (RICT sans génération IA, hasAi=false) sont exclues :
+    // sinon elles gonflent "Descriptifs générés" au-delà du nombre total de RICT.
+    return data.filter((item) => item.type && item.type.includes(type));
 }
 
 function filterByDateRange(data, startDate, endDate) {

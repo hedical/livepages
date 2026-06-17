@@ -31,6 +31,21 @@ const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/obje
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
 const AUTOCONTACT_TYPE = 'AUTOCONTACT';
 
+// Vrai si le dataset descriptif contient au moins une ligne avec un type renseigné.
+// Recalculé après le chargement des données (voir loadData).
+let descriptifTypePresent = false;
+
+// Prédicat : une ligne est un "Descriptif sommaire des travaux".
+// On ne garde QUE les lignes dont AIDeliverable_type contient DESCRIPTIF_TYPE.
+// Les lignes au type vide (RICT sans génération IA, hasAi=false) sont exclues,
+// sinon elles gonflent le nombre de descriptifs au-delà du nombre total de RICT.
+// Garde-fou : si AUCUNE ligne n'a de type (query Metabase déjà filtrée en amont),
+// on passe tout pour ne pas casser ce format pré-filtré.
+function isDescriptifRow(item) {
+    if (!descriptifTypePresent) return true;
+    return !!(item.type && item.type.includes(DESCRIPTIF_TYPE));
+}
+
 // Parameters for gains calculation (must match descriptif.js and autocontact.js)
 const MINUTES_PER_DESCRIPTIF = 30;
 const SECONDS_PER_CONTACT = 90; // Default value from autocontact.js
@@ -39,6 +54,9 @@ const MINUTES_PER_MESSAGE = 2.8125; // For chat tools (BTP and Citae)
 const MINUTES_PER_MESSAGE_EXPERT = 5; // For expert technique tools (BTP and Citae)
 const HOURS_PER_POINT_NF = 0.02816; // NF Habitat: hours gained per point checked
 const MINUTES_PER_AO_ANALYSE = 15; // Analyse AO: minutes gagnées par AO analysé (lead créé)
+// Date de mise en place effective du module Analyse AO. Les marchés détectés avant
+// cette date (données de test / backfill) ne sont jamais comptabilisés.
+const AO_MODULE_START_DATE = new Date('2026-06-06'); // UTC minuit, cohérent avec dateFilter
 const NF_HABITAT_REVENUE = 7000000; // NF Habitat specific revenue base
 const EURO_PER_MESSAGE = 1.5; // For chat and expert tools (BTP and Citae)
 const ANNUAL_HOURS = 1607;
@@ -810,13 +828,20 @@ function parseAOPayload(payload) {
         console.warn('Invalid AO payload — expected {count, data:[]}');
         return [];
     }
-    return payload.data.map(m => ({
-        marcheId: m.marcheId || '',
-        refMarche: m.refMarche || '',
-        typeAvis: m.typeAvis || '',
-        dateDetection: m.dateDetection || '',
-        leads: Array.isArray(m.leads) ? m.leads : [],
-    }));
+    return payload.data
+        // Floor de mise en place : ignorer les marchés détectés avant le go-live.
+        // (Les marchés sans date de détection valide sont conservés.)
+        .filter(m => {
+            const d = parseFrenchDate(m.dateDetection);
+            return !d || d >= AO_MODULE_START_DATE;
+        })
+        .map(m => ({
+            marcheId: m.marcheId || '',
+            refMarche: m.refMarche || '',
+            typeAvis: m.typeAvis || '',
+            dateDetection: m.dateDetection || '',
+            leads: Array.isArray(m.leads) ? m.leads : [],
+        }));
 }
 
 /**
@@ -1245,6 +1270,7 @@ function getFilteredData(data) {
             if (isSPS) return false; // ne pas compter les utilisateurs SPS dans BTP Consultants
         }
         if (filiale === 'Citae' && !item.email.includes('@citae.fr')) return false;
+        if (filiale === 'BTP Diagnostics' && !item.email.includes('@btp-diagnostics.fr')) return false;
         if (filiale === 'BTP Consultants SPS' && !isSPS) return false;
 
         // Direction filter
@@ -1331,7 +1357,7 @@ function updateAgencyTable() {
             
             if (type === 'descriptif' && !item.contractNumber.toUpperCase().includes('YIELD')) {
                 agencyStats[ag].descriptifPotential++;
-                if ((!item.type || item.type === DESCRIPTIF_TYPE)) {
+                if (isDescriptifRow(item)) {
                     agencyStats[ag].descriptifCount++;
                     if (isBtpOrCitae) agencyStats[ag].usersDescriptif.add(item.email);
                 }
@@ -1614,7 +1640,7 @@ function processDescriptifData(data) {
     
     // Filter by type
     const descriptifFiltered = filtered.filter(item => 
-        (!item.type || item.type === DESCRIPTIF_TYPE)
+        isDescriptifRow(item)
     );
     
     // Total utilisations = nombre de descriptifs générés
@@ -2079,7 +2105,7 @@ function updateKPIs() {
     const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations;
     const allUsers = new Set();
     
-    getFilteredData(descriptifData).filter(item => (!item.type || item.type === DESCRIPTIF_TYPE)).forEach(item => {
+    getFilteredData(descriptifData).filter(item => isDescriptifRow(item)).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
     
@@ -2291,26 +2317,34 @@ function updateKPIs() {
     // Comparateur page uses: totalPages
     // Chat and Expert pages use: totalMessages
     // NF Habitat uses: totalPoints
-    const gains = calculateGains(
-        descriptifStats.uniqueOperations,
-        autocontactStats.aiContacts,
-        comparateurStats.totalPages,
-        chatBTPStats.totalMessages,
-        expertBTPStats.totalMessages,
-        chatCitaeStats.totalMessages,
-        expertCitaeStats.totalMessages,
-        chatBTPDiagStats.totalMessages,
-        expertBTPDiagStats.totalMessages,
-        nfHabitatStats.totalPoints,
-        aoStats.analyses,
-        chatBtpSpsStats.totalMessages,
-        expertBtpSpsStats.totalMessages
-    );
+    // Gain total : on réutilise le moteur mensuel des jauges (attribution premier-mois,
+    // pas de double comptage inter-mois) restreint à la fenêtre de date active, pour que
+    // cette carte et les jauges « Objectifs de gain » concordent exactement.
+    const gains = calculateWindowedGains();
 
+    // Détail à 1 décimale → la somme des postes affichés colle à l'entête (pas de dérive d'arrondi).
+    const fmt1 = (h) => (Math.round(h * 10) / 10).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const breakdown = [
+        ['Descriptif',   gains.timeGainHoursDescriptif],
+        ['Auto',         gains.timeGainHoursAutocontact],
+        ['Comp',         gains.timeGainHoursComparateur],
+        ['Chat BTP',     gains.timeGainHoursChatBTP],
+        ['Expert BTP',   gains.timeGainHoursExpertBTP],
+        ['Chat Citae',   gains.timeGainHoursChatCitae],
+        ['Expert Citae', gains.timeGainHoursExpertCitae],
+        ['Chat Diag',    gains.timeGainHoursChatBTPDiag],
+        ['Expert Diag',  gains.timeGainHoursExpertBTPDiag],
+        ['Chat SPS',     gains.timeGainHoursChatBtpSps],
+        ['Expert SPS',   gains.timeGainHoursExpertBtpSps],
+        ['NF Habitat',   gains.timeGainHoursNFHabitat],
+        ['Analyse AO',   gains.timeGainHoursAO],
+    ].map(([label, h]) => `${label}: ${fmt1(h)}h`).join(' + ');
+
+    // Entête arrondi à l'entier, comme les jauges (formatNumber(Math.round(...))) → chiffres identiques.
     gainHeuresEl.textContent = formatNumber(gains.timeGainHours);
     gainSubtitleEl.innerHTML = `
         <div class="space-y-1">
-            <div>Heures économisées (Descriptif: ${formatNumber(gains.timeGainHoursDescriptif)}h + Auto: ${formatNumber(gains.timeGainHoursAutocontact)}h + Comp: ${formatNumber(gains.timeGainHoursComparateur)}h + Chat BTP: ${formatNumber(gains.timeGainHoursChatBTP)}h + Expert BTP: ${formatNumber(gains.timeGainHoursExpertBTP)}h + Chat Citae: ${formatNumber(gains.timeGainHoursChatCitae)}h + Expert Citae: ${formatNumber(gains.timeGainHoursExpertCitae)}h + Chat Diag: ${formatNumber(gains.timeGainHoursChatBTPDiag)}h + Expert Diag: ${formatNumber(gains.timeGainHoursExpertBTPDiag)}h + Chat SPS: ${formatNumber(gains.timeGainHoursChatBtpSps)}h + Expert SPS: ${formatNumber(gains.timeGainHoursExpertBtpSps)}h + NF Habitat: ${formatNumber(gains.timeGainHoursNFHabitat)}h + Analyse AO: ${formatNumber(gains.timeGainHoursAO)}h)</div>
+            <div>Heures économisées (${breakdown})</div>
             <div class="text-xs">≈ ${gains.percentGain.toFixed(4)}% du volume d'affaires</div>
             <div class="text-xs">≈ ${formatNumber(gains.euroGain)} €</div>
         </div>
@@ -2479,6 +2513,9 @@ async function loadData() {
             descriptifData = parseDescriptifCSV(descriptifCSV);
             console.log('Loaded', descriptifData.length, 'descriptif records (CSV)');
         }
+
+        // Le dataset contient-il une colonne type renseignée ? (cf. isDescriptifRow)
+        descriptifTypePresent = descriptifData.some(item => item.type && item.type.trim() !== '');
 
         console.log('Loading autocontact data...');
         const autocontactResponse = await fetch(AUTOCONTACT_URL);
@@ -3166,7 +3203,7 @@ function collectActiveUsers() {
 
     // Descriptif
     descriptifData
-        .filter(item => (!item.type || item.type === DESCRIPTIF_TYPE) && !item.contractNumber.toUpperCase().includes('YIELD') && inDateRange(item.createdAt))
+        .filter(item => isDescriptifRow(item) && !item.contractNumber.toUpperCase().includes('YIELD') && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, getDomainFiliale(item.email), 'descriptif', item.createdAt));
 
     // Autocontact (@btp-consultants.fr, fromAI, pas YIELD)
@@ -3343,7 +3380,7 @@ function closeUsersListModal() {
 // ==================== USERS EVOLUTION MODAL ====================
 
 let usersEvolutionChart = null;
-let usersModalIsCumulative = false;
+let usersModalView = 'monthly'; // 'monthly' | 'cumul' | 'filiale'
 let usersModalData = null; // cached monthly users data
 
 /**
@@ -3365,7 +3402,7 @@ function calculateMonthlyUsers() {
 
     // Descriptif (type = DESCRIPTIF_TYPE, pas de YIELD)
     getFilteredData(descriptifData)
-        .filter(item => (!item.type || item.type === DESCRIPTIF_TYPE) && !item.contractNumber.toUpperCase().includes('YIELD'))
+        .filter(item => isDescriptifRow(item) && !item.contractNumber.toUpperCase().includes('YIELD'))
         .forEach(item => addUser(item.createdAt, item.email));
 
     // Autocontact (@btp-consultants.fr, pas de YIELD, fromAI)
@@ -3416,18 +3453,86 @@ function calculateMonthlyUsers() {
     });
 }
 
+// Répartition des utilisateurs uniques actifs par filiale (réutilise collectActiveUsers,
+// qui dédoublonne par email et respecte le filtre de date — comme l'onglet « Utilisateurs actifs »).
+const FILIALE_PIE_COLORS = {
+    'BTP Consultants':     'rgba(59, 130, 246, 0.85)',
+    'Citae':               'rgba(16, 185, 129, 0.85)',
+    'BTP Diagnostics':     'rgba(249, 115, 22, 0.85)',
+    'BTP Consultants SPS': 'rgba(14, 165, 233, 0.85)',
+    'Autre':               'rgba(156, 163, 175, 0.85)',
+};
+function calculateUsersByFiliale() {
+    const counts = {};
+    collectActiveUsers().forEach(u => {
+        counts[u.filiale] = (counts[u.filiale] || 0) + 1;
+    });
+    const order = ['BTP Consultants', 'Citae', 'BTP Diagnostics', 'BTP Consultants SPS', 'Autre'];
+    const result = [];
+    order.forEach(f => { if (counts[f]) result.push({ filiale: f, count: counts[f], color: FILIALE_PIE_COLORS[f] }); });
+    Object.keys(counts).forEach(f => {
+        if (!order.includes(f)) result.push({ filiale: f, count: counts[f], color: FILIALE_PIE_COLORS['Autre'] });
+    });
+    return result;
+}
+
 function buildUsersChart() {
     const canvas = document.getElementById('usersEvolutionChart');
-    if (!canvas || !usersModalData) return;
+    if (!canvas) return;
 
     if (usersEvolutionChart) {
         usersEvolutionChart.destroy();
         usersEvolutionChart = null;
     }
 
-    const labels = usersModalData.map(d => d.label);
-    const isCumul = usersModalIsCumulative;
     const ctx = canvas.getContext('2d');
+
+    // ── Vue « Par filiale » : camembert du nombre d'utilisateurs uniques par filiale ──
+    if (usersModalView === 'filiale') {
+        const data = calculateUsersByFiliale();
+        const total = data.reduce((s, d) => s + d.count, 0);
+        usersEvolutionChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: data.map(d => d.filiale),
+                datasets: [{
+                    data: data.map(d => d.count),
+                    backgroundColor: data.map(d => d.color),
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true, position: 'right',
+                        labels: { font: { size: 13, weight: '500' }, color: '#1F2937', padding: 16, usePointStyle: true }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        titleColor: '#F9FAFB', bodyColor: '#E5E7EB',
+                        borderColor: 'rgba(75, 85, 99, 0.4)', borderWidth: 1,
+                        padding: 12, cornerRadius: 8,
+                        callbacks: {
+                            label: function(ctx) {
+                                const v = ctx.parsed;
+                                const pct = total > 0 ? (v / total * 100) : 0;
+                                return ` ${ctx.label} : ${new Intl.NumberFormat('fr-FR').format(v)} utilisateur${v > 1 ? 's' : ''} (${pct.toFixed(1)}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        return;
+    }
+
+    if (!usersModalData) return;
+
+    const labels = usersModalData.map(d => d.label);
+    const isCumul = (usersModalView === 'cumul');
 
     if (isCumul) {
         // Cumulative view: area + bar for new users
@@ -3567,16 +3672,11 @@ function buildUsersChart() {
 function updateUsersToggleUI() {
     const btn = document.getElementById('users-cumul-toggle');
     if (!btn) return;
-    const monthlyPill = btn.querySelector('[data-view="monthly"]');
-    const cumulPill   = btn.querySelector('[data-view="cumul"]');
-    if (!monthlyPill || !cumulPill) return;
-    if (!usersModalIsCumulative) {
-        monthlyPill.className = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-indigo-700 shadow-sm transition-all';
-        cumulPill.className   = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
-    } else {
-        cumulPill.className   = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-indigo-700 shadow-sm transition-all';
-        monthlyPill.className = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
-    }
+    const ACTIVE = 'px-3 py-1 rounded-md text-sm font-medium bg-white text-indigo-700 shadow-sm transition-all';
+    const INACTIVE = 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all';
+    btn.querySelectorAll('[data-view]').forEach(pill => {
+        pill.className = (pill.getAttribute('data-view') === usersModalView) ? ACTIVE : INACTIVE;
+    });
 }
 
 function openUsersEvolutionModal() {
@@ -3610,7 +3710,7 @@ function openUsersEvolutionModal() {
         peakMonth ? `actifs en ${peakMonth.label}` : 'utilisateurs actifs';
 
     // Reset toggle
-    usersModalIsCumulative = false;
+    usersModalView = 'monthly';
     updateUsersToggleUI();
     buildUsersChart();
 }
@@ -3642,7 +3742,7 @@ function closeUsersEvolutionModal() {
         toggleBtn.addEventListener('click', (e) => {
             const pill = e.target.closest('[data-view]');
             if (!pill) return;
-            usersModalIsCumulative = (pill.getAttribute('data-view') === 'cumul');
+            usersModalView = pill.getAttribute('data-view');
             updateUsersToggleUI();
             buildUsersChart();
         });
@@ -3707,7 +3807,7 @@ function calculateMonthlyGains() {
     const descriptifFirstMonth = new Map(); // contractNumber → earliest valid month key
     getFilteredData(descriptifData)
         .filter(item =>
-            (!item.type || item.type === DESCRIPTIF_TYPE) &&
+            isDescriptifRow(item) &&
             item.contractNumber &&
             item.contractNumber.trim() !== '' &&
             !item.contractNumber.toUpperCase().includes('YIELD')
@@ -3874,6 +3974,57 @@ function calculateMonthlyGains() {
             hoursAO:            gains.timeGainHoursAO,
         };
     });
+}
+
+/**
+ * Gain agrégé pour la fenêtre de date active, calculé via le MÊME moteur mensuel
+ * que les jauges (calculateMonthlyGains : attribution premier-mois par RICT, pas de
+ * double comptage inter-mois). Garantit que la carte « Gain total estimé » et les
+ * jauges « Objectifs de gain » donnent le même chiffre pour une même période.
+ * Granularité = mois : une plage partielle inclut le(s) mois entier(s) qu'elle touche.
+ * Les filtres filiale / direction / agence restent appliqués (seule la date est neutralisée).
+ */
+function calculateWindowedGains() {
+    const saved = { startDate: dateFilter.startDate, endDate: dateFilter.endDate };
+    dateFilter.startDate = null;
+    dateFilter.endDate = null;
+    const monthly = calculateMonthlyGains();
+    dateFilter.startDate = saved.startDate;
+    dateFilter.endDate = saved.endDate;
+
+    const startKey = saved.startDate ? getMonthKey(saved.startDate) : null;
+    const endKey   = saved.endDate   ? getMonthKey(saved.endDate)   : null;
+
+    const acc = {
+        timeGainHours: 0, euroGain: 0, percentGain: 0,
+        timeGainHoursDescriptif: 0, timeGainHoursAutocontact: 0, timeGainHoursComparateur: 0,
+        timeGainHoursChatBTP: 0, timeGainHoursExpertBTP: 0,
+        timeGainHoursChatCitae: 0, timeGainHoursExpertCitae: 0,
+        timeGainHoursChatBTPDiag: 0, timeGainHoursExpertBTPDiag: 0,
+        timeGainHoursChatBtpSps: 0, timeGainHoursExpertBtpSps: 0,
+        timeGainHoursNFHabitat: 0, timeGainHoursAO: 0,
+    };
+    monthly.forEach(m => {
+        if (startKey && m.key < startKey) return;
+        if (endKey && m.key > endKey) return;
+        acc.timeGainHours            += m.hours;
+        acc.euroGain                 += m.euros;
+        acc.timeGainHoursDescriptif  += m.hoursDescriptif;
+        acc.timeGainHoursAutocontact += m.hoursAutocontact;
+        acc.timeGainHoursComparateur += m.hoursComparateur;
+        acc.timeGainHoursChatBTP     += m.hoursChatBTP;
+        acc.timeGainHoursExpertBTP   += m.hoursExpertBTP;
+        acc.timeGainHoursChatCitae   += m.hoursChatCitae;
+        acc.timeGainHoursExpertCitae += m.hoursExpertCitae;
+        acc.timeGainHoursChatBTPDiag += m.hoursChatBTPDiag;
+        acc.timeGainHoursExpertBTPDiag += m.hoursExpertBTPDiag;
+        acc.timeGainHoursChatBtpSps  += m.hoursChatBtpSps;
+        acc.timeGainHoursExpertBtpSps += m.hoursExpertBtpSps;
+        acc.timeGainHoursNFHabitat   += m.hoursNFHabitat;
+        acc.timeGainHoursAO          += m.hoursAO;
+    });
+    acc.percentGain = (acc.timeGainHours / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
+    return acc;
 }
 
 /**
