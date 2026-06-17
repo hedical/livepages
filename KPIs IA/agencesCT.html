@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Détail par Agence - KPIs IA</title>
+    <title>Adoption & Pertinence par Agence — BTP Consultants CT</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
@@ -14,35 +14,35 @@
             -moz-osx-font-smoothing: grayscale;
             background-color: #f8fafc;
         }
-        .axis {
-            font-size: 12px;
-        }
-        .axis path,
-        .axis line {
-            fill: none;
-            stroke: #000;
-            shape-rendering: crispEdges;
-        }
-        .line {
-            fill: none;
-            stroke-width: 2px;
-        }
-        .legend {
-            font-size: 12px;
-        }
+        .axis { font-size: 12px; }
+        .axis path, .axis line { fill: none; stroke: #000; shape-rendering: crispEdges; }
+        .line { fill: none; stroke-width: 2px; }
+        .legend { font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="min-h-screen bg-gray-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
             <!-- Header -->
-            <div class="mb-10">
-                <div class="flex items-center justify-between mb-4">
+            <div class="mb-8">
+                <div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
                     <div>
                         <h1 class="text-3xl font-bold text-gray-900 mb-2">
-                            Détail par Agence - Adoption des Outils IA
+                            Adoption &amp; Pertinence d'usage des outils IA — par Agence
                         </h1>
-                        <p class="text-gray-500 text-sm">Tableau de bord d'adoption des fonctionnalités IA par agence</p>
+                        <p class="text-gray-500 text-sm">
+                            Deux familles d'indicateurs distinctes pour lire les statistiques sans ambiguïté
+                        </p>
+                        <div class="mt-3 flex items-center gap-2 flex-wrap">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                Périmètre : BTP Consultants · Contrôle Technique
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600">
+                                Hors SPS <span id="sps-excluded-badge" class="text-gray-400"></span>
+                            </span>
+                            <span id="period-badge" class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500"></span>
+                        </div>
                     </div>
                     <div class="flex gap-3">
                         <button
@@ -65,27 +65,14 @@
                     <div class="text-center">
                         <h3 class="text-2xl font-bold text-gray-900 mb-2">Accès sécurisé</h3>
                         <p class="text-gray-600 mb-6">Veuillez entrer le mot de passe pour accéder aux données</p>
-                        
                         <form id="login-form" class="space-y-4">
                             <div>
-                                <input
-                                    type="password"
-                                    id="password-input"
-                                    placeholder="Mot de passe"
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    required
-                                />
+                                <input type="password" id="password-input" placeholder="Mot de passe"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" required />
                             </div>
-                            
-                            <div id="login-error" class="hidden text-red-600 text-sm">
-                                Mot de passe incorrect
-                            </div>
-                            
-                            <button
-                                type="submit"
-                                id="login-button"
-                                class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
+                            <div id="login-error" class="hidden text-red-600 text-sm">Mot de passe incorrect</div>
+                            <button type="submit" id="login-button"
+                                class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                                 <span id="login-text">Se connecter</span>
                             </button>
                         </form>
@@ -110,177 +97,289 @@
 
             <!-- Main Content -->
             <div id="main-content" class="hidden">
+
+                <!-- ====== BANDEAU PÉDAGOGIQUE : COMMENT LIRE CETTE PAGE ====== -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h2 class="text-base font-semibold text-gray-900 mb-1">Comment lire cette page</h2>
+                    <p class="text-sm text-gray-500 mb-4">
+                        Les statistiques sont réparties en <strong>deux familles distinctes</strong> qui répondent à deux questions différentes.
+                        Ne pas les confondre&nbsp;: un même pourcentage n'a pas le même sens d'une famille à l'autre.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Adoption -->
+                        <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                <h3 class="font-semibold text-emerald-900">1 · Adoption — <span class="font-normal">déploiement humain</span></h3>
+                            </div>
+                            <p class="text-sm text-emerald-900/80 mb-2">
+                                « Quelle <strong>part des collaborateurs</strong> de l'agence se sert de l'outil&nbsp;? »
+                            </p>
+                            <p class="text-xs text-emerald-900/70 font-mono bg-white/60 rounded px-2 py-1.5 mb-2">
+                                utilisateurs uniques de l'agence ÷ effectif de l'agence
+                            </p>
+                            <p class="text-xs text-emerald-900/70">
+                                <strong>Exemple&nbsp;:</strong> agence de 10 personnes, 4 ont généré au moins un descriptif IA →
+                                adoption Descriptif = <strong>40&nbsp;%</strong>. Dénominateur = <em>personnes</em>.
+                            </p>
+                        </div>
+                        <!-- Pertinence -->
+                        <div class="rounded-lg border border-violet-200 bg-violet-50 p-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-violet-500"></span>
+                                <h3 class="font-semibold text-violet-900">2 · Pertinence d'usage — <span class="font-normal">couverture du gisement</span></h3>
+                            </div>
+                            <p class="text-sm text-violet-900/80 mb-2">
+                                « Quand l'outil est <strong>pertinent</strong>, est-il effectivement utilisé&nbsp;? »
+                            </p>
+                            <p class="text-xs text-violet-900/70 font-mono bg-white/60 rounded px-2 py-1.5 mb-2">
+                                affaires couvertes par l'IA ÷ affaires éligibles (description ≥ 100 mots)
+                            </p>
+                            <p class="text-xs text-violet-900/70">
+                                <strong>Exemple&nbsp;:</strong> 50 affaires éligibles, 30 ont reçu un descriptif IA →
+                                couverture = <strong>60&nbsp;%</strong>. Dénominateur = <em>affaires</em>.
+                                Défini uniquement pour le <strong>Descriptif</strong> (seul gisement éligible mesurable).
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-start gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2.5">
+                        <svg class="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span id="scope-note">
+                            Adoption et couverture sont <strong>indépendantes</strong>&nbsp;: une agence peut avoir beaucoup d'utilisateurs (forte adoption)
+                            mais ne couvrir qu'une partie des affaires éligibles (couverture faible), et inversement.
+                            Périmètre temporel du descriptif&nbsp;: à partir de juin 2025 (démarrage du pilote IA).
+                        </span>
+                    </div>
+                </div>
+
                 <!-- Filters -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <!-- Period Filter -->
                         <div class="md:col-span-2">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Période</label>
                             <div class="flex gap-2">
-                                <input
-                                    type="date"
-                                    id="start-date"
-                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <input
-                                    type="date"
-                                    id="end-date"
-                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
+                                <input type="date" id="start-date" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                <input type="date" id="end-date" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
                             </div>
                         </div>
-
-                        <!-- Direction Filter -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Direction</label>
-                            <select
-                                id="direction-filter"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
+                            <select id="direction-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="">Toutes les directions</option>
                             </select>
                         </div>
-
-                        <!-- Agency Filter -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Agence</label>
-                            <select
-                                id="agency-filter"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
+                            <select id="agency-filter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="">Toutes les agences</option>
                             </select>
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button
-                            id="reset-filters"
-                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md transition-all duration-200"
-                        >
+                        <button id="reset-filters" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md transition-all duration-200">
                             Réinitialiser les filtres
                         </button>
                     </div>
                 </div>
 
-                <!-- Chart -->
+                <!-- Synthèse KPIs -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                        <p class="text-xs font-medium text-gray-500 mb-1">Effectif pris en compte</p>
+                        <p class="text-3xl font-bold text-gray-900" id="kpi-effectif">—</p>
+                        <p class="text-xs text-gray-400 mt-1">collaborateurs CT (hors SPS)</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-l-4 border-emerald-400 p-5">
+                        <p class="text-xs font-medium text-emerald-700 mb-1">Adoption globale</p>
+                        <p class="text-3xl font-bold text-emerald-700" id="kpi-adoption-globale">—</p>
+                        <p class="text-xs text-gray-400 mt-1">≥ 1 outil IA utilisé / effectif</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-l-4 border-emerald-400 p-5">
+                        <p class="text-xs font-medium text-emerald-700 mb-1">Adoption Descriptif</p>
+                        <p class="text-3xl font-bold text-emerald-700" id="kpi-adoption-descriptif">—</p>
+                        <p class="text-xs text-gray-400 mt-1">utilisateurs Descriptif / effectif</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-l-4 border-violet-400 p-5">
+                        <p class="text-xs font-medium text-violet-700 mb-1">Couverture Descriptif</p>
+                        <p class="text-3xl font-bold text-violet-700" id="kpi-couverture-descriptif">—</p>
+                        <p class="text-xs text-gray-400 mt-1">affaires couvertes / éligibles</p>
+                    </div>
+                </div>
+
+                <!-- ============================= -->
+                <!-- ====== FAMILLE 1 : ADOPTION ====== -->
+                <!-- ============================= -->
+                <div class="flex items-center gap-2 mb-4 mt-2">
+                    <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <h2 class="text-xl font-bold text-gray-900">1 · Adoption — déploiement humain</h2>
+                </div>
+                <p class="text-sm text-gray-500 mb-5 -mt-2 ml-5">
+                    Lecture : <strong>% des collaborateurs de l'agence</strong> ayant utilisé l'outil au moins une fois sur la période.
+                    Dénominateur commun = effectif. Les colonnes sont donc comparables entre elles.
+                </p>
+
+                <!-- Adoption : évolution temporelle -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Évolution des taux d'adoption dans le temps</h3>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Évolution du taux d'adoption dans le temps</h3>
+                    <p class="text-sm text-gray-500 mb-4">Taux cumulé (% utilisateurs uniques / effectif). Cliquer sur la légende pour isoler un outil.</p>
                     <div id="adoption-chart" style="width: 100%; min-height: 400px; height: 400px;"></div>
                 </div>
 
-                <!-- Agency Table -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible">
+                <!-- Adoption : classement des agences -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Classement des agences par adoption globale</h3>
+                    <p class="text-sm text-gray-500 mb-4">Part des collaborateurs ayant utilisé au moins un outil IA. Agences avec effectif connu uniquement.</p>
+                    <div id="adoption-rank-chart" style="width: 100%; min-height: 360px;"></div>
+                </div>
+
+                <!-- Adoption : tableau -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible mb-12">
                     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                        <h3 class="text-lg font-semibold text-gray-900">Détail par Agence</h3>
+                        <h3 class="text-lg font-semibold text-gray-900">Taux d'adoption par agence et par outil</h3>
                     </div>
                     <div class="overflow-x-auto overflow-y-visible relative">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('direction')">
-                                        <div class="flex items-center">
-                                            Direction
-                                            <span id="sort-icon-direction" class="ml-1 text-gray-400">↕</span>
-                                        </div>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('direction')">
+                                        <div class="flex items-center">Direction <span id="ad-sort-direction" class="ml-1 text-gray-400">↕</span></div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
-                                        <div class="flex items-center">
-                                            Agence
-                                            <span id="sort-icon-agency" class="ml-1 text-gray-400">↕</span>
-                                        </div>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('agency')">
+                                        <div class="flex items-center">Agence <span id="ad-sort-agency" class="ml-1 text-gray-400">↕</span></div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('descriptif')">
-                                        <div class="flex items-center justify-center">
-                                            Taux Descriptif
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Taux de couverture : (Affaires uniques ayant reçu un descriptif IA) / (Affaires RICT avec description ≥ 100 mots) × 100
-                                                </div>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('effectif')">
+                                        <div class="flex items-center justify-center">Effectif <span id="ad-sort-effectif" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionGlobale')">
+                                        <div class="flex items-center justify-center">Globale
+                                            <div class="relative group ml-1"><span class="text-emerald-600 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Collaborateurs ayant utilisé <strong>au moins un</strong> outil IA ÷ effectif de l'agence.</div>
                                             </div>
-                                            <span id="sort-icon-descriptif" class="ml-1 text-gray-400">↕</span>
+                                            <span id="ad-sort-adoptionGlobale" class="ml-1 text-blue-600">↓</span>
                                         </div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('autocontact')">
-                                        <div class="flex items-center justify-center">
-                                            Taux Auto Contact
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
-                                                </div>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionDescriptif')">
+                                        <div class="flex items-center justify-center">Descriptif
+                                            <div class="relative group ml-1"><span class="text-emerald-600 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Utilisateurs ayant généré au moins un descriptif IA (sur une description source ≥ 100 mots) ÷ effectif.</div>
                                             </div>
-                                            <span id="sort-icon-autocontact" class="ml-1 text-gray-400">↕</span>
+                                            <span id="ad-sort-adoptionDescriptif" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('comparateur')">
-                                        <div class="flex items-center justify-center">
-                                            Taux Comparateur
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
-                                                </div>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionAutocontact')">
+                                        <div class="flex items-center justify-center">Auto Contact <span id="ad-sort-adoptionAutocontact" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionComparateur')">
+                                        <div class="flex items-center justify-center">Comparateur <span id="ad-sort-adoptionComparateur" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionExpertBTP')">
+                                        <div class="flex items-center justify-center">Expert BTP <span id="ad-sort-adoptionExpertBTP" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionChatBTP')">
+                                        <div class="flex items-center justify-center">Chat BTP <span id="ad-sort-adoptionChatBTP" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortAdoption('adoptionGeotech')">
+                                        <div class="flex items-center justify-center">Géotech <span id="ad-sort-adoptionGeotech" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="adoption-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                    <div class="px-6 py-3 border-t border-gray-100 text-xs text-gray-400" id="adoption-legend"></div>
+                </div>
+
+                <!-- ============================= -->
+                <!-- ====== FAMILLE 2 : PERTINENCE ====== -->
+                <!-- ============================= -->
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="w-3 h-3 rounded-full bg-violet-500"></span>
+                    <h2 class="text-xl font-bold text-gray-900">2 · Pertinence d'usage — Descriptif des travaux</h2>
+                </div>
+                <p class="text-sm text-gray-500 mb-5 -mt-2 ml-5">
+                    Lecture : sur les affaires RICT où le descriptif IA était <strong>pertinent</strong> (description source ≥ 100 mots),
+                    quelle part a effectivement reçu un descriptif IA. Dénominateur = <strong>affaires éligibles</strong>, pas personnes.
+                </p>
+
+                <!-- Pertinence : Adoption vs Couverture (le VS) -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Adoption <span class="text-emerald-600">vs</span> Couverture du Descriptif, par agence</h3>
+                    <p class="text-sm text-gray-500 mb-4">
+                        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>Adoption</span> = % de collaborateurs qui s'en servent ·
+                        <span class="inline-flex items-center gap-1 ml-2"><span class="w-2.5 h-2.5 rounded-sm bg-violet-500"></span>Couverture</span> = % des affaires éligibles couvertes.
+                        Un écart marqué entre les deux barres = signal d'usage à corriger.
+                    </p>
+                    <div id="descriptif-compare-chart" style="width: 100%; min-height: 380px;"></div>
+                </div>
+
+                <!-- Pertinence : quadrant -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">Cartographie adoption × couverture</h3>
+                    <p class="text-sm text-gray-500 mb-4">
+                        Chaque bulle = une agence (taille = effectif). Les lignes = moyennes. Repère les profils :
+                        haut-droite = exemplaire, bas-droite = beaucoup d'utilisateurs mais faible couverture, etc.
+                    </p>
+                    <div id="descriptif-quadrant-chart" style="width: 100%; min-height: 420px;"></div>
+                </div>
+
+                <!-- Pertinence : tableau -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible mb-10">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                        <h3 class="text-lg font-semibold text-gray-900">Pertinence d'usage du Descriptif par agence</h3>
+                    </div>
+                    <div class="overflow-x-auto overflow-y-visible relative">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortPertinence('direction')">
+                                        <div class="flex items-center">Direction <span id="pe-sort-direction" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortPertinence('agency')">
+                                        <div class="flex items-center">Agence <span id="pe-sort-agency" class="ml-1 text-gray-400">↕</span></div>
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortPertinence('eligibles')">
+                                        <div class="flex items-center justify-center">Affaires éligibles
+                                            <div class="relative group ml-1"><span class="text-violet-600 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Affaires RICT (diffusées depuis juin 2025) dont la <strong>description source compte ≥ 100 mots</strong>. C'est le gisement où le descriptif IA est pertinent.</div>
                                             </div>
-                                            <span id="sort-icon-comparateur" class="ml-1 text-gray-400">↕</span>
+                                            <span id="pe-sort-eligibles" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('expert-btp')">
-                                        <div class="flex items-center justify-center">
-                                            Taux Expert BTP
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
-                                                </div>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortPertinence('couvertes')">
+                                        <div class="flex items-center justify-center">Affaires couvertes IA
+                                            <div class="relative group ml-1"><span class="text-violet-600 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Parmi les affaires éligibles, celles ayant effectivement reçu un descriptif généré par l'IA.</div>
                                             </div>
-                                            <span id="sort-icon-expert-btp" class="ml-1 text-gray-400">↕</span>
+                                            <span id="pe-sort-couvertes" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('chat-btp')">
-                                        <div class="flex items-center justify-center">
-                                            Taux Chat BTP
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Taux d'adoption : (Utilisateurs uniques) / (Effectif de l'agence) × 100
-                                                </div>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none bg-violet-50" onclick="sortPertinence('couverture')">
+                                        <div class="flex items-center justify-center">Taux de couverture
+                                            <div class="relative group ml-1"><span class="text-violet-600 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Affaires couvertes ÷ affaires éligibles. <strong>Pertinence d'usage</strong> : intensité de couverture du gisement.</div>
                                             </div>
-                                            <span id="sort-icon-chat-btp" class="ml-1 text-gray-400">↕</span>
+                                            <span id="pe-sort-couverture" class="ml-1 text-blue-600">↓</span>
                                         </div>
                                     </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('geotech')">
-                                        <div class="flex items-center justify-center">
-                                            Taux Géotech
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Taux d'adoption : (Utilisateurs uniques ayant lancé une analyse géotechnique IA) / (Effectif de l'agence) × 100. Dédup par DeliverableId.
-                                                </div>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none bg-emerald-50" onclick="sortPertinence('adoptionDescriptif')">
+                                        <div class="flex items-center justify-center">Adoption (rappel)
+                                            <div class="relative group ml-1"><span class="text-emerald-600 cursor-help text-xs font-normal">(i)</span>
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Rappel de la famille Adoption : % de collaborateurs qui utilisent le Descriptif. À comparer avec la couverture (à sa gauche).</div>
                                             </div>
-                                            <span id="sort-icon-geotech" class="ml-1 text-gray-400">↕</span>
-                                        </div>
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('total')">
-                                        <div class="flex items-center justify-center">
-                                            Total Utilisations
-                                            <div class="relative group ml-1">
-                                                <span class="text-blue-500 cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal">
-                                                    Somme de toutes les utilisations : Descriptif + Auto Contact + Comparateur + Expert BTP + Chat BTP + Géotech
-                                                </div>
-                                            </div>
-                                            <span id="sort-icon-total" class="ml-1 text-blue-600">↓</span>
+                                            <span id="pe-sort-adoptionDescriptif" class="ml-1 text-gray-400">↕</span>
                                         </div>
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody id="agency-table-body" class="bg-white divide-y divide-gray-200">
-                                <!-- Rows will be populated by JS -->
-                            </tbody>
+                            <tbody id="pertinence-table-body" class="bg-white divide-y divide-gray-200"></tbody>
                         </table>
                     </div>
+                    <div class="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
+                        <strong>Affaires éligibles</strong> = RICT (depuis juin 2025) avec description source ≥ 100 mots — le gisement où le descriptif IA est pertinent.
+                        Colonne <span class="text-violet-700 font-medium">violette</span> = pertinence (par affaire) · colonne <span class="text-emerald-700 font-medium">verte</span> = adoption (par personne).
+                    </div>
                 </div>
+
             </div>
         </div>
     </div>

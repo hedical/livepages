@@ -1,56 +1,63 @@
+// ============================================================================
+// Adoption & Pertinence par Agence — BTP Consultants Contrôle Technique (hors SPS)
+// Version "explicite" de agencesCT : deux familles d'indicateurs séparées.
+//   - Adoption  : utilisateurs uniques / effectif de l'agence (par personne)
+//   - Pertinence: affaires couvertes IA / affaires éligibles ≥100 mots (par affaire)
+// SPS (BU distincte, même domaine email) est exclu de l'effectif ET des numérateurs
+// via la liste d'emails extraite des JSON chats/expert SPS.
+// ============================================================================
+
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordadoption';
 
-// URLs will be fetched from webhook after authentication
+// URLs fetched from webhook after authentication
 let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
-// Expert BTP Consultants URL (public)
+// Public sources — BTP Consultants Contrôle Technique
 const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
-// Chat BTP Consultants URL (public)
 const CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
-// Analyse Géotechnique URL (public, Card 139)
 const GEOTECH_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/analyse_geotechnique.json';
-// Default Population URL (public)
 const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+// SPS sources — utilisées UNIQUEMENT pour extraire les emails SPS à exclure
+const EXPERT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
+const CHAT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json';
 
 // Constants
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
 
-// Date à partir de laquelle on compte les RICT dans le taux de pénétration du descriptif IA.
-// Avant juin 2025 il n'y a que ~56 usages IA dispersés (phase de test, jan-mai 2025),
-// inclure les RICT de cette période fausse l'assiette et tasse le taux artificiellement.
-// Le démarrage pilote réel = 2025-06 (88 usages, puis ramp-up à 150-300/mois).
-const DESCRIPTIF_AI_START_DATE = new Date(2025, 5, 1); // 2025-06-01 local time
+// Date de démarrage du pilote IA descriptif. Avant juin 2025 : ~56 usages dispersés
+// (phase de test). On exclut les RICT antérieurs pour ne pas fausser l'assiette.
+const DESCRIPTIF_AI_START_DATE = new Date(2025, 5, 1); // 2025-06-01 local
 
-// Returns true if the RICT was diffused on or after the AI pilot start date.
 function isAfterDescriptifAIStart(item) {
     const d = parseFrenchDate(item.createdAt);
     return d && d >= DESCRIPTIF_AI_START_DATE;
 }
 
 // State
-let allRictData = []; // All RICT data for calculating relevance rate
+let allRictData = [];
 let descriptifData = [];
 let autocontactData = [];
 let comparateurData = [];
 let expertBTPData = [];
 let chatBTPData = [];
 let geotechData = [];
-let agencyPopulation = {}; // {agencyCode: effectif}
-let agencyToDR = {}; // {agencyCode: DR}
-let emailToAgency = {}; // {email (lowercase): agencyCode (uppercase)} — home agency from user directory
+let agencyPopulation = {};       // {agencyCode: effectif}  (SPS exclu)
+let agencyToDR = {};
+let agencyToDirection = {};
+let emailToAgency = {};          // {email: agencyCode}     (SPS exclu)
+let spsEmails = new Set();       // emails SPS (lowercased) à exclure
+let spsExcludedFromEffectif = 0; // combien de collaborateurs SPS retirés de l'effectif
 let availableAgencies = [];
 let availableDirections = [];
-let agencyToDirection = {};
-let tableSortState = {
-    column: 'total',
-    ascending: false
-};
-let dateFilter = {
-    startDate: null,
-    endDate: null
-};
+
+let adoptionSort = { column: 'adoptionGlobale', ascending: false };
+let pertinenceSort = { column: 'couverture', ascending: false };
+let dateFilter = { startDate: null, endDate: null };
+
+// Cache des stats calculées (recalculé à chaque changement de filtre)
+let currentStats = [];
 
 // DOM Elements
 const loadingEl = document.getElementById('loading');
@@ -61,7 +68,8 @@ const endDateEl = document.getElementById('end-date');
 const directionFilterEl = document.getElementById('direction-filter');
 const agencyFilterEl = document.getElementById('agency-filter');
 const resetFiltersBtn = document.getElementById('reset-filters');
-const agencyTableBodyEl = document.getElementById('agency-table-body');
+const adoptionTableBodyEl = document.getElementById('adoption-table-body');
+const pertinenceTableBodyEl = document.getElementById('pertinence-table-body');
 const adoptionChartEl = document.getElementById('adoption-chart');
 
 // Login elements
@@ -76,11 +84,8 @@ const logoutBtn = document.getElementById('logout-btn');
 // ==================== UTILITY FUNCTIONS ====================
 
 function escapeHtml(str) {
-    return str.replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 function formatNumber(num) {
@@ -104,11 +109,7 @@ function parseFrenchDate(dateString) {
             if (months[monthName] !== undefined) {
                 date = new Date(year, months[monthName], day);
                 const timeMatch = cleanDate.match(/(\d{1,2}):(\d{2})/);
-                if (timeMatch) {
-                    const hours = parseInt(timeMatch[1]);
-                    const minutes = parseInt(timeMatch[2]);
-                    date.setHours(hours, minutes, 0, 0);
-                }
+                if (timeMatch) date.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), 0, 0);
             }
         }
     }
@@ -127,12 +128,8 @@ function extractText(html) {
     if (!html || typeof html !== 'string') return '';
     const withBreaks = html.replace(/<\/p>/gi, '\n\n');
     let text = withBreaks.replace(HTML_TAG_RE, '');
-    text = text
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/[*_`]/g, '');
+    text = text.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&').replace(/[*_`]/g, '');
     return text.replace(/\s+/g, ' ').trim();
 }
 
@@ -142,115 +139,35 @@ function countWords(text) {
     return words ? words.length : 0;
 }
 
-// Full CSV parser that correctly handles multi-line quoted fields and "" escaping
 function parseCSVFull(csvText) {
     const rows = [];
-    let row = [];
-    let current = '';
-    let inQuotes = false;
+    let row = [], current = '', inQuotes = false;
     for (let i = 0; i < csvText.length; i++) {
         const char = csvText[i];
         if (inQuotes) {
             if (char === '"') {
-                if (i + 1 < csvText.length && csvText[i + 1] === '"') {
-                    current += '"';
-                    i++;
-                } else {
-                    inQuotes = false;
-                }
-            } else {
-                current += char; // keeps \n inside quoted fields
-            }
+                if (i + 1 < csvText.length && csvText[i + 1] === '"') { current += '"'; i++; }
+                else inQuotes = false;
+            } else current += char;
         } else {
-            if (char === '"') {
-                inQuotes = true;
-            } else if (char === ',') {
-                row.push(current.trim());
-                current = '';
-            } else if (char === '\n') {
-                row.push(current.trim());
-                current = '';
-                if (row.some(v => v !== '')) rows.push(row);
-                row = [];
-            } else if (char === '\r') {
-                // skip CR
-            } else {
-                current += char;
-            }
+            if (char === '"') inQuotes = true;
+            else if (char === ',') { row.push(current.trim()); current = ''; }
+            else if (char === '\n') { row.push(current.trim()); current = ''; if (row.some(v => v !== '')) rows.push(row); row = []; }
+            else if (char === '\r') { /* skip */ }
+            else current += char;
         }
     }
-    if (current.trim() !== '' || row.length > 0) {
-        row.push(current.trim());
-        if (row.some(v => v !== '')) rows.push(row);
-    }
+    if (current.trim() !== '' || row.length > 0) { row.push(current.trim()); if (row.some(v => v !== '')) rows.push(row); }
     return rows;
-}
-
-function parseCSVLine(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (inQuotes) {
-            if (char === '"') {
-                if (i + 1 < line.length && line[i + 1] === '"') {
-                    // Escaped double-quote ("") → literal "
-                    current += '"';
-                    i++;
-                } else {
-                    // Closing quote
-                    inQuotes = false;
-                }
-            } else {
-                current += char;
-            }
-        } else {
-            if (char === '"') {
-                inQuotes = true;
-            } else if (char === ',') {
-                values.push(current.trim());
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-    }
-    values.push(current.trim());
-    return values;
-}
-
-function parseCSVLineWithCommas(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            values.push(current.trim());
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    values.push(current.trim());
-    return values;
 }
 
 function extractCSVFromDataField(csvText) {
     const lines = csvText.split('\n');
     if (lines.length > 0 && lines[0].trim() === 'data') {
         const csvLines = lines.slice(1);
-        if (csvLines.length > 0 && csvLines[0].startsWith('"')) {
-            csvLines[0] = csvLines[0].substring(1);
-        }
-        if (csvLines.length > 0 && csvLines[csvLines.length - 1].trim() === '"') {
-            csvLines.pop();
-        } else if (csvLines.length > 0 && csvLines[csvLines.length - 1].endsWith('"')) {
-            csvLines[csvLines.length - 1] = csvLines[csvLines.length - 1].slice(0, -1);
-        }
+        if (csvLines.length > 0 && csvLines[0].startsWith('"')) csvLines[0] = csvLines[0].substring(1);
+        if (csvLines.length > 0 && csvLines[csvLines.length - 1].trim() === '"') csvLines.pop();
+        else if (csvLines.length > 0 && csvLines[csvLines.length - 1].endsWith('"')) csvLines[csvLines.length - 1] = csvLines[csvLines.length - 1].slice(0, -1);
         return csvLines.join('\n').trim();
     }
     return csvText;
@@ -259,13 +176,41 @@ function extractCSVFromDataField(csvText) {
 function fixEncoding(text) {
     const replacements = {
         'Ã©': 'é', 'Ã¨': 'è', 'Ãª': 'ê', 'Ã ': 'à', 'Ã¢': 'â', 'Ã´': 'ô', 'Ã»': 'û',
-        'Ã§': 'ç', 'Ã«': 'ë', 'Ã¯': 'ï', 'Ã¼': 'ü', 'Ã': 'É', 'Ã': 'È', 'Ã': 'À', 'Ã': 'Ç', '�': 'é'
+        'Ã§': 'ç', 'Ã«': 'ë', 'Ã¯': 'ï', 'Ã¼': 'ü', '�': 'é'
     };
     let fixed = text;
-    for (const [bad, good] of Object.entries(replacements)) {
-        fixed = fixed.replace(new RegExp(bad, 'g'), good);
-    }
+    for (const [bad, good] of Object.entries(replacements)) fixed = fixed.replace(new RegExp(bad, 'g'), good);
     return fixed;
+}
+
+// ==================== SPS EMAILS (à exclure) ====================
+
+// Charge les JSON SPS et construit l'ensemble des emails SPS à exclure.
+// SPS partage le domaine @btp-consultants.fr mais constitue une BU distincte :
+// on retire ces collaborateurs de l'effectif et des usages BTP Consultants CT.
+async function loadSpsEmails() {
+    const urls = [EXPERT_BTP_SPS_URL, CHAT_BTP_SPS_URL];
+    for (const url of urls) {
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) { console.warn('SPS source indisponible:', url, resp.status); continue; }
+            const json = await resp.json();
+            if (Array.isArray(json)) {
+                json.forEach(item => {
+                    const email = ((item && (item.email || (item.metadata && item.metadata.email))) || '').toLowerCase().trim();
+                    if (email) spsEmails.add(email);
+                });
+            }
+        } catch (e) {
+            console.warn('Erreur chargement emails SPS:', url, e);
+        }
+    }
+    console.log('Emails SPS exclus:', spsEmails.size, [...spsEmails]);
+}
+
+function isSpsEmail(email) {
+    if (!email) return false;
+    return spsEmails.has(email.toLowerCase().trim());
 }
 
 // ==================== DATA PARSING ====================
@@ -273,12 +218,8 @@ function fixEncoding(text) {
 function parseDescriptifCSV(csvString) {
     if (!csvString || typeof csvString !== 'string') return [];
     let csvText = csvString.trim();
-    while (csvText.startsWith('[') || csvText.startsWith('{')) {
-        csvText = csvText.substring(1).trim();
-    }
-    while (csvText.endsWith(']') || csvText.endsWith('}')) {
-        csvText = csvText.substring(0, csvText.length - 1).trim();
-    }
+    while (csvText.startsWith('[') || csvText.startsWith('{')) csvText = csvText.substring(1).trim();
+    while (csvText.endsWith(']') || csvText.endsWith('}')) csvText = csvText.substring(0, csvText.length - 1).trim();
     const rows = parseCSVFull(csvText);
     if (rows.length === 0) return [];
     const headers = rows[0];
@@ -305,7 +246,7 @@ function parseDescriptifCSV(csvString) {
         const values = rows[i];
         if (values.length < headers.length / 2) continue;
         const descWcRaw = descWcIndex >= 0 ? (values[descWcIndex] || '').toString().trim() : '';
-        const aiWcRaw  = aiWcIndex  >= 0 ? (values[aiWcIndex]  || '').toString().trim() : '';
+        const aiWcRaw = aiWcIndex >= 0 ? (values[aiWcIndex] || '').toString().trim() : '';
         const hasAiRaw = hasAiIndex >= 0 ? (values[hasAiIndex] || '').toString().toLowerCase().trim() : '';
         data.push({
             type: (values[typeIndex] || '').trim(),
@@ -317,15 +258,13 @@ function parseDescriptifCSV(csvString) {
             description: descriptionIndex >= 0 ? (values[descriptionIndex] || '') : '',
             aiResult: aiResultIndex >= 0 ? (values[aiResultIndex] || '') : '',
             descriptionWordCount: (descWcRaw !== '' && !isNaN(parseInt(descWcRaw))) ? parseInt(descWcRaw) : undefined,
-            aiResultWordCount:    (aiWcRaw  !== '' && !isNaN(parseInt(aiWcRaw)))  ? parseInt(aiWcRaw)  : undefined,
+            aiResultWordCount: (aiWcRaw !== '' && !isNaN(parseInt(aiWcRaw))) ? parseInt(aiWcRaw) : undefined,
             hasAi: hasAiRaw === 'true'
         });
     }
     return data;
 }
 
-// Returns the description word count: precomputed (Card 138 LEAN) if available,
-// otherwise falls back to counting words from the raw HTML (Card 134 full).
 function getDescWordCount(item) {
     if (typeof item.descriptionWordCount === 'number') return item.descriptionWordCount;
     return countWords(extractText(item.description || ''));
@@ -334,12 +273,8 @@ function getDescWordCount(item) {
 function parseAutocontactCSV(csvString) {
     if (!csvString || typeof csvString !== 'string') return [];
     let csvText = csvString.trim();
-    while (csvText.startsWith('[') || csvText.startsWith('{')) {
-        csvText = csvText.substring(1).trim();
-    }
-    while (csvText.endsWith(']') || csvText.endsWith('}')) {
-        csvText = csvText.substring(0, csvText.length - 1).trim();
-    }
+    while (csvText.startsWith('[') || csvText.startsWith('{')) csvText = csvText.substring(1).trim();
+    while (csvText.endsWith(']') || csvText.endsWith('}')) csvText = csvText.substring(0, csvText.length - 1).trim();
     const rows = parseCSVFull(csvText);
     if (rows.length === 0) return [];
     const headers = rows[0];
@@ -360,10 +295,7 @@ function parseAutocontactCSV(csvString) {
         for (let rowIdx = 1; rowIdx < Math.min(10, rows.length); rowIdx++) {
             const values = rows[rowIdx];
             for (let colIdx = 0; colIdx < values.length; colIdx++) {
-                if (values[colIdx] && values[colIdx].includes('@btp-consultants.fr')) {
-                    emailIndex = colIdx;
-                    break;
-                }
+                if (values[colIdx] && values[colIdx].includes('@btp-consultants.fr')) { emailIndex = colIdx; break; }
             }
             if (emailIndex !== -1) break;
         }
@@ -388,12 +320,8 @@ function parseAutocontactCSV(csvString) {
 function parseComparateurCSV(csvString) {
     if (!csvString || typeof csvString !== 'string') return [];
     let csvText = csvString.trim();
-    while (csvText.startsWith('[') || csvText.startsWith('{')) {
-        csvText = csvText.substring(1).trim();
-    }
-    while (csvText.endsWith(']') || csvText.endsWith('}')) {
-        csvText = csvText.substring(0, csvText.length - 1).trim();
-    }
+    while (csvText.startsWith('[') || csvText.startsWith('{')) csvText = csvText.substring(1).trim();
+    while (csvText.endsWith(']') || csvText.endsWith('}')) csvText = csvText.substring(0, csvText.length - 1).trim();
     const rows = parseCSVFull(csvText);
     if (rows.length === 0) return [];
     const headers = rows[0];
@@ -404,10 +332,7 @@ function parseComparateurCSV(csvString) {
         const headerLower = header.toLowerCase();
         if (contractIndex === -1 && (headerLower.includes('contractnumber') || header.includes('SubAffairDetailId'))) contractIndex = i;
         if (emailIndex === -1 && headerLower.includes('email')) emailIndex = i;
-        if (longResultIndex === -1 && headerLower.includes('longresult') && headerLower.includes('indexcomparator')) {
-            longResultIndex = i;
-            longResultIsItemsArray = true;
-        }
+        if (longResultIndex === -1 && headerLower.includes('longresult') && headerLower.includes('indexcomparator')) { longResultIndex = i; longResultIsItemsArray = true; }
         if (longResultIndex === -1 && headerLower === 'longresult') longResultIndex = i;
         if (agencyIndex === -1 && headerLower.includes('productionservice')) agencyIndex = i;
         if (managementIndex === -1 && headerLower.includes('management')) managementIndex = i;
@@ -443,45 +368,25 @@ function parseComparateurCSV(csvString) {
     return data;
 }
 
-// Parse Analyse Géotechnique (Card 139). Source = AnalyticEvent — 1 opération IA
-// génère 2 events (Notice + Report) avec le même DeliverableId. On déduplique ici
-// pour ne compter qu'une opération IA par déclencheur côté frontend.
+// Géotech (Card 139) — 1 op IA = 2 events (Notice+Report) même DeliverableId → dédup.
 function parseGeotechCSV(csvString) {
     if (!csvString || typeof csvString !== 'string') return [];
     let csvText = csvString.trim();
-    while (csvText.startsWith('[') || csvText.startsWith('{')) {
-        csvText = csvText.substring(1).trim();
-    }
-    while (csvText.endsWith(']') || csvText.endsWith('}')) {
-        csvText = csvText.substring(0, csvText.length - 1).trim();
-    }
+    while (csvText.startsWith('[') || csvText.startsWith('{')) csvText = csvText.substring(1).trim();
+    while (csvText.endsWith(']') || csvText.endsWith('}')) csvText = csvText.substring(0, csvText.length - 1).trim();
     const rows = parseCSVFull(csvText);
     if (rows.length === 0) return [];
     const headers = rows[0];
-    const idx = (name) => {
-        for (let i = 0; i < headers.length; i++) {
-            if (headers[i].trim().toLowerCase() === name.toLowerCase()) return i;
-        }
-        return -1;
-    };
-    const eventNameIdx = idx('EventName');
-    const eventDateIdx = idx('EventDate');
-    const deliverableIdx = idx('DeliverableId');
-    const contractIdx = idx('ContractNumber');
-    const emailIdx = idx('UserEmail');
-    const agenceIdx = idx('Agence');
-    const drIdx = idx('DR');
+    const idx = (name) => { for (let i = 0; i < headers.length; i++) if (headers[i].trim().toLowerCase() === name.toLowerCase()) return i; return -1; };
+    const eventNameIdx = idx('EventName'), eventDateIdx = idx('EventDate'), deliverableIdx = idx('DeliverableId');
+    const contractIdx = idx('ContractNumber'), emailIdx = idx('UserEmail'), agenceIdx = idx('Agence'), drIdx = idx('DR');
     const data = [];
     const seenDeliverables = new Set();
     for (let i = 1; i < rows.length; i++) {
         const values = rows[i];
         if (values.length < headers.length / 2) continue;
         const deliverableId = (deliverableIdx >= 0 ? values[deliverableIdx] : '').trim();
-        // Dédup par DeliverableId — 1 op IA = 1 Notice + 1 Report, même DeliverableId
-        if (deliverableId) {
-            if (seenDeliverables.has(deliverableId)) continue;
-            seenDeliverables.add(deliverableId);
-        }
+        if (deliverableId) { if (seenDeliverables.has(deliverableId)) continue; seenDeliverables.add(deliverableId); }
         data.push({
             eventName: (eventNameIdx >= 0 ? values[eventNameIdx] : '').trim(),
             deliverableId: deliverableId,
@@ -495,45 +400,29 @@ function parseGeotechCSV(csvString) {
     return data;
 }
 
+// Population / annuaire — SPS exclu du calcul de l'effectif.
 function parsePopulationData(rawData) {
     if (!rawData || typeof rawData !== 'string') return;
-
-    // Try to extract CSV text from various formats
     let csvText = rawData.trim();
-
-    // Handle JSON wrapper formats
     try {
         const json = JSON.parse(csvText);
-        if (Array.isArray(json) && json.length > 0 && json[0].data) {
-            csvText = json[0].data; // [{data: "csv..."}] format
-        } else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object') {
-            // Direct JSON array of user objects — parse directly
-            _parseUserObjects(json);
-            return;
-        }
-    } catch(e) {
-        // Not JSON, treat as plain text
+        if (Array.isArray(json) && json.length > 0 && json[0].data) csvText = json[0].data;
+        else if (Array.isArray(json) && json.length > 0 && typeof json[0] === 'object') { _parseUserObjects(json); return; }
+    } catch (e) {
         csvText = fixEncoding(csvText);
         csvText = extractCSVFromDataField(csvText);
     }
-
     const rows = parseCSVFull(csvText);
     if (rows.length < 2) return;
-
     const headers = rows[0].map(h => h.toLowerCase().trim());
-
-    // Detect if new user-directory format (has email + productionservice columns)
     const emailIdx = headers.findIndex(h => h.includes('email') && !h.includes('management'));
     const productionServiceIdx = headers.findIndex(h => h.includes('productionservice'));
 
     if (emailIdx !== -1 && productionServiceIdx !== -1) {
-        // New format: user directory with email → home agency mapping
         const isEnabledIdx = headers.findIndex(h => h.includes('enabled'));
         const isMainIdx = headers.findIndex(h => h.includes('ismain') || (h.includes('is') && h.includes('main')));
         const managementIdx = headers.findIndex(h => h.includes('management'));
-
-        // Collect all assignments per user
-        const userAssignments = {}; // email → [{agencyCode, isMain, dr}]
+        const userAssignments = {};
         for (let i = 1; i < rows.length; i++) {
             const values = rows[i];
             const email = (values[emailIdx] || '').toLowerCase().trim();
@@ -546,45 +435,36 @@ function parsePopulationData(rawData) {
             userAssignments[email].push({ agencyCode, isMain, dr });
             if (dr) { agencyToDR[agencyCode] = dr; agencyToDirection[agencyCode] = dr; }
         }
-
-        // Reset and build population + emailToAgency from primary assignments
         emailToAgency = {};
         agencyPopulation = {};
+        spsExcludedFromEffectif = 0;
         Object.entries(userAssignments).forEach(([email, assignments]) => {
-            const primary = assignments.find(a => a.isMain) || assignments[0];
             const normalizedEmail = email.toLowerCase().trim();
+            // EXCLUSION SPS : le collaborateur n'entre ni dans l'effectif ni dans emailToAgency
+            if (spsEmails.has(normalizedEmail)) { spsExcludedFromEffectif++; return; }
+            const primary = assignments.find(a => a.isMain) || assignments[0];
             emailToAgency[normalizedEmail] = primary.agencyCode;
             agencyPopulation[primary.agencyCode] = (agencyPopulation[primary.agencyCode] || 0) + 1;
         });
-        console.log('User directory loaded:', Object.keys(emailToAgency).length, 'users,', Object.keys(agencyPopulation).length, 'agencies');
+        console.log('Annuaire chargé:', Object.keys(emailToAgency).length, 'users,', Object.keys(agencyPopulation).length, 'agences ; SPS exclus de l\'effectif:', spsExcludedFromEffectif);
     } else {
-        // Legacy format: DR, AgencyCode, Effectif
-        agencyPopulation = {};
-        agencyToDR = {};
-        agencyToDirection = {};
+        // Format legacy : DR, AgencyCode, Effectif (pas d'email → exclusion SPS impossible)
+        agencyPopulation = {}; agencyToDR = {}; agencyToDirection = {};
         for (let i = 1; i < rows.length; i++) {
             if (rows[i].length >= 3) {
                 const dr = rows[i][0].trim();
                 const agencyCode = rows[i][1].trim().toUpperCase();
                 const effectif = parseInt(rows[i][2].trim());
-                if (agencyCode && !isNaN(effectif)) {
-                    agencyPopulation[agencyCode] = effectif;
-                    agencyToDR[agencyCode] = dr;
-                    agencyToDirection[agencyCode] = dr;
-                }
+                if (agencyCode && !isNaN(effectif)) { agencyPopulation[agencyCode] = effectif; agencyToDR[agencyCode] = dr; agencyToDirection[agencyCode] = dr; }
             }
         }
-        console.log('Legacy population loaded:', Object.keys(agencyPopulation).length, 'agencies');
+        console.log('Population legacy chargée:', Object.keys(agencyPopulation).length, 'agences (exclusion SPS non applicable au format effectif)');
     }
 }
 
 function _parseUserObjects(jsonArray) {
-    // Handle direct JSON array of user objects
     const userAssignments = {};
-    emailToAgency = {};
-    agencyPopulation = {};
-    agencyToDR = {};
-    agencyToDirection = {};
+    emailToAgency = {}; agencyPopulation = {}; agencyToDR = {}; agencyToDirection = {}; spsExcludedFromEffectif = 0;
     jsonArray.forEach(user => {
         const email = (user.Email || user.email || '').toLowerCase().trim();
         const isEnabled = String(user.IsEnabled || user.isEnabled || 'true').toLowerCase() === 'true';
@@ -597,8 +477,9 @@ function _parseUserObjects(jsonArray) {
         if (dr) { agencyToDR[agencyCode] = dr; agencyToDirection[agencyCode] = dr; }
     });
     Object.entries(userAssignments).forEach(([email, assignments]) => {
-        const primary = assignments.find(a => a.isMain) || assignments[0];
         const normalizedEmail = email.toLowerCase().trim();
+        if (spsEmails.has(normalizedEmail)) { spsExcludedFromEffectif++; return; }
+        const primary = assignments.find(a => a.isMain) || assignments[0];
         emailToAgency[normalizedEmail] = primary.agencyCode;
         agencyPopulation[primary.agencyCode] = (agencyPopulation[primary.agencyCode] || 0) + 1;
     });
@@ -611,16 +492,8 @@ function getFilteredData(data) {
         if (dateFilter.startDate || dateFilter.endDate) {
             const itemDate = parseFrenchDate(item.createdAt);
             if (!itemDate) return false;
-            if (dateFilter.startDate) {
-                const start = new Date(dateFilter.startDate);
-                start.setHours(0, 0, 0, 0);
-                if (itemDate < start) return false;
-            }
-            if (dateFilter.endDate) {
-                const end = new Date(dateFilter.endDate);
-                end.setHours(23, 59, 59, 999);
-                if (itemDate > end) return false;
-            }
+            if (dateFilter.startDate) { const start = new Date(dateFilter.startDate); start.setHours(0, 0, 0, 0); if (itemDate < start) return false; }
+            if (dateFilter.endDate) { const end = new Date(dateFilter.endDate); end.setHours(23, 59, 59, 999); if (itemDate > end) return false; }
         }
         const direction = directionFilterEl.value;
         if (direction && item.direction !== direction) return false;
@@ -631,51 +504,30 @@ function getFilteredData(data) {
 }
 
 function extractDirectionsAndAgencies() {
-    const directions = new Set();
-    const agencies = new Set();
-    // agencyToDirection is already populated from population data
-    // Now enrich it with data from items
+    const directions = new Set(), agencies = new Set();
     const processItems = (items) => {
         items.forEach(item => {
-            const dir = item.direction;
-            const ag = item.agency;
+            const dir = item.direction, ag = item.agency;
             if (ag) agencies.add(ag);
-            
-            // Try to get direction from multiple sources
             let finalDirection = dir;
             if (!finalDirection && ag) {
-                // Try to get from agencyToDR (from population)
                 const agencyCode = ag.trim().toUpperCase();
-                if (agencyToDR[agencyCode]) {
-                    finalDirection = agencyToDR[agencyCode];
-                } else if (agencyToDirection[agencyCode]) {
-                    finalDirection = agencyToDirection[agencyCode];
-                } else if (agencyToDirection[ag]) {
-                    finalDirection = agencyToDirection[ag];
-                }
+                if (agencyToDR[agencyCode]) finalDirection = agencyToDR[agencyCode];
+                else if (agencyToDirection[agencyCode]) finalDirection = agencyToDirection[agencyCode];
+                else if (agencyToDirection[ag]) finalDirection = agencyToDirection[ag];
             }
-            
             if (finalDirection) {
                 directions.add(finalDirection);
                 if (ag) {
-                    // Map agency to direction
                     agencyToDirection[ag] = finalDirection;
-                    // Also map by agency code if we can extract it
                     const agencyCode = ag.trim().toUpperCase();
-                    if (agencyCode !== ag) {
-                        agencyToDirection[agencyCode] = finalDirection;
-                    }
+                    if (agencyCode !== ag) agencyToDirection[agencyCode] = finalDirection;
                 }
             }
         });
     };
-    processItems(allRictData);
-    processItems(descriptifData);
-    processItems(autocontactData);
-    processItems(comparateurData);
-    processItems(expertBTPData);
-    processItems(chatBTPData);
-    processItems(geotechData);
+    processItems(allRictData); processItems(descriptifData); processItems(autocontactData);
+    processItems(comparateurData); processItems(expertBTPData); processItems(chatBTPData); processItems(geotechData);
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
 }
@@ -684,8 +536,7 @@ function populateFilters() {
     directionFilterEl.innerHTML = '<option value="">Toutes les directions</option>';
     availableDirections.forEach(dir => {
         const option = document.createElement('option');
-        option.value = dir;
-        option.textContent = dir;
+        option.value = dir; option.textContent = dir;
         directionFilterEl.appendChild(option);
     });
     populateAgencyFilter();
@@ -695,1107 +546,630 @@ function populateAgencyFilter() {
     const selectedDirection = directionFilterEl.value;
     const currentAgency = agencyFilterEl.value;
     agencyFilterEl.innerHTML = '<option value="">Toutes les agences</option>';
-    const filteredAgencies = availableAgencies.filter(agency => {
-        if (!selectedDirection) return true;
-        return agencyToDirection[agency] === selectedDirection;
-    });
+    const filteredAgencies = availableAgencies.filter(agency => !selectedDirection || agencyToDirection[agency] === selectedDirection);
     filteredAgencies.forEach(agency => {
         const option = document.createElement('option');
-        option.value = agency;
-        option.textContent = agency;
+        option.value = agency; option.textContent = agency;
         agencyFilterEl.appendChild(option);
     });
-    if (currentAgency && filteredAgencies.includes(currentAgency)) {
-        agencyFilterEl.value = currentAgency;
-    }
+    if (currentAgency && filteredAgencies.includes(currentAgency)) agencyFilterEl.value = currentAgency;
 }
 
 // ==================== CALCULATE STATISTICS ====================
+// Une seule passe produit, par agence :
+//  - adoption (par personne, home agency, dénominateur=effectif) pour les 6 outils + globale
+//  - pertinence du descriptif (par affaire, agence du projet) : éligibles / couvertes / couverture
 
 function calculateAgencyStatistics() {
     const statsMap = {};
-    
-    // Helper to get direction for an item
-    const getDirectionForItem = (item) => {
-        if (item.direction && item.direction.trim() !== '') {
-            return item.direction.trim();
-        }
-        // Try to get from agency code mapping
-        const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-        if (agencyCode && agencyToDR[agencyCode]) {
-            return agencyToDR[agencyCode];
-        }
-        if (agencyCode && agencyToDirection[agencyCode]) {
-            return agencyToDirection[agencyCode];
-        }
-        if (item.agency && agencyToDirection[item.agency]) {
-            return agencyToDirection[item.agency];
-        }
-        return 'Non spécifiée';
+    const hasDirectory = Object.keys(emailToAgency).length > 0;
+
+    // Un email "compte" dans l'adoption seulement s'il est dans l'annuaire (donc dans l'effectif),
+    // et n'est pas un email SPS. Numérateur ⊆ dénominateur garanti.
+    const isKnownUser = (email) => {
+        if (!email) return false;
+        const e = email.toLowerCase().trim();
+        if (spsEmails.has(e)) return false;
+        if (hasDirectory) return !!emailToAgency[e];
+        return e.includes('@btp-consultants.fr') || e.includes('@citae.fr');
     };
-    
-    // Helper: resolve home agency from email (user directory), fall back to item agency
+
+    // Agence "de rattachement" du collaborateur (annuaire), sinon agence portée par la donnée.
     const homeAgency = (item) => {
         const email = (item.email || '').toLowerCase().trim();
         return (email && emailToAgency[email]) ? emailToAgency[email] : (item.agency || '');
     };
 
-    // Helper to get or create a statsMap entry keyed by agency code only
     const getOrCreate = (agencyRaw) => {
         const key = (agencyRaw || '').trim().toUpperCase() || '__NONE__';
         if (!statsMap[key]) {
             statsMap[key] = {
-                agencyKey: key,
-                agency: agencyRaw || '',
-                contractsWithRICT100Plus: new Set(),
-                contractsWithAIOrRICT100Plus: new Set(),
-                usersDescriptif: new Set(),
-                usersAutocontact: new Set(),
-                usersComparateur: new Set(),
-                usersExpertBTP: new Set(),
-                usersChatBTP: new Set(),
-                usersGeotech: new Set(),
-                descriptifCount: 0,
-                autocontactCount: 0,
-                comparateurCount: 0,
-                expertBTPCount: 0,
-                chatBTPCount: 0,
-                geotechCount: 0
+                agencyKey: key, agency: agencyRaw || '',
+                contractsEligibles: new Set(),       // affaires RICT ≥100 mots (gisement)
+                contractsCouverts: new Set(),        // affaires éligibles couvertes par l'IA
+                usersDescriptif: new Set(), usersAutocontact: new Set(), usersComparateur: new Set(),
+                usersExpertBTP: new Set(), usersChatBTP: new Set(), usersGeotech: new Set(),
+                usersAny: new Set(),                 // union → adoption globale
+                descriptifCount: 0, autocontactCount: 0, comparateurCount: 0,
+                expertBTPCount: 0, chatBTPCount: 0, geotechCount: 0
             };
         }
         return statsMap[key];
     };
 
-    // Denominator: RICT contracts with description ≥ 100 words per agency.
-    // Only contracts with a substantive description are counted, matching the
-    // numerator basis (AI descriptifs ≥ 100 words).
-    const allRictFiltered = getFilteredData(allRictData);
-    allRictFiltered.forEach(item => {
-        // Exclure les RICT diffusés avant le démarrage pilote IA (jan-mai 2025) :
-        // ils faussent l'assiette du taux de pénétration sans avoir eu d'opportunité
-        // significative d'utiliser l'IA.
+    const addUser = (stats, tool, email) => {
+        const e = email.toLowerCase().trim();
+        stats['users' + tool].add(e);
+        stats.usersAny.add(e);
+    };
+
+    // --- Dénominateur pertinence : affaires RICT ≥100 mots, par agence du projet ---
+    getFilteredData(allRictData).forEach(item => {
         if (!isAfterDescriptifAIStart(item)) return;
         const projectAgency = (item.agency || '').trim().toUpperCase();
         if (!projectAgency) return;
         const stats = getOrCreate(projectAgency);
-        const descWordCount = getDescWordCount(item);
-        if (item.contractNumber && item.contractNumber.trim() !== '' && descWordCount >= 100) {
-            stats.contractsWithRICT100Plus.add(item.contractNumber);
+        if (item.contractNumber && item.contractNumber.trim() !== '' && getDescWordCount(item) >= 100) {
+            stats.contractsEligibles.add(item.contractNumber);
         }
     });
 
-    // Process descriptif data for relevance rate
-    const descriptifFiltered = getFilteredData(descriptifData);
-    // Helper: only count an email in adoption if it exists in the user directory.
-    // This ensures numerator and denominator are consistent (no user can be counted
-    // without also appearing in agencyPopulation).
-    const hasDirectory = Object.keys(emailToAgency).length > 0;
-    const isKnownUser = (email) => {
-        if (!email) return false;
-        const e = email.toLowerCase().trim();
-        if (hasDirectory) return !!emailToAgency[e];
-        // Legacy fallback: accept any BTP / Citae domain
-        return e.includes('@btp-consultants.fr') || e.includes('@citae.fr');
-    };
-
-    descriptifFiltered.forEach(item => {
-        // Même cadrage temporel que le dénominateur : on ignore les usages IA d'avant
-        // le démarrage pilote (jan-mai 2025, ~56 usages dispersés en phase de test).
+    // --- Descriptif : adoption (personne) + couverture (affaire) ---
+    getFilteredData(descriptifData).forEach(item => {
         if (!isAfterDescriptifAIStart(item)) return;
-        // User adoption metrics → home agency (person's agency, not project's)
         const homeStats = getOrCreate(homeAgency(item));
-        // Contract relevance metrics → project agency (same basis as contractsWithRICT100Plus)
         const projectAgency = (item.agency || '').trim().toUpperCase();
         const contractStats = projectAgency ? getOrCreate(projectAgency) : homeStats;
-
-        const descWordCount = getDescWordCount(item);
-        // Numérateur : affaires IA parmi celles du dénominateur (description ≥ 100 mots)
-        // contractsWithRICT100Plus garantit déjà que la description est ≥ 100 mots
-        if (item.contractNumber && item.contractNumber.trim() !== ''
-                && contractStats.contractsWithRICT100Plus.has(item.contractNumber)) {
-            contractStats.contractsWithAIOrRICT100Plus.add(item.contractNumber);
+        // Couverture : affaire IA parmi les éligibles (≥100 mots déjà garanti par contractsEligibles)
+        if (item.contractNumber && item.contractNumber.trim() !== '' && contractStats.contractsEligibles.has(item.contractNumber)) {
+            contractStats.contractsCouverts.add(item.contractNumber);
         }
+        // Adoption : user ayant utilisé le descriptif IA sur une source ≥100 mots
         if (!item.type || item.type === DESCRIPTIF_TYPE) {
-            // Filtre 100 mots : on ne compte un user comme "adoptant le descriptif IA"
-            // que s'il l'a utilisé au moins une fois sur une description source ≥ 100 mots.
-            // Cohérent avec le tooltip et le KPI métier (cf. table colonne descriptif).
-            if (descWordCount >= 100) {
+            if (getDescWordCount(item) >= 100) {
                 homeStats.descriptifCount++;
-                if (isKnownUser(item.email)) {
-                    homeStats.usersDescriptif.add(item.email.toLowerCase().trim());
-                }
+                if (isKnownUser(item.email)) addUser(homeStats, 'Descriptif', item.email);
             }
         }
     });
 
-    // Process autocontact data
-    const autocontactFiltered = getFilteredData(autocontactData);
-    autocontactFiltered.forEach(item => {
+    // --- Auto Contact ---
+    getFilteredData(autocontactData).forEach(item => {
         if (!item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI) {
             const stats = getOrCreate(homeAgency(item));
             stats.autocontactCount++;
-            if (isKnownUser(item.email)) {
-                stats.usersAutocontact.add(item.email.toLowerCase().trim());
-            }
+            if (isKnownUser(item.email)) addUser(stats, 'Autocontact', item.email);
         }
     });
 
-    // Process comparateur data
-    // Attribution : item.agency (agence du projet), comme comparateur.html et index
-    // Pas de restriction isKnownUser : même base que les autres pages
-    const comparateurFiltered = getFilteredData(comparateurData);
-    comparateurFiltered.forEach(item => {
-        const projectAgency = (item.agency || '').trim().toUpperCase();
-        if (!projectAgency) return; // ignorer les lignes sans agence
-        const stats = getOrCreate(projectAgency);
+    // --- Comparateur ---
+    getFilteredData(comparateurData).forEach(item => {
+        const stats = getOrCreate(homeAgency(item));
         stats.comparateurCount++;
-        const email = (item.email || '').toLowerCase().trim();
-        if (email) {
-            stats.usersComparateur.add(email);
-        }
+        if (isKnownUser(item.email)) addUser(stats, 'Comparateur', item.email);
     });
 
-    // Process Expert BTP data
-    const expertBTPFiltered = getFilteredData(expertBTPData);
-    expertBTPFiltered.forEach(item => {
+    // --- Expert BTP ---
+    getFilteredData(expertBTPData).forEach(item => {
         const stats = getOrCreate(homeAgency(item));
         stats.expertBTPCount++;
-        if (isKnownUser(item.email)) {
-            stats.usersExpertBTP.add(item.email.toLowerCase().trim());
-        }
+        if (isKnownUser(item.email)) addUser(stats, 'ExpertBTP', item.email);
     });
 
-    // Process Chat BTP data
-    const chatBTPFiltered = getFilteredData(chatBTPData);
-    chatBTPFiltered.forEach(item => {
+    // --- Chat BTP ---
+    getFilteredData(chatBTPData).forEach(item => {
         const stats = getOrCreate(homeAgency(item));
         stats.chatBTPCount++;
-        if (isKnownUser(item.email)) {
-            stats.usersChatBTP.add(item.email.toLowerCase().trim());
-        }
+        if (isKnownUser(item.email)) addUser(stats, 'ChatBTP', item.email);
     });
 
-    // Process Géotech data — attribution par homeAgency (l'utilisateur),
-    // cohérent avec expertBTP/chatBTP. Déjà dédupliqué par DeliverableId au parse.
-    const geotechFiltered = getFilteredData(geotechData);
-    geotechFiltered.forEach(item => {
+    // --- Géotech (déjà dédupliqué) ---
+    getFilteredData(geotechData).forEach(item => {
         const stats = getOrCreate(homeAgency(item));
         stats.geotechCount++;
-        if (isKnownUser(item.email)) {
-            stats.usersGeotech.add(item.email.toLowerCase().trim());
-        }
+        if (isKnownUser(item.email)) addUser(stats, 'Geotech', item.email);
     });
-    
-    // Convert to array and calculate rates
-    const statsArray = Object.values(statsMap).map(stats => {
-        // agencyKey is already the uppercase code set by getOrCreate
+
+    // --- Conversion + taux ---
+    return Object.values(statsMap).map(stats => {
         const agencyCode = stats.agencyKey;
         const finalDirection = agencyToDR[agencyCode] || agencyToDirection[agencyCode] || 'Non spécifiée';
-        const effectif = agencyCode && agencyCode !== '__NONE__' ? (agencyPopulation[agencyCode] || 0) : 0;
-        
-        // Relevance rate for descriptif (like sup 100 mots)
-        // null = pas de contrats RICT (aucune base de calcul), 0 = vrais 0%
-        const relevanceRate = stats.contractsWithRICT100Plus.size > 0
-            ? (stats.contractsWithAIOrRICT100Plus.size / stats.contractsWithRICT100Plus.size) * 100
-            : null;
+        const effectif = (agencyCode && agencyCode !== '__NONE__') ? (agencyPopulation[agencyCode] || 0) : 0;
 
-        // Adoption rates — capped at 100% (data quality guard)
-        // null = effectif inconnu (aucune base de calcul), 0 = vrais 0%
-        // Log any overflow to help diagnose directory vs data mismatches
-        if (effectif > 0 && stats.usersDescriptif.size > effectif) {
-            console.warn(`[Adoption >100%] ${agencyCode}: ${stats.usersDescriptif.size} users in data vs ${effectif} in directory`);
-            console.warn(`  emails in usersDescriptif not in agencyPopulation scope:`, [...stats.usersDescriptif].filter(e => emailToAgency[e] !== agencyCode));
-        }
-        const adoptionDescriptif  = effectif > 0 ? Math.min(100, (stats.usersDescriptif.size  / effectif) * 100) : null;
-        const adoptionAutocontact = effectif > 0 ? Math.min(100, (stats.usersAutocontact.size  / effectif) * 100) : null;
-        const adoptionComparateur = effectif > 0 ? Math.min(100, (stats.usersComparateur.size  / effectif) * 100) : null;
-        const adoptionExpertBTP   = effectif > 0 ? Math.min(100, (stats.usersExpertBTP.size    / effectif) * 100) : null;
-        const adoptionChatBTP     = effectif > 0 ? Math.min(100, (stats.usersChatBTP.size      / effectif) * 100) : null;
-        const adoptionGeotech     = effectif > 0 ? Math.min(100, (stats.usersGeotech.size      / effectif) * 100) : null;
-
-        const total = stats.descriptifCount + stats.autocontactCount + stats.comparateurCount + stats.expertBTPCount + stats.chatBTPCount + stats.geotechCount;
+        const pct = (num, den) => den > 0 ? Math.min(100, (num / den) * 100) : null;
+        const eligibles = stats.contractsEligibles.size;
+        const couvertes = stats.contractsCouverts.size;
 
         return {
             direction: finalDirection,
             agency: stats.agency,
-            relevanceRate: relevanceRate,
-            adoptionDescriptif: adoptionDescriptif,
-            adoptionAutocontact: adoptionAutocontact,
-            adoptionComparateur: adoptionComparateur,
-            adoptionExpertBTP: adoptionExpertBTP,
-            adoptionChatBTP: adoptionChatBTP,
-            adoptionGeotech: adoptionGeotech,
-            total: total
+            agencyCode: agencyCode,
+            effectif: effectif,
+            // Adoption (par personne)
+            adoptionDescriptif: pct(stats.usersDescriptif.size, effectif),
+            adoptionAutocontact: pct(stats.usersAutocontact.size, effectif),
+            adoptionComparateur: pct(stats.usersComparateur.size, effectif),
+            adoptionExpertBTP: pct(stats.usersExpertBTP.size, effectif),
+            adoptionChatBTP: pct(stats.usersChatBTP.size, effectif),
+            adoptionGeotech: pct(stats.usersGeotech.size, effectif),
+            adoptionGlobale: pct(stats.usersAny.size, effectif),
+            usersAny: stats.usersAny.size,
+            usersDescriptif: stats.usersDescriptif.size,
+            // Pertinence (par affaire)
+            eligibles: eligibles,
+            couvertes: couvertes,
+            couverture: eligibles > 0 ? (couvertes / eligibles) * 100 : null,
+            total: stats.descriptifCount + stats.autocontactCount + stats.comparateurCount + stats.expertBTPCount + stats.chatBTPCount + stats.geotechCount
         };
     });
-    
-    return statsArray;
 }
 
-// ==================== UPDATE TABLE ====================
+// ==================== BADGES ====================
 
-function updateAgencyTable() {
-    const stats = calculateAgencyStatistics();
-    
-    // Sort
-    const columnMapping = {
-        'direction': 'direction',
-        'agency': 'agency',
-        'descriptif': 'relevanceRate',
-        'autocontact': 'adoptionAutocontact',
-        'comparateur': 'adoptionComparateur',
-        'expert-btp': 'adoptionExpertBTP',
-        'chat-btp': 'adoptionChatBTP',
-        'geotech': 'adoptionGeotech',
-        'total': 'total'
-    };
-    
-    stats.sort((a, b) => {
-        const propertyName = columnMapping[tableSortState.column] || tableSortState.column;
-        let valA = a[propertyName];
-        let valB = b[propertyName];
-        if (valA === undefined || valA === null || isNaN(valA) || !isFinite(valA)) {
-            valA = typeof valA === 'string' ? '' : 0;
-        }
-        if (valB === undefined || valB === null || isNaN(valB) || !isFinite(valB)) {
-            valB = typeof valB === 'string' ? '' : 0;
-        }
+// Échelle indicative commune (adoption & couverture). Vert ≥50, jaune ≥30, orange ≥20, sinon rouge.
+function badgeHtml(rate) {
+    if (rate === null || rate === undefined || isNaN(rate)) return '<span class="text-gray-400">—</span>';
+    let bg = 'bg-red-500';
+    if (rate >= 50) bg = 'bg-green-500';
+    else if (rate >= 30) bg = 'bg-yellow-500';
+    else if (rate >= 20) bg = 'bg-orange-500';
+    return `<span class="px-3 py-1 rounded-full text-white font-bold ${bg}">${rate.toFixed(1)}%</span>`;
+}
+
+// ==================== SYNTHÈSE KPIs ====================
+
+function updateSynthese(stats) {
+    // Dénominateur = effectif des agences dans le périmètre courant (respecte direction/agence).
+    const selectedDirection = directionFilterEl.value;
+    const selectedAgency = agencyFilterEl.value;
+    let totalEffectif = 0;
+    Object.keys(agencyPopulation).forEach(code => {
+        if (selectedAgency) { if (code === selectedAgency.trim().toUpperCase()) totalEffectif += agencyPopulation[code]; }
+        else if (selectedDirection) { const dir = agencyToDR[code] || agencyToDirection[code] || ''; if (dir === selectedDirection) totalEffectif += agencyPopulation[code]; }
+        else totalEffectif += agencyPopulation[code];
+    });
+    // Numérateurs : utilisateurs uniques par agence de rattachement (chaque user = 1 seule agence).
+    const sumUsersAny = stats.reduce((s, a) => s + (a.usersAny || 0), 0);
+    const sumUsersDescriptif = stats.reduce((s, a) => s + (a.usersDescriptif || 0), 0);
+    const totalEligibles = stats.reduce((s, a) => s + (a.eligibles || 0), 0);
+    const totalCouvertes = stats.reduce((s, a) => s + (a.couvertes || 0), 0);
+
+    const cap = (v) => Math.min(100, v).toFixed(1) + '%';
+    document.getElementById('kpi-effectif').textContent = totalEffectif > 0 ? formatNumber(totalEffectif) : '—';
+    document.getElementById('kpi-adoption-globale').textContent = totalEffectif > 0 ? cap(sumUsersAny / totalEffectif * 100) : '—';
+    document.getElementById('kpi-adoption-descriptif').textContent = totalEffectif > 0 ? cap(sumUsersDescriptif / totalEffectif * 100) : '—';
+    document.getElementById('kpi-couverture-descriptif').textContent = totalEligibles > 0 ? cap(totalCouvertes / totalEligibles * 100) : '—';
+}
+
+// ==================== TABLES ====================
+
+function sortStats(stats, sortState) {
+    const arr = stats.slice();
+    arr.sort((a, b) => {
+        let valA = a[sortState.column], valB = b[sortState.column];
+        if (valA === undefined || valA === null || (typeof valA === 'number' && (isNaN(valA) || !isFinite(valA)))) valA = (typeof valA === 'string') ? '' : -1;
+        if (valB === undefined || valB === null || (typeof valB === 'number' && (isNaN(valB) || !isFinite(valB)))) valB = (typeof valB === 'string') ? '' : -1;
         if (typeof valA === 'string' && typeof valB === 'string') {
-            return tableSortState.ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            return sortState.ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
         const numA = typeof valA === 'number' ? valA : parseFloat(valA) || 0;
         const numB = typeof valB === 'number' ? valB : parseFloat(valB) || 0;
-        return tableSortState.ascending ? numA - numB : numB - numA;
+        return sortState.ascending ? numA - numB : numB - numA;
     });
-    
-    // Render
-    agencyTableBodyEl.innerHTML = '';
+    return arr;
+}
+
+function renderAdoptionTable() {
+    // On n'affiche dans l'adoption que les agences à effectif connu (sinon taux = —, non pertinent)
+    const stats = sortStats(currentStats.filter(s => s.effectif > 0), adoptionSort);
+    adoptionTableBodyEl.innerHTML = '';
     if (stats.length === 0) {
-        agencyTableBodyEl.innerHTML = `
-            <tr>
-                <td colspan="9" class="px-6 py-4 text-center text-gray-500">
-                    Aucune donnée disponible
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    stats.forEach((stat, index) => {
-        const tr = document.createElement('tr');
-        tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-        
-        // Helper function to get badge style for any rate
-        const getBadgeStyle = (rate) => {
-            if (rate === null || rate === undefined) {
-                return { bg: '', text: 'text-gray-500', content: '-' };
-            }
-            let bg = '';
-            let text = 'text-white font-bold';
-            if (rate >= 50) {
-                bg = 'bg-green-500';
-            } else if (rate >= 30) {
-                bg = 'bg-yellow-500';
-            } else if (rate >= 20) {
-                bg = 'bg-orange-500';
-            } else {
-                bg = 'bg-red-500';
-            }
-            return { bg, text, content: `${rate.toFixed(1)}%` };
-        };
-        
-        const descriptifBadge = getBadgeStyle(stat.relevanceRate);
-        const autocontactBadge = getBadgeStyle(stat.adoptionAutocontact);
-        const comparateurBadge = getBadgeStyle(stat.adoptionComparateur);
-        const expertBTPBadge = getBadgeStyle(stat.adoptionExpertBTP);
-        const chatBTPBadge = getBadgeStyle(stat.adoptionChatBTP);
-        const geotechBadge = getBadgeStyle(stat.adoptionGeotech);
-
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${escapeHtml(stat.direction)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(stat.agency)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${descriptifBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${descriptifBadge.bg} ${descriptifBadge.text}">${descriptifBadge.content}</span>` : '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${autocontactBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${autocontactBadge.bg} ${autocontactBadge.text}">${autocontactBadge.content}</span>` : '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${comparateurBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${comparateurBadge.bg} ${comparateurBadge.text}">${comparateurBadge.content}</span>` : '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${expertBTPBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${expertBTPBadge.bg} ${expertBTPBadge.text}">${expertBTPBadge.content}</span>` : '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${chatBTPBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${chatBTPBadge.bg} ${chatBTPBadge.text}">${chatBTPBadge.content}</span>` : '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${geotechBadge.content !== '-' ? `<span class="px-3 py-1 rounded-full ${geotechBadge.bg} ${geotechBadge.text}">${geotechBadge.content}</span>` : '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600 text-center">${formatNumber(stat.total)}</td>
-        `;
-        agencyTableBodyEl.appendChild(tr);
-    });
-    
-    updateSortIcons();
-    updateChart();
-}
-
-function updateSortIcons() {
-    ['direction', 'agency', 'descriptif', 'autocontact', 'comparateur', 'expert-btp', 'chat-btp', 'geotech', 'total'].forEach(col => {
-        const icon = document.getElementById(`sort-icon-${col}`);
-        if (icon) {
-            if (tableSortState.column === col) {
-                icon.textContent = tableSortState.ascending ? '↑' : '↓';
-                icon.className = 'ml-1 text-blue-600';
-            } else {
-                icon.textContent = '↕';
-                icon.className = 'ml-1 text-gray-400';
-            }
-        }
-    });
-}
-
-function sortTable(column) {
-    if (tableSortState.column === column) {
-        tableSortState.ascending = !tableSortState.ascending;
+        adoptionTableBodyEl.innerHTML = `<tr><td colspan="10" class="px-6 py-4 text-center text-gray-500">Aucune donnée disponible</td></tr>`;
     } else {
-        tableSortState.column = column;
-        tableSortState.ascending = false;
+        stats.forEach((s, index) => {
+            const tr = document.createElement('tr');
+            tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            tr.innerHTML = `
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${escapeHtml(s.direction)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(s.agency)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-600">${s.effectif > 0 ? formatNumber(s.effectif) : '—'}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center font-semibold">${badgeHtml(s.adoptionGlobale)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${badgeHtml(s.adoptionDescriptif)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${badgeHtml(s.adoptionAutocontact)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${badgeHtml(s.adoptionComparateur)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${badgeHtml(s.adoptionExpertBTP)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${badgeHtml(s.adoptionChatBTP)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${badgeHtml(s.adoptionGeotech)}</td>`;
+            adoptionTableBodyEl.appendChild(tr);
+        });
     }
-    updateAgencyTable();
+    document.getElementById('adoption-legend').innerHTML =
+        'Échelle indicative : <span class="px-2 py-0.5 rounded-full bg-green-500 text-white">≥ 50%</span> ' +
+        '<span class="px-2 py-0.5 rounded-full bg-yellow-500 text-white">30–49%</span> ' +
+        '<span class="px-2 py-0.5 rounded-full bg-orange-500 text-white">20–29%</span> ' +
+        '<span class="px-2 py-0.5 rounded-full bg-red-500 text-white">&lt; 20%</span> · « — » = effectif inconnu.';
+    updateSortIcons('ad-sort-', adoptionSort, ['direction', 'agency', 'effectif', 'adoptionGlobale', 'adoptionDescriptif', 'adoptionAutocontact', 'adoptionComparateur', 'adoptionExpertBTP', 'adoptionChatBTP', 'adoptionGeotech']);
 }
 
-window.sortTable = sortTable;
+function renderPertinenceTable() {
+    // On n'affiche que les agences avec un gisement éligible (sinon couverture non définie)
+    const stats = sortStats(currentStats.filter(s => s.eligibles > 0), pertinenceSort);
+    pertinenceTableBodyEl.innerHTML = '';
+    if (stats.length === 0) {
+        pertinenceTableBodyEl.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Aucune affaire éligible sur la période</td></tr>`;
+    } else {
+        stats.forEach((s, index) => {
+            const tr = document.createElement('tr');
+            tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            tr.innerHTML = `
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${escapeHtml(s.direction)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(s.agency)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-700">${formatNumber(s.eligibles)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-700">${formatNumber(s.couvertes)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center bg-violet-50/40">${badgeHtml(s.couverture)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center bg-emerald-50/40">${badgeHtml(s.adoptionDescriptif)}</td>`;
+            pertinenceTableBodyEl.appendChild(tr);
+        });
+    }
+    updateSortIcons('pe-sort-', pertinenceSort, ['direction', 'agency', 'eligibles', 'couvertes', 'couverture', 'adoptionDescriptif']);
+}
 
-// ==================== CHART ====================
+function updateSortIcons(prefix, sortState, columns) {
+    columns.forEach(col => {
+        const icon = document.getElementById(prefix + col);
+        if (!icon) return;
+        if (sortState.column === col) { icon.textContent = sortState.ascending ? '↑' : '↓'; icon.className = 'ml-1 text-blue-600'; }
+        else { icon.textContent = '↕'; icon.className = 'ml-1 text-gray-400'; }
+    });
+}
 
-function updateChart() {
+function sortAdoption(column) {
+    if (adoptionSort.column === column) adoptionSort.ascending = !adoptionSort.ascending;
+    else { adoptionSort.column = column; adoptionSort.ascending = false; }
+    renderAdoptionTable();
+}
+function sortPertinence(column) {
+    if (pertinenceSort.column === column) pertinenceSort.ascending = !pertinenceSort.ascending;
+    else { pertinenceSort.column = column; pertinenceSort.ascending = false; }
+    renderPertinenceTable();
+}
+window.sortAdoption = sortAdoption;
+window.sortPertinence = sortPertinence;
+
+// ==================== REFRESH (recalcule tout) ====================
+
+function refreshAll() {
+    currentStats = calculateAgencyStatistics();
+    updatePeriodBadge();
+    updateSynthese(currentStats);
+    renderAdoptionTable();
+    renderPertinenceTable();
+    updateAdoptionTimeChart();
+    updateAdoptionRankChart();
+    updateDescriptifCompareChart();
+    updateQuadrantChart();
+}
+
+function updatePeriodBadge() {
+    const badge = document.getElementById('period-badge');
+    const fmt = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : null;
+    let txt = 'Période : tout l\'historique';
+    if (dateFilter.startDate && dateFilter.endDate) txt = `Période : ${fmt(dateFilter.startDate)} → ${fmt(dateFilter.endDate)}`;
+    else if (dateFilter.startDate) txt = `Période : depuis le ${fmt(dateFilter.startDate)}`;
+    else if (dateFilter.endDate) txt = `Période : jusqu'au ${fmt(dateFilter.endDate)}`;
+    badge.textContent = txt;
+    const spsBadge = document.getElementById('sps-excluded-badge');
+    if (spsBadge) spsBadge.textContent = spsExcludedFromEffectif > 0
+        ? `· ${spsExcludedFromEffectif} collaborateur${spsExcludedFromEffectif > 1 ? 's' : ''} retiré${spsExcludedFromEffectif > 1 ? 's' : ''} de l'effectif`
+        : (spsEmails.size ? `· ${spsEmails.size} email${spsEmails.size > 1 ? 's' : ''} SPS exclus des usages` : '');
+}
+
+// ==================== CHART 1 : ADOPTION DANS LE TEMPS ====================
+// (courbe multi-outils, taux d'adoption cumulé = users / effectif filtré)
+
+function updateAdoptionTimeChart() {
     if (!adoptionChartEl) return;
-    
-    // Calculate adoption rates over time (monthly)
-    // We need to calculate rates for each month based on cumulative data
-    
-    // Helper function to get direction for an item (same as in calculateAgencyStatistics)
-    const getDirectionForItem = (item) => {
-        if (item.direction && item.direction.trim() !== '') {
-            return item.direction.trim();
-        }
-        // Try to get from agency code mapping
-        const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-        if (agencyCode && agencyToDR[agencyCode]) {
-            return agencyToDR[agencyCode];
-        }
-        if (agencyCode && agencyToDirection[agencyCode]) {
-            return agencyToDirection[agencyCode];
-        }
-        return 'Non spécifiée';
-    };
-    
-    // Helper to get agency code
-    const getAgencyCode = (item) => {
-        if (item.agencyCode) return item.agencyCode.trim().toUpperCase();
-        if (item.contractNumber) {
-            const extracted = extractAgency(item.contractNumber);
-            if (extracted) return extracted.trim().toUpperCase();
-        }
-        return (item.agency || '').trim().toUpperCase();
-    };
-    
-    // Process all data sources and group by month (cumulative)
+
     const allSources = [
-        // Descriptif = users qui ont produit au moins un AI deliverable de type descriptif
-        // SUR UNE DESCRIPTION SOURCE ≥ 100 MOTS. Cohérent avec le KPI métier et avec le
-        // taux de pertinence de la colonne descriptif du tableau.
         { data: descriptifData, tool: 'descriptif', filter: (item) => (!item.type || item.type === DESCRIPTIF_TYPE) && getDescWordCount(item) >= 100 },
         { data: autocontactData, tool: 'autocontact', filter: (item) => item.fromAI && !item.contractNumber.toUpperCase().includes('YIELD') },
         { data: comparateurData, tool: 'comparateur', filter: () => true },
         { data: expertBTPData, tool: 'expertBTP', filter: () => true },
         { data: chatBTPData, tool: 'chatBTP', filter: () => true },
-        // Geotech déjà dédupliqué par DeliverableId au parse → tout passe ici.
         { data: geotechData, tool: 'geotech', filter: () => true }
     ];
-    
-    // Get all dates and sort them
+
+    const isCountable = (email) => {
+        if (!email) return false;
+        const e = email.toLowerCase().trim();
+        if (spsEmails.has(e)) return false;
+        if (Object.keys(emailToAgency).length > 0) return !!emailToAgency[e];
+        return e.includes('@btp-consultants.fr') || e.includes('@citae.fr');
+    };
+
     const allDates = [];
     allSources.forEach(source => {
-        const filtered = getFilteredData(source.data);
-        filtered.forEach(item => {
-            if (!source.filter(item)) return;
-            if (!item.createdAt) return;
+        getFilteredData(source.data).forEach(item => {
+            if (!source.filter(item) || !item.createdAt) return;
             const date = parseFrenchDate(item.createdAt);
-            if (date) {
-                allDates.push(date);
-            }
+            if (date) allDates.push(date);
         });
     });
-    
-    if (allDates.length === 0) {
-        // Clear chart if no data
-        d3.select(adoptionChartEl).selectAll('*').remove();
-        return;
-    }
-    
-    // Group by month and find min/max dates
+    d3.select(adoptionChartEl).selectAll('*').remove();
+    if (allDates.length === 0) return;
+
     const monthlyGroups = {};
-    let minDate = null;
-    let maxDate = null;
-    
+    let minDate = null, maxDate = null;
     allDates.forEach(date => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const key = `${year}-${String(month + 1).padStart(2, '0')}`;
-        if (!monthlyGroups[key]) {
-            monthlyGroups[key] = new Date(year, month, 1);
-        }
+        const y = date.getFullYear(), m = date.getMonth();
+        const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+        if (!monthlyGroups[key]) monthlyGroups[key] = new Date(y, m, 1);
         if (!minDate || date < minDate) minDate = date;
         if (!maxDate || date > maxDate) maxDate = date;
     });
-    
-    // Create entries for ALL months between min and max (even if no data)
     if (minDate && maxDate) {
         const current = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
         const end = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-        
         while (current <= end) {
-            const year = current.getFullYear();
-            const month = current.getMonth();
-            const key = `${year}-${String(month + 1).padStart(2, '0')}`;
-            if (!monthlyGroups[key]) {
-                monthlyGroups[key] = new Date(year, month, 1);
-            }
+            const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthlyGroups[key]) monthlyGroups[key] = new Date(current.getFullYear(), current.getMonth(), 1);
             current.setMonth(current.getMonth() + 1);
         }
     }
-    
-    // Calculate cumulative adoption rates month by month
+
     const sortedMonths = Object.keys(monthlyGroups).sort();
     const chartData = [];
-    // Chart = taux d'adoption homogène pour tous les outils (% users / effectif).
-    // Le taux de pertinence du descriptif reste calculé dans la table (colonne dédiée).
-    const cumulativeUsers = {
-        descriptif: new Set(),
-        autocontact: new Set(),
-        comparateur: new Set(),
-        expertBTP: new Set(),
-        chatBTP: new Set(),
-        geotech: new Set()
-    };
-    
-    // Calculate filtered effectif based on current filters
+    const cumulativeUsers = { descriptif: new Set(), autocontact: new Set(), comparateur: new Set(), expertBTP: new Set(), chatBTP: new Set(), geotech: new Set() };
+
+    // Effectif filtré (selon direction/agence sélectionnée)
     let filteredEffectif = 0;
     const selectedDirection = directionFilterEl.value;
     const selectedAgency = agencyFilterEl.value;
-    
     if (selectedAgency) {
-        // If a specific agency is selected, use only that agency's effectif
-        // Find the agency code using the same logic as calculateAgencyStatistics
-        let agencyCode = null;
-        const sampleDescriptif = descriptifData.find(item => item.agency === selectedAgency);
-        const sampleAutocontact = autocontactData.find(item => item.agency === selectedAgency);
-        const sampleComparateur = comparateurData.find(item => item.agency === selectedAgency);
-        const sampleItem = sampleDescriptif || sampleAutocontact || sampleComparateur;
-        
-        if (sampleItem) {
-            if (sampleItem.agencyCode) {
-                agencyCode = sampleItem.agencyCode.trim().toUpperCase();
-            } else if (sampleItem.contractNumber) {
-                const extracted = extractAgency(sampleItem.contractNumber);
-                if (extracted) agencyCode = extracted.trim().toUpperCase();
-            } else {
-                agencyCode = (selectedAgency || '').trim().toUpperCase();
-            }
-        } else {
-            // Try direct match with agency name as code
-            agencyCode = (selectedAgency || '').trim().toUpperCase();
-        }
-        filteredEffectif = agencyCode ? (agencyPopulation[agencyCode] || 0) : 0;
+        const agencyCode = (selectedAgency || '').trim().toUpperCase();
+        filteredEffectif = agencyPopulation[agencyCode] || 0;
     } else if (selectedDirection) {
-        // If a direction is selected, sum effectif for all agencies in that direction
         Object.keys(agencyPopulation).forEach(code => {
-            const direction = agencyToDR[code] || agencyToDirection[code] || '';
-            if (direction === selectedDirection) {
-                filteredEffectif += agencyPopulation[code] || 0;
-            }
+            const dir = agencyToDR[code] || agencyToDirection[code] || '';
+            if (dir === selectedDirection) filteredEffectif += agencyPopulation[code] || 0;
         });
     } else {
-        // No filter: use total effectif
-        filteredEffectif = Object.values(agencyPopulation).reduce((sum, eff) => sum + eff, 0);
+        filteredEffectif = Object.values(agencyPopulation).reduce((s, e) => s + e, 0);
     }
-    
+
     const tools = ['descriptif', 'autocontact', 'comparateur', 'expertBTP', 'chatBTP', 'geotech'];
-    
-    // Helper function to check if item matches current filters (for descriptif calculation)
-    const matchesFilters = (item) => {
-        // Check date filter
-        if (dateFilter.startDate || dateFilter.endDate) {
-            const itemDate = parseFrenchDate(item.createdAt);
-            if (!itemDate) return false;
-            if (dateFilter.startDate) {
-                const start = new Date(dateFilter.startDate);
-                start.setHours(0, 0, 0, 0);
-                if (itemDate < start) return false;
-            }
-            if (dateFilter.endDate) {
-                const end = new Date(dateFilter.endDate);
-                end.setHours(23, 59, 59, 999);
-                if (itemDate > end) return false;
-            }
-        }
-        
-        // Check direction filter
-        if (selectedDirection) {
-            const itemDirection = getDirectionForItem(item);
-            if (itemDirection !== selectedDirection) return false;
-        }
-        
-        // Check agency filter
-        if (selectedAgency) {
-            const itemAgency = item.agency || 'Non spécifiée';
-            if (itemAgency !== selectedAgency) return false;
-        }
-        
-        return true;
-    };
-    
     sortedMonths.forEach(monthKey => {
         const monthDate = monthlyGroups[monthKey];
         const [year, month] = monthKey.split('-').map(Number);
-
-        // Add users from this month for each tool (descriptif inclus — taux d'adoption homogène)
         allSources.forEach(source => {
-            const filtered = getFilteredData(source.data);
-            filtered.forEach(item => {
-                if (!source.filter(item)) return;
-                if (!item.createdAt) return;
+            getFilteredData(source.data).forEach(item => {
+                if (!source.filter(item) || !item.createdAt) return;
                 const date = parseFrenchDate(item.createdAt);
-                if (date && date.getFullYear() === year && date.getMonth() === month - 1) {
-                    if (item.email && (item.email.includes('@btp-consultants.fr') || item.email.includes('@citae.fr'))) {
-                        cumulativeUsers[source.tool].add(item.email);
-                    }
+                if (date && date.getFullYear() === year && date.getMonth() === month - 1 && isCountable(item.email)) {
+                    cumulativeUsers[source.tool].add(item.email.toLowerCase().trim());
                 }
             });
         });
-
-        // Calculate cumulative adoption rate (% users / effectif) for all tools
         const rates = {};
-        tools.forEach(tool => {
-            rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0;
-        });
-
-        chartData.push({
-            date: monthDate,
-            ...rates
-        });
+        tools.forEach(tool => { rates[tool] = filteredEffectif > 0 ? (cumulativeUsers[tool].size / filteredEffectif) * 100 : 0; });
+        chartData.push({ date: monthDate, ...rates });
     });
-    
-    // Always clear previous chart first
-    d3.select(adoptionChartEl).selectAll('*').remove();
-    
-    if (chartData.length === 0) {
-        // Show message if no data
-        const svg = d3.select(adoptionChartEl)
-            .append('svg')
-            .attr('width', 400)
-            .attr('height', 200);
-        svg.append('text')
-            .attr('x', 200)
-            .attr('y', 100)
-            .attr('text-anchor', 'middle')
-            .style('font-size', '14px')
-            .style('fill', '#6b7280')
-            .text('Aucune donnée disponible pour les filtres sélectionnés');
-        return;
-    }
-    
-    // Ensure container has dimensions - use the actual container width
-    // Force a reflow to get accurate dimensions
+
     adoptionChartEl.style.width = '100%';
-    
-    // Force a reflow by accessing offsetHeight
     void adoptionChartEl.offsetHeight;
-    
-    // Use offsetWidth for more accurate measurement (includes padding/border)
-    let containerWidth = adoptionChartEl.offsetWidth;
-    
-    // If still no width, try clientWidth
-    if (!containerWidth || containerWidth === 0) {
-        containerWidth = adoptionChartEl.clientWidth;
-    }
-    
-    // If still no width, try parent with padding calculation
-    if (!containerWidth || containerWidth === 0) {
-        const parentContainer = adoptionChartEl.parentElement;
-        if (parentContainer) {
-            // Get computed style to account for padding
-            const parentStyle = window.getComputedStyle(parentContainer);
-            const parentPadding = parseFloat(parentStyle.paddingLeft) + parseFloat(parentStyle.paddingRight);
-            containerWidth = parentContainer.clientWidth - parentPadding;
-        }
-    }
-    
-    // Final fallback: use window width minus approximate page margins
-    if (!containerWidth || containerWidth === 0) {
-        containerWidth = Math.max(800, window.innerWidth - 200);
-    }
-    
-    const containerHeight = 400;
-    
+    let containerWidth = adoptionChartEl.offsetWidth || adoptionChartEl.clientWidth || 800;
     const margin = { top: 20, right: 150, bottom: 60, left: 60 };
     const width = Math.max(400, containerWidth - margin.left - margin.right);
-    const height = containerHeight - margin.top - margin.bottom;
-    
-    if (width <= 0 || height <= 0) {
-        console.warn('Chart container has invalid dimensions', { containerWidth, width, height });
-        // Set a minimum width
-        const minWidth = 400;
-        const minHeight = 300;
-        const svg = d3.select(adoptionChartEl)
-            .append('svg')
-            .attr('width', minWidth + margin.left + margin.right)
-            .attr('height', minHeight + margin.top + margin.bottom);
-        svg.append('text')
-            .attr('x', (minWidth + margin.left + margin.right) / 2)
-            .attr('y', (minHeight + margin.top + margin.bottom) / 2)
-            .attr('text-anchor', 'middle')
-            .text('Graphique non disponible');
-        return;
-    }
-    
-    // Use the full calculated width including margins for the SVG
-    const svgWidth = width + margin.left + margin.right;
-    const svgHeight = height + margin.top + margin.bottom;
-    
-    const svg = d3.select(adoptionChartEl)
-        .append('svg')
-        .attr('width', svgWidth)
-        .attr('height', svgHeight);
-    
-    const g = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-    
-    const x = d3.scaleTime()
-        .domain(d3.extent(chartData, d => d.date))
-        .range([0, width]);
-    
-    // Calculate max value across all tools for dynamic Y scale
-    let maxValue = 0;
-    tools.forEach(tool => {
-        const toolMax = d3.max(chartData, d => d[tool] || 0);
-        if (toolMax > maxValue) {
-            maxValue = toolMax;
-        }
-    });
-    
-    // Set Y domain dynamically, with a minimum of 10% and add some padding
-    const yMax = Math.max(10, Math.ceil(maxValue * 1.1)); // Add 10% padding, minimum 10%
-    const y = d3.scaleLinear()
-        .domain([0, yMax])
-        .nice()
-        .range([height, 0]);
-    
-    const colors = {
-        descriptif: '#3B82F6',
-        autocontact: '#10B981',
-        comparateur: '#F59E0B',
-        expertBTP: '#EF4444',
-        chatBTP: '#8B5CF6',
-        geotech: '#0EA5E9'
-    };
+    const height = 320;
+    const svg = d3.select(adoptionChartEl).append('svg').attr('width', width + margin.left + margin.right).attr('height', height + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const toolLabels = {
-        descriptif: 'Descriptif',
-        autocontact: 'Auto Contact',
-        comparateur: 'Comparateur',
-        expertBTP: 'Expert BTP',
-        chatBTP: 'Chat BTP',
-        geotech: 'Géotech'
-    };
-    
-    // Track visibility state for each tool
-    const visibility = {};
+    const x = d3.scaleTime().domain(d3.extent(chartData, d => d.date)).range([0, width]);
+    let maxValue = 0;
+    tools.forEach(tool => { const tm = d3.max(chartData, d => d[tool] || 0); if (tm > maxValue) maxValue = tm; });
+    const y = d3.scaleLinear().domain([0, Math.max(10, Math.ceil(maxValue * 1.1))]).nice().range([height, 0]);
+
+    const colors = { descriptif: '#3B82F6', autocontact: '#10B981', comparateur: '#F59E0B', expertBTP: '#EF4444', chatBTP: '#8B5CF6', geotech: '#0EA5E9' };
+    const toolLabels = { descriptif: 'Descriptif', autocontact: 'Auto Contact', comparateur: 'Comparateur', expertBTP: 'Expert BTP', chatBTP: 'Chat BTP', geotech: 'Géotech' };
+    const visibility = {}; tools.forEach(t => visibility[t] = true);
+
+    // grid
+    g.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(8).tickSize(-width).tickFormat('')).selectAll('line').style('stroke', '#e5e7eb').style('stroke-dasharray', '3,3');
+
+    // axes
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%m/%Y')));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(8).tickFormat(d => d + '%'));
+    g.append('text').attr('transform', 'rotate(-90)').attr('y', -margin.left).attr('x', -(height / 2)).attr('dy', '1em').style('text-anchor', 'middle').style('font-size', '12px').text("Taux d'adoption (%)");
+
+    const tooltip = g.append('g').style('opacity', 0).style('pointer-events', 'none');
+    const tooltipText = tooltip.append('text').style('font-size', '13px').style('font-weight', 'bold').style('text-anchor', 'middle');
+    const highlight = g.append('circle').attr('r', 6).attr('fill', 'none').attr('stroke-width', 2).style('opacity', 0);
+
     tools.forEach(tool => {
-        visibility[tool] = true;
+        const line = d3.line().x(d => x(d.date)).y(d => y(d[tool] || 0)).curve(d3.curveMonotoneX);
+        g.append('path').datum(chartData).attr('class', `line line-${tool}`).attr('d', line).attr('stroke', colors[tool]).attr('stroke-width', 2).attr('fill', 'none').style('pointer-events', 'none');
+        g.selectAll(`.dot-${tool}`).data(chartData).enter().append('circle').attr('class', `dot-${tool}`).attr('cx', d => x(d.date)).attr('cy', d => y(d[tool] || 0)).attr('r', 3.5).attr('fill', colors[tool]).style('pointer-events', 'none');
     });
-    
-    // Function to toggle visibility
-    const toggleVisibility = (tool) => {
-        visibility[tool] = !visibility[tool];
-        const opacity = visibility[tool] ? 1 : 0.2;
-        
-        // Toggle line
-        g.selectAll(`.line-${tool}`)
-            .style('opacity', opacity)
-            .style('pointer-events', visibility[tool] ? 'all' : 'none');
-        
-        // Toggle dots
-        g.selectAll(`.dot-${tool}`)
-            .style('opacity', opacity)
-            .style('pointer-events', visibility[tool] ? 'all' : 'none');
-        
-        // Update legend appearance
-        g.selectAll(`.legend-${tool}`)
-            .style('opacity', opacity)
-            .style('cursor', 'pointer');
-    };
-    
-    // Create tooltip element (without background)
-    const tooltip = g.append('g')
-        .attr('class', 'tooltip')
-        .style('opacity', 0)
-        .style('pointer-events', 'none');
-    
-    const tooltipText = tooltip.append('text')
-        .attr('x', 0)
-        .attr('y', 0)
-        .style('font-size', '13px')
-        .style('font-weight', 'bold')
-        .style('font-family', 'system-ui, -apple-system, sans-serif')
-        .style('text-anchor', 'middle')
-        .style('pointer-events', 'none');
-    
-    // Helper function to find closest point on a line
-    const findClosestPointOnLine = (mouseX, mouseY, tool) => {
-        if (visibility[tool] === false) return null;
-        
-        let closestPoint = null;
-        let minDistance = Infinity;
-        
-        // Check each segment of the line
-        for (let i = 0; i < chartData.length - 1; i++) {
-            const p1 = chartData[i];
-            const p2 = chartData[i + 1];
-            
-            const x1 = x(p1.date);
-            const y1 = y(p1[tool] || 0);
-            const x2 = x(p2.date);
-            const y2 = y(p2[tool] || 0);
-            
-            // Calculate distance from point to line segment
-            const A = mouseX - x1;
-            const B = mouseY - y1;
-            const C = x2 - x1;
-            const D = y2 - y1;
-            
-            const dot = A * C + B * D;
-            const lenSq = C * C + D * D;
-            let param = -1;
-            
-            if (lenSq !== 0) param = dot / lenSq;
-            
-            let xx, yy;
-            if (param < 0) {
-                xx = x1;
-                yy = y1;
-            } else if (param > 1) {
-                xx = x2;
-                yy = y2;
-            } else {
-                xx = x1 + param * C;
-                yy = y1 + param * D;
-            }
-            
-            const dx = mouseX - xx;
-            const dy = mouseY - yy;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance < minDistance) {
-                minDistance = distance;
-                // Use the point that's closer to the mouse
-                closestPoint = (param < 0.5) ? p1 : p2;
-            }
-        }
-        
-        return { point: closestPoint, distance: minDistance };
-    };
-    
-    // Helper function to find which tool's line is closest
-    const findClosestTool = (mouseX, mouseY) => {
-        let closestTool = null;
-        let minDistance = Infinity;
-        
+
+    const findClosest = (mx, my) => {
+        let best = null, bestDist = Infinity;
         tools.forEach(tool => {
-            if (visibility[tool] === false) return;
-            
-            const result = findClosestPointOnLine(mouseX, mouseY, tool);
-            if (result && result.distance < minDistance) {
-                minDistance = result.distance;
-                closestTool = { tool: tool, point: result.point, distance: result.distance };
-            }
+            if (!visibility[tool]) return;
+            chartData.forEach(d => {
+                const dx = mx - x(d.date), dy = my - y(d[tool] || 0);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < bestDist) { bestDist = dist; best = { tool, point: d }; }
+            });
         });
-        
-        // Only show tooltip if we're close enough (within 30 pixels)
-        if (closestTool && closestTool.distance < 30) {
-            return closestTool;
-        }
-        
-        return null;
+        return (best && bestDist < 30) ? best : null;
     };
-    
-    // Highlight circle for the hovered point
-    const highlightCircle = g.append('circle')
-        .attr('r', 6)
-        .attr('fill', 'none')
-        .attr('stroke-width', 2)
-        .style('opacity', 0)
-        .style('pointer-events', 'none');
-    
-    // Helper function to show tooltip
-    const showTooltip = (event, closestTool) => {
-        if (!closestTool) {
-            hideTooltip();
-            return;
-        }
-        
-        const { tool, point } = closestTool;
-        
-        const value = point[tool] || 0;
-        const color = colors[tool];
-        const dateStr = d3.timeFormat('%m/%Y')(point.date);
-        
-        // Get the point position on the chart
-        const pointX = x(point.date);
-        const pointY = y(point[tool] || 0);
-        
-        // Update tooltip text
-        tooltipText.selectAll('tspan').remove();
-        
-        // Date line (smaller, lighter)
-        tooltipText.append('tspan')
-            .attr('x', 0)
-            .attr('dy', '-1.2em')
-            .style('font-size', '11px')
-            .style('font-weight', 'normal')
-            .style('fill', '#6b7280')
-            .text(dateStr);
-        
-        // Value line with color (bold, larger)
-        tooltipText.append('tspan')
-            .attr('x', 0)
-            .attr('dy', '1.2em')
-            .style('fill', color)
-            .style('font-weight', 'bold')
-            .style('font-size', '13px')
-            .text(`${toolLabels[tool]}: ${value.toFixed(2)}%`);
-        
-        // Position tooltip above the point
-        let tooltipX = pointX;
-        let tooltipY = pointY - 25;
-        
-        // If tooltip would go above chart, show it below instead
-        if (tooltipY < 20) {
-            tooltipY = pointY + 25;
-        }
-        
-        // Keep tooltip within chart bounds
-        tooltipX = Math.max(50, Math.min(tooltipX, width - 50));
-        
-        tooltip
-            .attr('transform', `translate(${tooltipX}, ${tooltipY})`)
-            .style('opacity', 1);
-        
-        // Show highlight circle on the point
-        highlightCircle
-            .attr('cx', pointX)
-            .attr('cy', pointY)
-            .attr('stroke', color)
-            .style('opacity', 1);
-    };
-    
-    // Helper function to hide tooltip
-    const hideTooltip = () => {
-        tooltip.style('opacity', 0);
-        highlightCircle.style('opacity', 0);
-    };
-    
-    // Create invisible overlay for mouse tracking
-    const overlay = g.append('rect')
-        .attr('width', width)
-        .attr('height', height)
-        .attr('fill', 'transparent')
-        .style('cursor', 'crosshair')
-        .on('mousemove', function(event) {
-            const [mouseX, mouseY] = d3.pointer(event, g.node());
-            const closestTool = findClosestTool(mouseX, mouseY);
-            showTooltip(event, closestTool);
+    g.append('rect').attr('width', width).attr('height', height).attr('fill', 'transparent').style('cursor', 'crosshair')
+        .on('mousemove', function (event) {
+            const [mx, my] = d3.pointer(event, g.node());
+            const c = findClosest(mx, my);
+            if (!c) { tooltip.style('opacity', 0); highlight.style('opacity', 0); return; }
+            const px = x(c.point.date), py = y(c.point[c.tool] || 0);
+            tooltipText.selectAll('tspan').remove();
+            tooltipText.append('tspan').attr('x', 0).attr('dy', '-1.2em').style('font-size', '11px').style('font-weight', 'normal').style('fill', '#6b7280').text(d3.timeFormat('%m/%Y')(c.point.date));
+            tooltipText.append('tspan').attr('x', 0).attr('dy', '1.2em').style('fill', colors[c.tool]).text(`${toolLabels[c.tool]}: ${(c.point[c.tool] || 0).toFixed(1)}%`);
+            tooltip.attr('transform', `translate(${Math.max(50, Math.min(px, width - 50))}, ${py < 30 ? py + 25 : py - 25})`).style('opacity', 1);
+            highlight.attr('cx', px).attr('cy', py).attr('stroke', colors[c.tool]).style('opacity', 1);
         })
-        .on('mouseleave', hideTooltip);
-    
-    // Create line generator for each tool
-    tools.forEach(tool => {
-        const line = d3.line()
-            .x(d => x(d.date))
-            .y(d => y(d[tool] || 0))
-            .curve(d3.curveMonotoneX);
-        
-        g.append('path')
-            .datum(chartData)
-            .attr('class', `line line-${tool}`)
-            .attr('d', line)
-            .attr('stroke', colors[tool])
-            .attr('stroke-width', 2)
-            .attr('fill', 'none')
-            .style('pointer-events', 'none'); // Let overlay handle events
-        
-        // Add dots with hover effects
-        g.selectAll(`.dot-${tool}`)
-            .data(chartData)
-            .enter()
-            .append('circle')
-            .attr('class', `dot dot-${tool}`)
-            .attr('cx', d => x(d.date))
-            .attr('cy', d => y(d[tool] || 0))
-            .attr('r', 4)
-            .attr('fill', colors[tool])
-            .style('pointer-events', 'none'); // Let overlay handle events
+        .on('mouseleave', () => { tooltip.style('opacity', 0); highlight.style('opacity', 0); });
+
+    const legend = g.append('g').attr('transform', `translate(${width + 20}, 0)`);
+    tools.forEach((tool, i) => {
+        const row = legend.append('g').attr('transform', `translate(0, ${i * 24})`).style('cursor', 'pointer')
+            .on('click', () => {
+                visibility[tool] = !visibility[tool];
+                const op = visibility[tool] ? 1 : 0.15;
+                g.selectAll(`.line-${tool}`).style('opacity', op);
+                g.selectAll(`.dot-${tool}`).style('opacity', op);
+                row.style('opacity', visibility[tool] ? 1 : 0.4);
+            });
+        row.append('line').attr('x1', 0).attr('x2', 18).attr('y1', 9).attr('y2', 9).attr('stroke', colors[tool]).attr('stroke-width', 2);
+        row.append('circle').attr('cx', 9).attr('cy', 9).attr('r', 3.5).attr('fill', colors[tool]);
+        row.append('text').attr('x', 24).attr('y', 9).attr('dy', '.35em').style('font-size', '12px').text(toolLabels[tool]);
     });
-    
-    // Add grid lines (before axes so they appear behind)
-    // Horizontal grid lines
-    g.append('g')
-        .attr('class', 'grid')
-        .call(d3.axisLeft(y)
-            .ticks(10)
-            .tickSize(-width)
-            .tickFormat('')
-        )
-        .selectAll('line')
-        .style('stroke', '#e5e7eb')
-        .style('stroke-width', 1)
-        .style('stroke-dasharray', '3,3');
-    
-    // Vertical grid lines
-    g.append('g')
-        .attr('class', 'grid')
-        .attr('transform', `translate(0,${height})`)
-        .call(d3.axisBottom(x)
-            .ticks(6)
-            .tickSize(-height)
-            .tickFormat('')
-        )
-        .selectAll('line')
-        .style('stroke', '#e5e7eb')
-        .style('stroke-width', 1)
-        .style('stroke-dasharray', '3,3');
-    
-    // Add axes (after grid so they appear on top)
-    g.append('g')
-        .attr('class', 'axis')
-        .attr('transform', `translate(0,${height})`)
-        .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%m/%Y')));
-    
-    g.append('g')
-        .attr('class', 'axis')
-        .call(d3.axisLeft(y).ticks(10).tickFormat(d => d + '%'));
-    
-    // Add labels
-    g.append('text')
-        .attr('transform', 'rotate(-90)')
-        .attr('y', 0 - margin.left)
-        .attr('x', 0 - (height / 2))
-        .attr('dy', '1em')
-        .style('text-anchor', 'middle')
-        .text('Taux d\'adoption (%)');
-    
-    g.append('text')
-        .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 10})`)
-        .style('text-anchor', 'middle')
-        .text('Date');
-    
-    // Add legend
-    const legend = g.append('g')
-        .attr('transform', `translate(${width + 20}, 0)`);
-    
-    tools.forEach((tool, index) => {
-        const legendRow = legend.append('g')
-            .attr('class', `legend-${tool}`)
-            .attr('transform', `translate(0, ${index * 25})`)
-            .style('cursor', 'pointer')
-            .on('click', () => toggleVisibility(tool));
-        
-        legendRow.append('line')
-            .attr('x1', 0)
-            .attr('x2', 18)
-            .attr('y1', 9)
-            .attr('y2', 9)
-            .attr('stroke', colors[tool])
-            .attr('stroke-width', 2);
-        
-        legendRow.append('circle')
-            .attr('cx', 9)
-            .attr('cy', 9)
-            .attr('r', 4)
-            .attr('fill', colors[tool]);
-        
-        legendRow.append('text')
-            .attr('x', 24)
-            .attr('y', 9)
-            .attr('dy', '.35em')
-            .style('font-size', '12px')
-            .text(toolLabels[tool]);
+}
+
+// ==================== CHART 2 : CLASSEMENT ADOPTION GLOBALE ====================
+
+function updateAdoptionRankChart() {
+    const el = document.getElementById('adoption-rank-chart');
+    if (!el) return;
+    d3.select(el).selectAll('*').remove();
+
+    const data = currentStats.filter(s => s.effectif > 0 && s.adoptionGlobale != null && s.agencyCode !== '__NONE__')
+        .sort((a, b) => b.adoptionGlobale - a.adoptionGlobale);
+    if (data.length === 0) { el.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Aucune agence à effectif connu.</p>'; return; }
+
+    const rowH = 26;
+    const margin = { top: 10, right: 60, bottom: 30, left: 150 };
+    let containerWidth = el.offsetWidth || el.clientWidth || 800;
+    const width = Math.max(400, containerWidth - margin.left - margin.right);
+    const height = data.length * rowH;
+    const svg = d3.select(el).append('svg').attr('width', width + margin.left + margin.right).attr('height', height + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleLinear().domain([0, Math.max(10, d3.max(data, d => d.adoptionGlobale) * 1.1)]).range([0, width]);
+    const yb = d3.scaleBand().domain(data.map(d => d.agency)).range([0, height]).padding(0.18);
+
+    g.append('g').attr('transform', `translate(0,${height})`).attr('class', 'axis').call(d3.axisBottom(x).ticks(6).tickFormat(d => d + '%'));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(yb)).selectAll('text').style('font-size', '11px');
+
+    const color = (r) => r >= 50 ? '#22c55e' : r >= 30 ? '#eab308' : r >= 20 ? '#f97316' : '#ef4444';
+    g.selectAll('.bar').data(data).enter().append('rect')
+        .attr('x', 0).attr('y', d => yb(d.agency)).attr('height', yb.bandwidth()).attr('width', d => x(d.adoptionGlobale))
+        .attr('fill', d => color(d.adoptionGlobale)).attr('rx', 3)
+        .append('title').text(d => `${d.agency} — ${d.adoptionGlobale.toFixed(1)}% (effectif ${d.effectif})`);
+    g.selectAll('.lbl').data(data).enter().append('text')
+        .attr('x', d => x(d.adoptionGlobale) + 6).attr('y', d => yb(d.agency) + yb.bandwidth() / 2).attr('dy', '.35em')
+        .style('font-size', '11px').style('fill', '#374151').text(d => d.adoptionGlobale.toFixed(0) + '%');
+}
+
+// ==================== CHART 3 : ADOPTION vs COUVERTURE (DESCRIPTIF) ====================
+
+function updateDescriptifCompareChart() {
+    const el = document.getElementById('descriptif-compare-chart');
+    if (!el) return;
+    d3.select(el).selectAll('*').remove();
+
+    // Agences avec gisement éligible ET effectif connu (les deux mesures définies)
+    const data = currentStats.filter(s => s.eligibles > 0 && s.effectif > 0)
+        .map(s => ({ agency: s.agency, adoption: s.adoptionDescriptif || 0, couverture: s.couverture || 0 }))
+        .sort((a, b) => b.couverture - a.couverture);
+    if (data.length === 0) { el.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Aucune agence avec affaires éligibles et effectif connu.</p>'; return; }
+
+    const margin = { top: 20, right: 20, bottom: 90, left: 50 };
+    let containerWidth = el.offsetWidth || el.clientWidth || 800;
+    const width = Math.max(400, containerWidth - margin.left - margin.right);
+    const height = 300;
+    const svg = d3.select(el).append('svg').attr('width', width + margin.left + margin.right).attr('height', height + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x0 = d3.scaleBand().domain(data.map(d => d.agency)).range([0, width]).padding(0.25);
+    const x1 = d3.scaleBand().domain(['adoption', 'couverture']).range([0, x0.bandwidth()]).padding(0.08);
+    const y = d3.scaleLinear().domain([0, Math.max(10, d3.max(data, d => Math.max(d.adoption, d.couverture)) * 1.1)]).nice().range([height, 0]);
+
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(6).tickFormat(d => d + '%'));
+    g.append('g').attr('transform', `translate(0,${height})`).attr('class', 'axis').call(d3.axisBottom(x0))
+        .selectAll('text').attr('transform', 'rotate(-40)').style('text-anchor', 'end').style('font-size', '10px');
+
+    const colors = { adoption: '#10B981', couverture: '#8B5CF6' };
+    const groups = g.selectAll('.grp').data(data).enter().append('g').attr('transform', d => `translate(${x0(d.agency)},0)`);
+    ['adoption', 'couverture'].forEach(key => {
+        groups.append('rect')
+            .attr('x', x1(key)).attr('y', d => y(d[key])).attr('width', x1.bandwidth()).attr('height', d => height - y(d[key]))
+            .attr('fill', colors[key]).attr('rx', 2)
+            .append('title').text(d => `${d.agency} — ${key === 'adoption' ? 'Adoption' : 'Couverture'} ${d[key].toFixed(1)}%`);
     });
+}
+
+// ==================== CHART 4 : QUADRANT ADOPTION × COUVERTURE ====================
+
+function updateQuadrantChart() {
+    const el = document.getElementById('descriptif-quadrant-chart');
+    if (!el) return;
+    d3.select(el).selectAll('*').remove();
+
+    const data = currentStats.filter(s => s.eligibles > 0 && s.effectif > 0 && s.adoptionDescriptif != null && s.couverture != null)
+        .map(s => ({ agency: s.agency, x: s.adoptionDescriptif, y: s.couverture, effectif: s.effectif }));
+    if (data.length === 0) { el.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Données insuffisantes pour la cartographie.</p>'; return; }
+
+    const margin = { top: 20, right: 20, bottom: 50, left: 55 };
+    let containerWidth = el.offsetWidth || el.clientWidth || 800;
+    const width = Math.max(400, containerWidth - margin.left - margin.right);
+    const height = 360;
+    const svg = d3.select(el).append('svg').attr('width', width + margin.left + margin.right).attr('height', height + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const xMax = Math.max(10, d3.max(data, d => d.x) * 1.15);
+    const yMax = Math.max(10, d3.max(data, d => d.y) * 1.15);
+    const x = d3.scaleLinear().domain([0, xMax]).range([0, width]);
+    const y = d3.scaleLinear().domain([0, yMax]).range([height, 0]);
+    const r = d3.scaleSqrt().domain([0, d3.max(data, d => d.effectif) || 1]).range([4, 22]);
+    const meanX = d3.mean(data, d => d.x), meanY = d3.mean(data, d => d.y);
+
+    // Quadrant guides (moyennes)
+    g.append('line').attr('x1', x(meanX)).attr('x2', x(meanX)).attr('y1', 0).attr('y2', height).attr('stroke', '#cbd5e1').attr('stroke-dasharray', '4,4');
+    g.append('line').attr('x1', 0).attr('x2', width).attr('y1', y(meanY)).attr('y2', y(meanY)).attr('stroke', '#cbd5e1').attr('stroke-dasharray', '4,4');
+
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(6).tickFormat(d => d + '%'));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(6).tickFormat(d => d + '%'));
+    g.append('text').attr('x', width / 2).attr('y', height + 40).style('text-anchor', 'middle').style('font-size', '12px').style('fill', '#10B981').text("Adoption Descriptif (% collaborateurs) →");
+    g.append('text').attr('transform', 'rotate(-90)').attr('x', -height / 2).attr('y', -42).style('text-anchor', 'middle').style('font-size', '12px').style('fill', '#8B5CF6').text("Couverture (% affaires éligibles) →");
+
+    g.selectAll('.bubble').data(data).enter().append('circle')
+        .attr('cx', d => x(d.x)).attr('cy', d => y(d.y)).attr('r', d => r(d.effectif))
+        .attr('fill', '#6366f1').attr('fill-opacity', 0.35).attr('stroke', '#4f46e5').attr('stroke-width', 1)
+        .append('title').text(d => `${d.agency}\nAdoption ${d.x.toFixed(1)}% · Couverture ${d.y.toFixed(1)}%\nEffectif ${d.effectif}`);
+    g.selectAll('.blabel').data(data).enter().append('text')
+        .attr('x', d => x(d.x)).attr('y', d => y(d.y) - r(d.effectif) - 3).attr('text-anchor', 'middle')
+        .style('font-size', '9px').style('fill', '#475569').text(d => d.agency);
 }
 
 // ==================== EVENT LISTENERS ====================
 
-startDateEl.addEventListener('change', () => {
-    dateFilter.startDate = startDateEl.value;
-    updateAgencyTable();
-    updateChart();
-});
-
-endDateEl.addEventListener('change', () => {
-    dateFilter.endDate = endDateEl.value;
-    updateAgencyTable();
-    updateChart();
-});
-
-directionFilterEl.addEventListener('change', () => {
-    populateAgencyFilter();
-    updateAgencyTable();
-    updateChart();
-});
-
-agencyFilterEl.addEventListener('change', () => {
-    updateAgencyTable();
-    updateChart();
-});
-
+startDateEl.addEventListener('change', () => { dateFilter.startDate = startDateEl.value; refreshAll(); });
+endDateEl.addEventListener('change', () => { dateFilter.endDate = endDateEl.value; refreshAll(); });
+directionFilterEl.addEventListener('change', () => { populateAgencyFilter(); refreshAll(); });
+agencyFilterEl.addEventListener('change', () => { refreshAll(); });
 resetFiltersBtn.addEventListener('click', () => {
-    startDateEl.value = '';
-    endDateEl.value = '';
-    directionFilterEl.value = '';
-    agencyFilterEl.value = '';
-    dateFilter.startDate = null;
-    dateFilter.endDate = null;
-    populateAgencyFilter();
-    updateAgencyTable();
-    updateChart();
+    startDateEl.value = ''; endDateEl.value = ''; directionFilterEl.value = ''; agencyFilterEl.value = '';
+    dateFilter.startDate = null; dateFilter.endDate = null;
+    populateAgencyFilter(); refreshAll();
 });
+logoutBtn.addEventListener('click', () => { localStorage.removeItem('roi_password'); window.location.reload(); });
 
-logoutBtn.addEventListener('click', () => {
-    localStorage.removeItem('roi_password');
-    window.location.reload();
-});
-
-// Handle window resize for chart
 let resizeTimeout;
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-        updateChart();
-    }, 250);
-});
+window.addEventListener('resize', () => { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(refreshAll, 250); });
 
 // ==================== AUTHENTICATION ====================
 
 async function authenticateWithPassword(password) {
     try {
-        const response = await fetch(WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: password
-        });
+        const response = await fetch(WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: password });
         if (!response.ok) return false;
         const result = await response.text();
         const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
@@ -1818,13 +1192,8 @@ async function checkAuthentication() {
     const storedPassword = localStorage.getItem('roi_password');
     if (storedPassword) {
         const success = await authenticateWithPassword(storedPassword);
-        if (success) {
-            loginModal.classList.add('hidden');
-            await loadData();
-            return;
-        } else {
-            localStorage.removeItem('roi_password');
-        }
+        if (success) { loginModal.classList.add('hidden'); await loadData(); return; }
+        else localStorage.removeItem('roi_password');
     }
     loginModal.classList.remove('hidden');
     passwordInput.focus();
@@ -1834,21 +1203,10 @@ loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const password = passwordInput.value.trim();
     if (!password) return;
-    loginButton.disabled = true;
-    loginText.textContent = 'Connexion...';
-    loginError.classList.add('hidden');
+    loginButton.disabled = true; loginText.textContent = 'Connexion...'; loginError.classList.add('hidden');
     const success = await authenticateWithPassword(password);
-    if (success) {
-        localStorage.setItem('roi_password', password);
-        loginModal.classList.add('hidden');
-        await loadData();
-    } else {
-        loginError.classList.remove('hidden');
-        loginButton.disabled = false;
-        loginText.textContent = 'Se connecter';
-        passwordInput.value = '';
-        passwordInput.focus();
-    }
+    if (success) { localStorage.setItem('roi_password', password); loginModal.classList.add('hidden'); await loadData(); }
+    else { loginError.classList.remove('hidden'); loginButton.disabled = false; loginText.textContent = 'Se connecter'; passwordInput.value = ''; passwordInput.focus(); }
 });
 
 // ==================== DATA LOADING ====================
@@ -1858,209 +1216,99 @@ async function loadData() {
         loadingEl.classList.remove('hidden');
         errorEl.classList.add('hidden');
         mainContentEl.classList.add('hidden');
-        
-        // Load population data FIRST (needed for direction mapping)
+
+        // 1) Emails SPS D'ABORD (nécessaire pour exclure SPS de l'effectif au chargement annuaire)
+        await loadSpsEmails();
+
+        // 2) Population / annuaire (SPS exclu)
         try {
             const popResponse = await fetch(POPULATION_URL);
-            if (popResponse.ok) {
-                const popCsv = await popResponse.text();
-                parsePopulationData(popCsv);
-            }
-        } catch (e) {
-            console.warn('Error loading population data:', e);
-        }
-        
-        // Load descriptif data
+            if (popResponse.ok) parsePopulationData(await popResponse.text());
+        } catch (e) { console.warn('Erreur chargement population:', e); }
+
+        // 3) Descriptif (+ RICT pour le gisement éligible)
         const descriptifResponse = await fetch(DESCRIPTIF_URL);
-        if (!descriptifResponse.ok) throw new Error(`Failed to load descriptif: ${descriptifResponse.status}`);
+        if (!descriptifResponse.ok) throw new Error(`Failed descriptif: ${descriptifResponse.status}`);
         const descriptifRaw = await descriptifResponse.text();
         let descriptifCSV = null;
-        try {
-            const descriptifJson = JSON.parse(descriptifRaw);
-            if (Array.isArray(descriptifJson) && descriptifJson[0] && descriptifJson[0].data) {
-                descriptifCSV = descriptifJson[0].data;
-            }
-        } catch (e) {}
+        try { const j = JSON.parse(descriptifRaw); if (Array.isArray(j) && j[0] && j[0].data) descriptifCSV = j[0].data; } catch (e) {}
         if (descriptifCSV) {
             allRictData = parseDescriptifCSV(descriptifCSV);
-            // Card 138 (LEAN) returns ALL RICT — including those WITHOUT an AI deliverable
-            // (type is empty/NULL). For the descriptif relevance rate, the numerator must
-            // only count contracts where AI was actually used, so we filter descriptifData
-            // to AI rows only. The denominator (contracts with RICT ≥ 100 mots) still uses
-            // allRictData since it's based on the source description, not the AI output.
-            // Legacy fallback: if NO row has a type at all, the export was pre-filtered
-            // upstream (old metabase format) → keep everything.
             const anyHasType = allRictData.some(item => item.type && item.type.trim() !== '');
-            descriptifData = anyHasType
-                ? allRictData.filter(item => item.type === DESCRIPTIF_TYPE)
-                : allRictData;
-            
-            // Enrich with direction from population mapping
-            allRictData.forEach(item => {
-                if (!item.direction || item.direction.trim() === '') {
-                    const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-                    if (agencyCode && agencyToDR[agencyCode]) {
-                        item.direction = agencyToDR[agencyCode];
-                    }
-                }
-            });
-            descriptifData.forEach(item => {
-                if (!item.direction || item.direction.trim() === '') {
-                    const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-                    if (agencyCode && agencyToDR[agencyCode]) {
-                        item.direction = agencyToDR[agencyCode];
-                    }
-                }
-            });
+            descriptifData = anyHasType ? allRictData.filter(item => item.type === DESCRIPTIF_TYPE) : allRictData;
+            const enrich = (item) => { if (!item.direction || item.direction.trim() === '') { const c = item.agency ? item.agency.trim().toUpperCase() : ''; if (c && agencyToDR[c]) item.direction = agencyToDR[c]; } };
+            allRictData.forEach(enrich); descriptifData.forEach(enrich);
         }
-        
-        // Load autocontact data
+
+        // 4) Auto Contact
         const autocontactResponse = await fetch(AUTOCONTACT_URL);
-        if (!autocontactResponse.ok) throw new Error(`Failed to load autocontact: ${autocontactResponse.status}`);
-        const autocontactRaw = await autocontactResponse.text();
+        if (!autocontactResponse.ok) throw new Error(`Failed autocontact: ${autocontactResponse.status}`);
         let autocontactCSV = null;
-        try {
-            const autocontactJson = JSON.parse(autocontactRaw);
-            if (Array.isArray(autocontactJson) && autocontactJson[0] && autocontactJson[0].data) {
-                autocontactCSV = autocontactJson[0].data;
-            }
-        } catch (e) {}
+        try { const j = JSON.parse(await autocontactResponse.text()); if (Array.isArray(j) && j[0] && j[0].data) autocontactCSV = j[0].data; } catch (e) {}
         if (autocontactCSV) {
             autocontactData = parseAutocontactCSV(autocontactCSV);
-            
-            // Enrich with direction from population mapping
-            autocontactData.forEach(item => {
-                if (!item.direction || item.direction.trim() === '') {
-                    const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-                    if (agencyCode && agencyToDR[agencyCode]) {
-                        item.direction = agencyToDR[agencyCode];
-                    }
-                }
-            });
+            autocontactData.forEach(item => { if (!item.direction || item.direction.trim() === '') { const c = item.agency ? item.agency.trim().toUpperCase() : ''; if (c && agencyToDR[c]) item.direction = agencyToDR[c]; } });
         }
-        
-        // Load comparateur data
+
+        // 5) Comparateur
         const comparateurResponse = await fetch(COMPARATEUR_URL);
-        if (!comparateurResponse.ok) throw new Error(`Failed to load comparateur: ${comparateurResponse.status}`);
-        const comparateurRaw = await comparateurResponse.text();
+        if (!comparateurResponse.ok) throw new Error(`Failed comparateur: ${comparateurResponse.status}`);
         let comparateurCSV = null;
-        try {
-            const comparateurJson = JSON.parse(comparateurRaw);
-            if (Array.isArray(comparateurJson) && comparateurJson[0] && comparateurJson[0].data) {
-                comparateurCSV = comparateurJson[0].data;
-            }
-        } catch (e) {}
+        try { const j = JSON.parse(await comparateurResponse.text()); if (Array.isArray(j) && j[0] && j[0].data) comparateurCSV = j[0].data; } catch (e) {}
         if (comparateurCSV) {
             comparateurData = parseComparateurCSV(comparateurCSV);
-            
-            // Enrich with direction from population mapping
-            comparateurData.forEach(item => {
-                if (!item.direction || item.direction.trim() === '') {
-                    const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-                    if (agencyCode && agencyToDR[agencyCode]) {
-                        item.direction = agencyToDR[agencyCode];
-                    }
-                }
-            });
-        }
-        
-        // Load Expert BTP data
-        try {
-            const expertBTPResponse = await fetch(EXPERT_BTP_URL);
-            if (expertBTPResponse.ok) {
-                const expertBTPJson = await expertBTPResponse.json();
-                expertBTPData = expertBTPJson.map(item => {
-                    const metadata = item.metadata || {};
-                    const productionService = metadata.productionService || '';
-                    const management = metadata.management || '';
-                    const agencyCode = productionService.trim().toUpperCase();
-                    // Use direction from population mapping if available
-                    const directionFromMapping = agencyCode && agencyToDR[agencyCode] ? agencyToDR[agencyCode] : '';
-                    return {
-                        id: item.id,
-                        email: item.email || '',
-                        createdAt: item.createdAt || '',
-                        messagesLength: item.messagesLength || item._count?.messages || 0,
-                        agency: productionService,
-                        direction: management || directionFromMapping || ''
-                    };
-                });
-            }
-        } catch (e) {
-            console.warn('Error loading Expert BTP data:', e);
-        }
-        
-        // Load Chat BTP data
-        try {
-            const chatBTPResponse = await fetch(CHAT_BTP_URL);
-            if (chatBTPResponse.ok) {
-                const chatBTPJson = await chatBTPResponse.json();
-                chatBTPData = chatBTPJson.map(item => {
-                    const metadata = item.metadata || {};
-                    const productionService = metadata.productionService || '';
-                    const management = metadata.management || '';
-                    const agencyCode = productionService.trim().toUpperCase();
-                    // Use direction from population mapping if available
-                    const directionFromMapping = agencyCode && agencyToDR[agencyCode] ? agencyToDR[agencyCode] : '';
-                    return {
-                        id: item.id,
-                        email: item.email || '',
-                        createdAt: item.createdAt || '',
-                        messagesLength: item.messagesLength || item._count?.messages || 0,
-                        agency: productionService,
-                        direction: management || directionFromMapping || ''
-                    };
-                });
-            }
-        } catch (e) {
-            console.warn('Error loading Chat BTP data:', e);
+            comparateurData.forEach(item => { if (!item.direction || item.direction.trim() === '') { const c = item.agency ? item.agency.trim().toUpperCase() : ''; if (c && agencyToDR[c]) item.direction = agencyToDR[c]; } });
         }
 
-        // Load Analyse Géotechnique data (Card 139)
+        // 6) Expert BTP (CT)
         try {
-            const geotechResponse = await fetch(GEOTECH_URL);
-            if (geotechResponse.ok) {
-                const geotechRaw = await geotechResponse.text();
+            const r = await fetch(EXPERT_BTP_URL);
+            if (r.ok) {
+                const j = await r.json();
+                expertBTPData = j.map(item => {
+                    const m = item.metadata || {};
+                    const ps = m.productionService || '';
+                    const c = ps.trim().toUpperCase();
+                    return { id: item.id, email: item.email || '', createdAt: item.createdAt || '', agency: ps, direction: m.management || (c && agencyToDR[c] ? agencyToDR[c] : '') };
+                });
+            }
+        } catch (e) { console.warn('Erreur Expert BTP:', e); }
+
+        // 7) Chat BTP (CT)
+        try {
+            const r = await fetch(CHAT_BTP_URL);
+            if (r.ok) {
+                const j = await r.json();
+                chatBTPData = j.map(item => {
+                    const m = item.metadata || {};
+                    const ps = m.productionService || '';
+                    const c = ps.trim().toUpperCase();
+                    return { id: item.id, email: item.email || '', createdAt: item.createdAt || '', agency: ps, direction: m.management || (c && agencyToDR[c] ? agencyToDR[c] : '') };
+                });
+            }
+        } catch (e) { console.warn('Erreur Chat BTP:', e); }
+
+        // 8) Géotech
+        try {
+            const r = await fetch(GEOTECH_URL);
+            if (r.ok) {
                 let geotechCSV = null;
-                try {
-                    const geotechJson = JSON.parse(geotechRaw);
-                    if (Array.isArray(geotechJson) && geotechJson[0] && geotechJson[0].data) {
-                        geotechCSV = geotechJson[0].data;
-                    }
-                } catch (e) {}
+                try { const j = JSON.parse(await r.text()); if (Array.isArray(j) && j[0] && j[0].data) geotechCSV = j[0].data; } catch (e) {}
                 if (geotechCSV) {
                     geotechData = parseGeotechCSV(geotechCSV);
-                    // Enrich direction from population mapping if missing
-                    geotechData.forEach(item => {
-                        if (!item.direction || item.direction.trim() === '') {
-                            const agencyCode = item.agency ? item.agency.trim().toUpperCase() : '';
-                            if (agencyCode && agencyToDR[agencyCode]) {
-                                item.direction = agencyToDR[agencyCode];
-                            }
-                        }
-                    });
+                    geotechData.forEach(item => { if (!item.direction || item.direction.trim() === '') { const c = item.agency ? item.agency.trim().toUpperCase() : ''; if (c && agencyToDR[c]) item.direction = agencyToDR[c]; } });
                 }
             }
-        } catch (e) {
-            console.warn('Error loading Geotech data:', e);
-        }
+        } catch (e) { console.warn('Erreur Géotech:', e); }
 
-        // Extract directions and agencies
         extractDirectionsAndAgencies();
         populateFilters();
-        
-        // Show content first to ensure DOM is rendered
+
         loadingEl.classList.add('hidden');
         mainContentEl.classList.remove('hidden');
-        
-        // Update table immediately
-        updateAgencyTable();
-        
-        // Update chart after a delay to ensure layout is complete and container has dimensions
-        setTimeout(() => {
-            updateChart();
-        }, 200);
-        
+
+        refreshAll();
+        setTimeout(refreshAll, 200); // re-render charts après layout (largeur conteneur)
     } catch (error) {
         console.error('Error loading data:', error);
         loadingEl.classList.add('hidden');
