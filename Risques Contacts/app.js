@@ -512,6 +512,141 @@ function showEntrepriseDetail(name) {
   modal.classList.add('active');
 }
 
+// ============================================================================
+// ANALYSES COMPLÉMENTAIRES (onglets génériques, chargés à la demande)
+// Chaque analyse = 1 fichier JSON agrégé sur Supabase, rendu en tableau
+// générique (colonnes dynamiques, tri au clic, recherche, pagination).
+// ============================================================================
+const DATA_BASE = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/';
+const ANALYSES = [
+  { key: 'taux',    label: 'Taux défav. (entr.)', file: DATA_BASE + 'risk_taux_entreprise.json',  search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...' },
+  { key: 'ouvert',  label: 'Risque ouvert',       file: DATA_BASE + 'risk_ouvert_entreprise.json', search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...' },
+  { key: 'collab',  label: 'Collaborateurs',      file: DATA_BASE + 'risk_collaborateur.json',      search: ['Collaborateur', 'Agence'], placeholder: 'Rechercher un collaborateur / agence...' },
+  { key: 'agence',  label: 'Agences',             file: DATA_BASE + 'risk_agence.json',             search: ['Agence'],       placeholder: 'Rechercher une agence...' },
+  { key: 'mission', label: 'Missions',            file: DATA_BASE + 'risk_mission.json',            search: ['Mission'],      placeholder: 'Rechercher une mission...' },
+  { key: 'dept',    label: 'Départements',        file: DATA_BASE + 'risk_departement.json',        search: ['Département'],  placeholder: 'Rechercher un département...' }
+];
+const analysisCache = {};
+const analysisUI = {};
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function fmtNum(v) {
+  if (typeof v !== 'number') return v;
+  return Number.isInteger(v) ? v.toLocaleString('fr-FR') : v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+}
+
+function debounceLocal(fn, ms) {
+  let t;
+  return () => { clearTimeout(t); t = setTimeout(fn, ms); };
+}
+
+function setupAnalyses() {
+  const nav = document.querySelector('nav.tabs');
+  const main = document.getElementById('mainContent');
+  if (!nav || !main) return;
+  for (const a of ANALYSES) {
+    analysisUI[a.key] = { page: 1, sortCol: null, sortDir: -1, query: '' };
+    const btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.dataset.view = a.key;
+    btn.textContent = a.label;
+    nav.appendChild(btn);
+
+    const sec = document.createElement('section');
+    sec.id = 'view' + cap(a.key);
+    sec.className = 'view';
+    sec.innerHTML = `
+      <div class="search-bar">
+        <input type="text" id="search_${a.key}" placeholder="${a.placeholder}">
+        <span class="result-count" id="count_${a.key}"></span>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead id="thead_${a.key}"></thead>
+          <tbody id="tbody_${a.key}"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pag_${a.key}"></div>`;
+    main.appendChild(sec);
+
+    btn.addEventListener('click', () => activateAnalysis(a));
+    sec.querySelector('#search_' + a.key).addEventListener('input', debounceLocal(() => {
+      analysisUI[a.key].query = document.getElementById('search_' + a.key).value;
+      analysisUI[a.key].page = 1;
+      renderAnalysis(a);
+    }, 250));
+  }
+}
+
+function activateAnalysis(a) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === a.key));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view' + cap(a.key)).classList.add('active');
+  if (!analysisCache[a.key]) loadAnalysis(a); else renderAnalysis(a);
+}
+
+async function loadAnalysis(a) {
+  const tb = document.getElementById('tbody_' + a.key);
+  tb.innerHTML = '<tr><td class="empty-state" colspan="20">Chargement…</td></tr>';
+  try {
+    const d = await loadJsonFromUrl(a.file);
+    analysisCache[a.key] = Array.isArray(d) ? d : [];
+    renderAnalysis(a);
+  } catch (e) {
+    tb.innerHTML = `<tr><td class="empty-state" colspan="20">Erreur: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderAnalysis(a) {
+  const rows = analysisCache[a.key] || [];
+  const ui = analysisUI[a.key];
+  const cols = rows.length ? Object.keys(rows[0]) : [];
+
+  const q = (ui.query || '').toLowerCase().trim();
+  let filtered = rows;
+  if (q) {
+    const keys = (a.search && a.search.length) ? a.search : cols;
+    filtered = rows.filter(r => keys.some(k => String(r[k] ?? '').toLowerCase().includes(q)));
+  }
+  if (ui.sortCol) {
+    const c = ui.sortCol, dir = ui.sortDir;
+    filtered = filtered.slice().sort((x, y) => {
+      const xa = x[c], ya = y[c];
+      if (typeof xa === 'number' && typeof ya === 'number') return (xa - ya) * dir;
+      return String(xa ?? '').localeCompare(String(ya ?? '')) * dir;
+    });
+  }
+
+  const thead = document.getElementById('thead_' + a.key);
+  thead.innerHTML = '<tr>' + cols.map(c =>
+    `<th data-col="${escapeHtml(c)}" style="cursor:pointer;white-space:nowrap">${escapeHtml(c)}${ui.sortCol === c ? (ui.sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`
+  ).join('') + '</tr>';
+  thead.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+    const c = th.dataset.col;
+    if (ui.sortCol === c) ui.sortDir = -ui.sortDir; else { ui.sortCol = c; ui.sortDir = -1; }
+    ui.page = 1;
+    renderAnalysis(a);
+  }));
+
+  document.getElementById('count_' + a.key).textContent = `${filtered.length} ligne(s)`;
+
+  const start = (ui.page - 1) * PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+  const tb = document.getElementById('tbody_' + a.key);
+  if (!pageRows.length) {
+    tb.innerHTML = `<tr><td class="empty-state" colspan="${cols.length || 1}">Aucune donnée</td></tr>`;
+    document.getElementById('pag_' + a.key).innerHTML = '';
+    return;
+  }
+  tb.innerHTML = pageRows.map(r => '<tr>' + cols.map(c => {
+    const v = r[c];
+    const isNum = typeof v === 'number';
+    return `<td class="${isNum ? 'num-cell' : ''}">${isNum ? fmtNum(v) : escapeHtml(String(v ?? ''))}</td>`;
+  }).join('') + '</tr>').join('');
+  renderPagination('pag_' + a.key, filtered.length, ui.page, (p) => { ui.page = p; renderAnalysis(a); });
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', () => {
   const loginOverlay = document.getElementById('loginOverlay');
@@ -622,6 +757,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('entrepriseModal').addEventListener('click', (e) => {
     if (e.target.id === 'entrepriseModal') e.target.classList.remove('active');
   });
+
+  // Onglets d'analyses complémentaires (générés dynamiquement)
+  setupAnalyses();
 
   function debounce(fn, ms) {
     let t;
