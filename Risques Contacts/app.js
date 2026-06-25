@@ -1,6 +1,10 @@
 /**
  * Interface d'analyse des avis défavorables - Contacts & Entreprises
- * Gère les gros fichiers JSON (jusqu'à 67 Mo) via chargement par fichier
+ * VERSION AGRÉGÉE (B2) : consomme 2 fichiers pré-agrégés côté SQL
+ *   - risk_contacts.json     : 1 ligne par contact (carte Metabase 144)
+ *   - risk_entreprises.json   : 1 ligne par entreprise (carte Metabase 145)
+ * L'agrégation (totaux, nb d'affaires, types de bâtiments) est faite en SQL,
+ * le front se contente de calculer le score de risque et d'afficher.
  */
 
 // Données consolidées
@@ -8,276 +12,161 @@ let contactsByEmail = {};
 let entreprisesByName = {};
 let allContacts = [];
 let allEntreprises = [];
-// Données brutes par source (pour re-fusion lors des rechargements)
-let avisData = [];
-let observationsData = [];
-let statementsData = [];
 
 // Constantes
 const PAGE_SIZE = 50;
-const COUNT_COL_AVIS = 'Avis (Notice) défavorables';
-const COUNT_COL_OBS = 'Observations défavorables';
-const COUNT_COL_HAND = 'HAND défavorables';
-
-// Helpers
-function getVal(obj, key) {
-  const v = obj[key];
-  return (v && String(v).trim()) || '';
-}
-
-function parseClassification(str) {
-  if (!str) return [];
-  try {
-    const m = str.match(/\{([^}]*)\}/);
-    if (!m) return [];
-    return m[1].split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function parseCount(val) {
-  if (val === '' || val == null) return 0;
-  const n = parseInt(String(val).replace(/\s/g, ''), 10);
-  return isNaN(n) ? 0 : n;
-}
+const SANS_SOCIETE = '(Sans société)';
 
 // Webhook de vérification du mot de passe (retourne les URLs si OK)
 const WEBHOOK_AUTH = 'https://databuildr.app.n8n.cloud/webhook/risk-data';
 
-// URLs des données (utilisées si webhook non appelé ou en secours)
+// URLs des données (fichiers agrégés, secours si webhook non appelé)
 const DATA_URLS = {
-  avis: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/avis__notices__defavorables_par_contact_2026-02-13T11_37_32.8744Z.json',
-  observations: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/observations_defavorables_par_affaire_2026-02-13T11_36_04.991586Z.json',
-  statements: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/statements_defavorables__rah___hand__par_contacts_2026-02-13T11_34_48.038661Z.json'
+  contacts: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/risk_contacts.json',
+  entreprises: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/risk_entreprises.json'
 };
 
+// Helpers
+function num(v) {
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  if (v === '' || v == null) return 0;
+  const n = parseInt(String(v).replace(/\s/g, ''), 10);
+  return isNaN(n) ? 0 : n;
+}
+
+function str(v) {
+  return (v == null ? '' : String(v)).trim();
+}
+
+// BuildingTypes arrive en chaîne JSON ("{\"ERP\":12}") ou déjà en objet
+function parseBuildingTypes(v) {
+  if (!v) return {};
+  if (typeof v === 'object') return v;
+  try {
+    const o = JSON.parse(v);
+    return (o && typeof o === 'object') ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Score de risque : échelle logarithmique sur la moyenne par affaire.
+ * Log compresse l'écart tout en gardant la cohérence du classement.
+ */
+function riskRawOf(avgPerOp) {
+  return Math.log(1 + (avgPerOp || 0));
+}
+
 function parseUrlsFromResponse(text) {
-  const mAv = (text || '').match(/AVIS_URL\s*=\s*['"]([^'"]+)['"]/i);
-  const mObs = (text || '').match(/OBSERVATIONS_URL\s*=\s*['"]([^'"]+)['"]/i);
-  const mStmt = (text || '').match(/(?:STATEMENTS_URL|STATEMENTS)\s*=\s*['"]([^'"]+)['"]/i);
-  if (mAv && mObs && mStmt) return { avis: mAv[1], observations: mObs[1], statements: mStmt[1] };
+  const mC = (text || '').match(/CONTACTS_URL\s*=\s*['"]([^'"]+)['"]/i);
+  const mE = (text || '').match(/ENTREPRISES_URL\s*=\s*['"]([^'"]+)['"]/i);
+  if (mC && mE) return { contacts: mC[1], entreprises: mE[1] };
   try {
     const o = JSON.parse(text);
-    const avis = o.AVIS_URL || o.avis_url || o.avis;
-    const obs = o.OBSERVATIONS_URL || o.observations_url || o.observations;
-    const stmt = o.STATEMENTS_URL || o.STATEMENTS || o.statements_url || o.statements;
-    if (avis && obs && stmt) return { avis, observations: obs, statements: stmt };
+    const c = o.CONTACTS_URL || o.contacts_url || o.contacts;
+    const e = o.ENTREPRISES_URL || o.entreprises_url || o.entreprises;
+    if (c && e) return { contacts: c, entreprises: e };
   } catch (_) {}
   return null;
 }
 
 // Chargement d'un fichier JSON depuis une URL
+// Cache-buster + cache:'no-store' pour toujours récupérer la dernière version
+// (évite le cache CDN Supabase / navigateur).
 async function loadJsonFromUrl(url) {
-  const res = await fetch(url);
+  const bustUrl = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+  const res = await fetch(bustUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   return res.json();
 }
 
-// Traitement des données
-function reprocessAll() {
+// Construction des structures à partir des 2 fichiers agrégés
+function buildAll(contactsRaw, entreprisesRaw) {
+  // --- Contacts ---
   contactsByEmail = {};
-  processAvis(avisData);
-  processObservations(observationsData);
-  processStatements(statementsData);
-  consolidateData();
-  renderContacts();
-  renderEntreprises();
-}
-
-function processAvis(data) {
-  for (const row of data) {
-    const email = getVal(row, 'Contact → Email');
+  for (const row of (contactsRaw || [])) {
+    const email = str(row.Email);
     if (!email) continue;
-    if (!contactsByEmail[email]) {
-      contactsByEmail[email] = {
-        email,
-        lastName: getVal(row, 'Contact → LastName'),
-        firstName: getVal(row, 'Contact → FirstName'),
-        company: getVal(row, 'Company - CompanyId → Name'),
-        position: getVal(row, 'Contact → Position'),
-        role: getVal(row, 'Contact → Role'),
-        avis: 0,
-        observations: 0,
-        statements: 0,
-        items: [],
-        buildingTypes: {}
-      };
-    }
-    const c = contactsByEmail[email];
-    if (!c.position && getVal(row, 'Contact → Position')) c.position = getVal(row, 'Contact → Position');
-    if (!c.role && getVal(row, 'Contact → Role')) c.role = getVal(row, 'Contact → Role');
-    const cnt = parseCount(row[COUNT_COL_AVIS]);
-    c.avis += cnt;
-    c.items.push({
-      type: 'avis',
-      count: cnt,
-      operation: getVal(row, 'SubAffairDetail - SubAffairDetailId → OperationName'),
-      buildingTypes: parseClassification(row['SubAffairDetail - SubAffairDetailId → ClassificationOfBuilding'])
-    });
-    for (const bt of c.items[c.items.length - 1].buildingTypes) {
-      c.buildingTypes[bt] = (c.buildingTypes[bt] || 0) + cnt;
-    }
+    const avis = num(row.Avis);
+    const obs = num(row.Observations);
+    const hand = num(row.HAND);
+    const nbOps = Math.max(1, num(row.NbOperations));
+    const total = avis + obs + hand;
+    contactsByEmail[email] = {
+      email,
+      lastName: str(row.LastName),
+      firstName: str(row.FirstName),
+      company: str(row.Company) || SANS_SOCIETE,
+      position: str(row.Position),
+      role: str(row.Role),
+      avis,
+      observations: obs,
+      statements: hand,
+      nbOperations: nbOps,
+      totalDefavorables: total,
+      avgPerOperation: total / nbOps,
+      buildingTypes: parseBuildingTypes(row.BuildingTypes)
+    };
   }
-}
+  allContacts = Object.values(contactsByEmail).filter(c => c.totalDefavorables > 0);
 
-function processObservations(data) {
-  for (const row of data) {
-    const email = getVal(row, 'Contact → Email');
-    if (!email) continue;
-    if (!contactsByEmail[email]) {
-      contactsByEmail[email] = {
-        email,
-        lastName: getVal(row, 'Contact → LastName'),
-        firstName: getVal(row, 'Contact → FirstName'),
-        company: getVal(row, 'Company - CompanyId → Name'),
-        position: getVal(row, 'Contact → Position'),
-        role: getVal(row, 'Contact → Role'),
-        avis: 0,
-        observations: 0,
-        statements: 0,
-        items: [],
-        buildingTypes: {}
-      };
-    }
-    const c = contactsByEmail[email];
-    if (!c.position && getVal(row, 'Contact → Position')) c.position = getVal(row, 'Contact → Position');
-    if (!c.role && getVal(row, 'Contact → Role')) c.role = getVal(row, 'Contact → Role');
-    const cnt = parseCount(row[COUNT_COL_OBS]);
-    c.observations += cnt;
-    c.items.push({
-      type: 'observations',
-      count: cnt,
-      operation: getVal(row, 'SubAffairDetail - SubAffairDetailId → OperationName'),
-      buildingTypes: parseClassification(row['SubAffairDetail - SubAffairDetailId → ClassificationOfBuilding'])
-    });
-    for (const bt of c.items[c.items.length - 1].buildingTypes) {
-      c.buildingTypes[bt] = (c.buildingTypes[bt] || 0) + cnt;
-    }
-  }
-}
-
-function processStatements(data) {
-  for (const row of data) {
-    const email = getVal(row, 'Contact → Email');
-    if (!email) continue;
-    if (!contactsByEmail[email]) {
-      contactsByEmail[email] = {
-        email,
-        lastName: getVal(row, 'Contact → LastName'),
-        firstName: getVal(row, 'Contact → FirstName'),
-        company: getVal(row, 'Company - CompanyId → Name'),
-        position: getVal(row, 'Contact → Position'),
-        role: getVal(row, 'Contact → Role'),
-        avis: 0,
-        observations: 0,
-        statements: 0,
-        items: [],
-        buildingTypes: {}
-      };
-    }
-    const c = contactsByEmail[email];
-    if (!c.position && getVal(row, 'Contact → Position')) c.position = getVal(row, 'Contact → Position');
-    if (!c.role && getVal(row, 'Contact → Role')) c.role = getVal(row, 'Contact → Role');
-    const cnt = parseCount(row[COUNT_COL_HAND]);
-    c.statements += cnt;
-    c.items.push({
-      type: 'statements',
-      count: cnt,
-      operation: getVal(row, 'SubAffairDetail - SubAffairDetailId → OperationName'),
-      buildingTypes: parseClassification(row['SubAffairDetail - SubAffairDetailId → ClassificationOfBuilding'])
-    });
-    for (const bt of c.items[c.items.length - 1].buildingTypes) {
-      c.buildingTypes[bt] = (c.buildingTypes[bt] || 0) + cnt;
-    }
-  }
-}
-
-function computeContactMetrics(c) {
-  const ops = new Set();
-  for (const it of c.items) {
-    const op = (it.operation || '').trim();
-    if (op) ops.add(op);
-  }
-  c.nbOperations = Math.max(1, ops.size);
-  c.totalDefavorables = c.avis + c.observations + c.statements;
-  c.avgPerOperation = c.totalDefavorables / c.nbOperations;
-}
-
-/**
- * Score de risque : échelle logarithmique sur la moyenne par affaire
- * Log compresse l'écart (738 vs 41 → score 100 vs ~57) tout en gardant la cohérence du classement
- */
-function computeRiskScore(total, nbOps, avgPerOp) {
-  return Math.log(1 + (avgPerOp || 0));
-}
-
-function buildEntreprises() {
+  // --- Entreprises (totaux exacts depuis la carte 145) ---
   entreprisesByName = {};
-  for (const email of Object.keys(contactsByEmail)) {
-    const c = contactsByEmail[email];
-    const companyName = c.company || '(Sans société)';
-    if (!entreprisesByName[companyName]) {
-      entreprisesByName[companyName] = {
-        name: companyName,
-        avis: 0,
-        observations: 0,
-        statements: 0,
-        contacts: [],
-        operationsSet: new Set()
+  for (const row of (entreprisesRaw || [])) {
+    const name = str(row.Company) || SANS_SOCIETE;
+    const avis = num(row.Avis);
+    const obs = num(row.Observations);
+    const hand = num(row.HAND);
+    const nbOps = Math.max(1, num(row.NbOperations));
+    const total = avis + obs + hand;
+    entreprisesByName[name] = {
+      name,
+      avis,
+      observations: obs,
+      statements: hand,
+      nbOperations: nbOps,
+      totalDefavorables: total,
+      avgPerOperation: total / nbOps,
+      contacts: []
+    };
+  }
+
+  // Rattacher la liste des contacts à chaque entreprise (pour la modale)
+  for (const c of allContacts) {
+    let e = entreprisesByName[c.company];
+    if (!e) {
+      // société absente du fichier entreprises : on la crée a minima
+      e = entreprisesByName[c.company] = {
+        name: c.company, avis: 0, observations: 0, statements: 0,
+        nbOperations: 1, totalDefavorables: 0, avgPerOperation: 0, contacts: []
       };
-    }
-    const e = entreprisesByName[companyName];
-    e.avis += c.avis;
-    e.observations += c.observations;
-    e.statements += c.statements;
-    for (const it of c.items) {
-      const op = (it.operation || '').trim();
-      if (op) e.operationsSet.add(op);
     }
     e.contacts.push({
-      email: c.email,
-      lastName: c.lastName,
-      firstName: c.firstName,
-      avis: c.avis,
-      observations: c.observations,
-      statements: c.statements
+      email: c.email, lastName: c.lastName, firstName: c.firstName,
+      avis: c.avis, observations: c.observations, statements: c.statements
     });
   }
-}
+  allEntreprises = Object.values(entreprisesByName).filter(e => e.totalDefavorables > 0);
 
-function consolidateData() {
-  for (const c of Object.values(contactsByEmail)) {
-    computeContactMetrics(c);
-  }
-  allContacts = Object.values(contactsByEmail)
-    .filter(c => c.avis > 0 || c.observations > 0 || c.statements > 0)
-    .sort((a, b) => (b.totalDefavorables || 0) - (a.totalDefavorables || 0));
-
-  buildEntreprises();
-
-  for (const e of Object.values(entreprisesByName)) {
-    e.nbOperations = Math.max(1, e.operationsSet.size);
-    e.totalDefavorables = e.avis + e.observations + e.statements;
-    e.avgPerOperation = e.totalDefavorables / e.nbOperations;
-    e.riskRaw = computeRiskScore(e.totalDefavorables, e.nbOperations, e.avgPerOperation);
-    delete e.operationsSet;
-  }
-  allEntreprises = Object.values(entreprisesByName)
-    .filter(e => e.avis > 0 || e.observations > 0 || e.statements > 0);
-
-  // Référence = max des valeurs log (l'échelle log compresse déjà les écarts extrêmes)
-  const contactRawValues = allContacts.map(c => computeRiskScore(c.totalDefavorables, c.nbOperations, c.avgPerOperation));
-  const entrepriseRawValues = allEntreprises.map(e => e.riskRaw);
-  const refContact = Math.max(...contactRawValues, 0.001);
-  const refEntreprise = Math.max(...entrepriseRawValues, 0.001);
-
+  // --- Scores de risque (normalisés sur le max de chaque population) ---
+  // NB: on calcule le max par boucle (Math.max(...array) dépasse la pile au-delà
+  // de ~100k éléments avec l'opérateur spread).
+  let refContact = 0.001;
   for (const c of allContacts) {
-    c.riskRaw = computeRiskScore(c.totalDefavorables, c.nbOperations, c.avgPerOperation);
+    c.riskRaw = riskRawOf(c.avgPerOperation);
+    if (c.riskRaw > refContact) refContact = c.riskRaw;
+  }
+  for (const c of allContacts) {
     c.riskScore = Math.min(100, Math.round((c.riskRaw / refContact) * 100));
   }
+  let refEnt = 0.001;
   for (const e of allEntreprises) {
-    e.riskScore = Math.min(100, Math.round((e.riskRaw / refEntreprise) * 100));
+    e.riskRaw = riskRawOf(e.avgPerOperation);
+    if (e.riskRaw > refEnt) refEnt = e.riskRaw;
+  }
+  for (const e of allEntreprises) {
+    e.riskScore = Math.min(100, Math.round((e.riskRaw / refEnt) * 100));
   }
 
   allContacts.sort((a, b) => b.riskScore - a.riskScore);
@@ -295,50 +184,52 @@ async function loadAllDataFromUrls(urls) {
   const statusObservations = document.getElementById('statusObservations');
   const statusStatements = document.getElementById('statusStatements');
 
-  overlay.style.display = 'flex';
-  progress.style.display = 'flex';
-  progressFill.style.width = '0%';
+  if (overlay) overlay.style.display = 'flex';
+  if (progress) progress.style.display = 'flex';
+  if (progressFill) progressFill.style.width = '0%';
   const overlayText = document.getElementById('loadingOverlayText');
-  if (overlayText) overlayText.textContent = 'Chargement des 3 fichiers...';
+  if (overlayText) overlayText.textContent = 'Chargement des données...';
   [statusAvis, statusObservations, statusStatements].forEach(s => {
+    if (!s) return;
     s.textContent = 'En attente';
     s.classList.remove('loaded');
   });
+  if (statusStatements) statusStatements.style.display = 'none';
 
   function setStatus(el, text, ok) {
+    if (!el) return;
     el.textContent = text;
     if (ok) el.classList.add('loaded');
   }
 
   try {
-    progressText.textContent = 'Chargement des 3 fichiers...';
+    if (progressText) progressText.textContent = 'Chargement des 2 fichiers...';
     let done = 0;
     const onDone = (el, d) => {
       done++;
-      progressFill.style.width = `${(done / 3) * 100}%`;
-      setStatus(el, `Chargé (${(Array.isArray(d) ? d : [d]).length} enregistrements)`, true);
+      if (progressFill) progressFill.style.width = `${(done / 2) * 100}%`;
+      setStatus(el, `Chargé (${(Array.isArray(d) ? d : [d]).length} lignes)`, true);
     };
-    const [avis, obs, stmt] = await Promise.all([
-      loadJsonFromUrl(urlsToUse.avis).then(d => { onDone(statusAvis, d); return d; }),
-      loadJsonFromUrl(urlsToUse.observations).then(d => { onDone(statusObservations, d); return d; }),
-      loadJsonFromUrl(urlsToUse.statements).then(d => { onDone(statusStatements, d); return d; })
+    const [contactsData, entData] = await Promise.all([
+      loadJsonFromUrl(urlsToUse.contacts).then(d => { onDone(statusAvis, d); return d; }),
+      loadJsonFromUrl(urlsToUse.entreprises).then(d => { onDone(statusObservations, d); return d; })
     ]);
-    avisData = Array.isArray(avis) ? avis : [avis];
-    observationsData = Array.isArray(obs) ? obs : [obs];
-    statementsData = Array.isArray(stmt) ? stmt : [stmt];
-    progressFill.style.width = '100%';
-    progressText.textContent = 'Traitement en cours...';
+    if (progressFill) progressFill.style.width = '100%';
+    if (progressText) progressText.textContent = 'Traitement en cours...';
     if (overlayText) overlayText.textContent = 'Traitement en cours...';
-    reprocessAll();
-    progressText.textContent = 'Chargement terminé';
+    buildAll(Array.isArray(contactsData) ? contactsData : [contactsData],
+             Array.isArray(entData) ? entData : [entData]);
+    renderContacts();
+    renderEntreprises();
+    if (progressText) progressText.textContent = 'Chargement terminé';
     if (overlayText) overlayText.textContent = 'Chargement terminé';
   } catch (err) {
-    progressText.textContent = `Erreur: ${err.message}`;
-    [statusAvis, statusObservations, statusStatements].forEach(s => setStatus(s, 'Erreur', false));
+    if (progressText) progressText.textContent = `Erreur: ${err.message}`;
+    [statusAvis, statusObservations].forEach(s => setStatus(s, 'Erreur', false));
     console.error(err);
   } finally {
-    overlay.style.display = 'none';
-    setTimeout(() => { progress.style.display = 'none'; }, 2000);
+    if (overlay) overlay.style.display = 'none';
+    setTimeout(() => { if (progress) progress.style.display = 'none'; }, 2000);
   }
 }
 
@@ -359,9 +250,7 @@ function filterContacts(query) {
 function filterEntreprises(query) {
   const q = (query || '').toLowerCase().trim();
   if (!q) return allEntreprises;
-  return allEntreprises.filter(e =>
-    e.name.toLowerCase().includes(q)
-  );
+  return allEntreprises.filter(e => e.name.toLowerCase().includes(q));
 }
 
 // UI: Pagination
@@ -372,6 +261,7 @@ function paginate(arr, page) {
 
 function renderPagination(containerId, total, currentPage, onPageChange) {
   const container = document.getElementById(containerId);
+  if (!container) return;
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
   const cp = Math.max(1, Math.min(currentPage, totalPages));
   let html = '';
@@ -411,7 +301,7 @@ function renderContactsPage() {
   }
   tbody.innerHTML = pageData.map(c => {
     const total = c.totalDefavorables || (c.avis + c.observations + c.statements);
-    const num = (v) => v > 0 ? `<span class="num-cell has-value">${v}</span>` : `<span class="num-cell">0</span>`;
+    const num2 = (v) => v > 0 ? `<span class="num-cell has-value">${v}</span>` : `<span class="num-cell">0</span>`;
     const scoreClass = c.riskScore >= 70 ? 'risk-high' : c.riskScore >= 40 ? 'risk-medium' : 'risk-low';
     return `<tr data-email="${escapeHtml(c.email)}">
       <td><span class="risk-badge ${scoreClass}">${c.riskScore ?? '-'}</span></td>
@@ -421,10 +311,10 @@ function renderContactsPage() {
       <td>${escapeHtml(c.company)}</td>
       <td>${escapeHtml(c.position || '')}</td>
       <td>${escapeHtml(c.role || '')}</td>
-      <td class="num-cell">${num(c.avis)}</td>
-      <td class="num-cell">${num(c.observations)}</td>
-      <td class="num-cell">${num(c.statements)}</td>
-      <td class="num-cell">${num(total)}</td>
+      <td class="num-cell">${num2(c.avis)}</td>
+      <td class="num-cell">${num2(c.observations)}</td>
+      <td class="num-cell">${num2(c.statements)}</td>
+      <td class="num-cell">${num2(total)}</td>
       <td class="num-cell">${c.nbOperations ?? '-'}</td>
       <td class="num-cell">${(c.avgPerOperation ?? 0).toFixed(1)}</td>
     </tr>`;
@@ -493,7 +383,6 @@ function showContactDetail(email) {
 // UI: Entreprises
 let filteredEntreprises = [];
 let entrepriseCurrentPage = 1;
-const SANS_SOCIETE = '(Sans société)';
 
 function getEntreprisesForView() {
   const excludeSans = document.getElementById('excludeSansSociete')?.checked ?? false;
@@ -517,9 +406,8 @@ function goToEntreprisePage(p) {
 
 function getDisplayRiskScore(e, list) {
   if (list.length === 0) return 0;
-  const values = list.map(x => x.riskRaw || 0).filter(v => v > 0);
-  if (values.length === 0) return 0;
-  const ref = Math.max(...values, 0.001);
+  let ref = 0.001;
+  for (const x of list) { const v = x.riskRaw || 0; if (v > ref) ref = v; }
   return Math.min(100, Math.round(((e.riskRaw || 0) / ref) * 100));
 }
 
@@ -534,16 +422,16 @@ function renderEntreprisesPage() {
   }
   tbody.innerHTML = pageData.map(e => {
     const total = e.totalDefavorables || (e.avis + e.observations + e.statements);
-    const num = (v) => v > 0 ? `<span class="num-cell has-value">${v}</span>` : `<span class="num-cell">0</span>`;
+    const num2 = (v) => v > 0 ? `<span class="num-cell has-value">${v}</span>` : `<span class="num-cell">0</span>`;
     const displayScore = hasExcludeRecalc ? getDisplayRiskScore(e, filteredEntreprises) : (e.riskScore ?? '-');
     const scoreClass = displayScore >= 70 ? 'risk-high' : displayScore >= 40 ? 'risk-medium' : 'risk-low';
     return `<tr data-name="${escapeHtml(e.name)}">
       <td><span class="risk-badge ${scoreClass}">${displayScore}</span></td>
       <td>${escapeHtml(e.name)}</td>
-      <td class="num-cell">${num(e.avis)}</td>
-      <td class="num-cell">${num(e.observations)}</td>
-      <td class="num-cell">${num(e.statements)}</td>
-      <td class="num-cell">${num(total)}</td>
+      <td class="num-cell">${num2(e.avis)}</td>
+      <td class="num-cell">${num2(e.observations)}</td>
+      <td class="num-cell">${num2(e.statements)}</td>
+      <td class="num-cell">${num2(total)}</td>
       <td class="num-cell">${e.nbOperations ?? '-'}</td>
       <td class="num-cell">${(e.avgPerOperation ?? 0).toFixed(1)}</td>
       <td class="num-cell">${e.contacts.length}</td>
@@ -653,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (stored) {
       try {
         urls = JSON.parse(stored);
-        if (!urls.avis || !urls.observations || !urls.statements) urls = null;
+        if (!urls.contacts || !urls.entreprises) urls = null;
       } catch (_) {
         urls = null;
       }
@@ -674,8 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const text = await res.text();
         if (!res.ok) throw new Error('Mot de passe incorrect');
-        const urls = parseUrlsFromResponse(text);
-        if (!urls) throw new Error('Réponse invalide');
+        const urls = parseUrlsFromResponse(text) || DATA_URLS;
         sessionStorage.setItem('risques_urls', JSON.stringify(urls));
         setAuth();
         showApp(urls);
@@ -692,8 +579,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlay = document.getElementById('loadingOverlay');
     const overlayText = document.getElementById('loadingOverlayText');
     btn.disabled = true;
-    overlay.style.display = 'flex';
-    if (overlayText) overlayText.textContent = 'Appel du webhook (GET)...';
+    if (overlay) overlay.style.display = 'flex';
+    if (overlayText) overlayText.textContent = 'Rafraîchissement des données (peut prendre ~1 min)...';
     try {
       let urls = DATA_URLS;
       const res = await fetch('https://databuildr.app.n8n.cloud/webhook/get-risks-files', { method: 'GET' });
@@ -702,12 +589,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const parsed = parseUrlsFromResponse(text);
         if (parsed) urls = parsed;
       }
-      if (overlayText) overlayText.textContent = 'Chargement des 3 fichiers...';
+      if (overlayText) overlayText.textContent = 'Chargement des données...';
       await loadAllDataFromUrls(urls);
     } catch (err) {
       if (overlayText) overlayText.textContent = 'Erreur: ' + err.message;
     } finally {
-      overlay.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
       btn.disabled = false;
     }
   });
