@@ -58,6 +58,7 @@ body {
   padding: 0 2rem;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
 .tab {
@@ -240,7 +241,8 @@ body {
 
 /* Table */
 .table-container {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 72vh;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-card);
@@ -287,10 +289,27 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.data-table .num-cell.has-value {
+.data-table td .has-value {
   color: var(--accent);
-  font-weight: 500;
+  font-weight: 600;
 }
+
+/* En-têtes triables + alignement valeur/titre */
+.data-table th.num { text-align: right; }
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { background: var(--accent-muted); color: var(--accent); }
+.data-table th.sorted { color: var(--accent); }
+.data-table th .sort-ind { font-size: 0.75rem; }
+
+/* En-tête figé + lignes zébrées */
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.data-table tbody tr:nth-child(even) { background: rgba(37, 99, 235, 0.035); }
+.data-table tbody tr:hover { background: var(--accent-muted); }
+.data-table tbody tr.clickable { cursor: pointer; }
 
 /* Pagination */
 .pagination {
@@ -450,8 +469,12 @@ body {
   height: 100%;
   border-radius: 4px;
   min-width: 2px;
+  background: var(--accent);
   transition: width 0.4s ease;
 }
+.chart-bar-fill.c1 { background: var(--chart-1); }
+.chart-bar-fill.c2 { background: var(--chart-2); }
+.chart-bar-fill.c3 { background: var(--chart-3); }
 
 .chart-bar-value {
   min-width: 40px;
@@ -632,4 +655,121 @@ body {
   font-size: 0.9rem;
   color: #dc2626;
   min-height: 1.2em;
+}
+
+/* ============================================================
+   Bandeau KPI + répartition du risque
+   ============================================================ */
+.kpi-band {
+  padding: 1.25rem 2rem 0;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+@media (max-width: 900px) { .kpi-band { grid-template-columns: 1fr; } }
+
+.kpi-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.kpi-card.kpi-a { border-top-color: var(--chart-1); }
+.kpi-card.kpi-b { border-top-color: var(--chart-2); }
+.kpi-card.kpi-c { border-top-color: #b91c1c; }
+.kpi-card.kpi-d { border-top-color: #a16207; }
+.kpi-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.kpi-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.kpi-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.dist-title { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.4rem; }
+.dist-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-input);
+}
+.dist-bar .seg { height: 100%; transition: width 0.4s ease; }
+.seg-low  { background: #16a34a; }
+.seg-med  { background: #eab308; }
+.seg-high { background: #dc2626; }
+.dist-legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+.dist-legend b { color: var(--text-primary); }
+.dist-legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.3rem; }
+.dot-low { background: #16a34a; }
+.dot-med { background: #eab308; }
+.dot-high { background: #dc2626; }
+
+/* ============================================================
+   Panneau graphique (onglets d'analyses)
+   ============================================================ */
+.chart-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.chart-panel:empty { display: none; }
+.chart-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+.chart-panel .chart-bar-label {
+  min-width: 0;
+  flex: 0 0 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 700px) { .chart-panel .chart-bar-label { flex-basis: 120px; } }
+
+.detail-total {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
