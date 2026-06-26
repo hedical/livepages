@@ -41,6 +41,28 @@ function str(v) {
   return (v == null ? '' : String(v)).trim();
 }
 
+// Détection « BTP Consultants » robuste (toutes graphies : espaces, tirets,
+// casse) + domaine e-mail interne.
+function isBtpName(s) {
+  const n = String(s || '').toLowerCase().replace(/[\s\-_.]/g, '');
+  return n.includes('btpconsultants');
+}
+function isBtpEmail(email) {
+  return /@btp-consultants\.fr\s*$/i.test(String(email || ''));
+}
+function isBtp(row, nameKey, emailKey) {
+  return (nameKey && isBtpName(row[nameKey])) || (emailKey && isBtpEmail(row[emailKey]));
+}
+
+// Crée un toggle « Exclure ... » réutilisable
+function makeExcludeToggle(id, label, onChange) {
+  const lbl = document.createElement('label');
+  lbl.className = 'exclude-checkbox';
+  lbl.innerHTML = `<input type="checkbox" id="${id}"><span>${escapeHtml(label)}</span>`;
+  lbl.querySelector('input').addEventListener('change', onChange);
+  return lbl;
+}
+
 // BuildingTypes arrive en chaîne JSON ("{\"ERP\":12}") ou déjà en objet
 function parseBuildingTypes(v) {
   if (!v) return {};
@@ -402,6 +424,9 @@ let contactSort = { key: 'riskScore', dir: -1 };
 
 function renderContacts() {
   let list = filterContacts(document.getElementById('searchContact').value);
+  if (document.getElementById('excludeBtpContacts')?.checked) {
+    list = list.filter(c => !isBtpName(c.company) && !isBtpEmail(c.email));
+  }
   filteredContacts = sortRows(list, CONTACT_COLS, contactSort);
   contactCurrentPage = 1;
   buildHead(document.querySelector('#viewContacts thead'), CONTACT_COLS, contactSort, k => {
@@ -521,6 +546,7 @@ function getEntreprisesForView() {
   const excludeSans = document.getElementById('excludeSansSociete')?.checked ?? false;
   let base = filterEntreprises(document.getElementById('searchEntreprise').value);
   if (excludeSans) base = base.filter(e => e.name !== SANS_SOCIETE);
+  if (document.getElementById('excludeBtpEntreprises')?.checked) base = base.filter(e => !isBtpName(e.name));
   return base;
 }
 
@@ -635,8 +661,8 @@ function showEntrepriseDetail(name) {
 // ============================================================================
 const DATA_BASE = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/';
 const ANALYSES = [
-  { key: 'taux',    label: 'Taux défav. (entr.)', file: DATA_BASE + 'risk_taux_entreprise.json',  search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
-  { key: 'ouvert',  label: 'Risque ouvert',       file: DATA_BASE + 'risk_ouvert_entreprise.json', search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Défav. NON levés', defaultSort: 'Défav. NON levés' },
+  { key: 'taux',    label: 'Taux défav. (entr.)', file: DATA_BASE + 'risk_taux_entreprise.json',  search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables', excludeBtpCol: 'Entreprise' },
+  { key: 'ouvert',  label: 'Risque ouvert',       file: DATA_BASE + 'risk_ouvert_entreprise.json', search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Défav. NON levés', defaultSort: 'Défav. NON levés', excludeBtpCol: 'Entreprise' },
   { key: 'collab',  label: 'Collaborateurs',      file: DATA_BASE + 'risk_collaborateur.json',      search: ['Collaborateur', 'Agence'], placeholder: 'Rechercher un collaborateur / agence...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
   { key: 'agence',  label: 'Agences',             file: DATA_BASE + 'risk_agence.json',             search: ['Agence'],       placeholder: 'Rechercher une agence...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
   { key: 'mission', label: 'Missions',            file: DATA_BASE + 'risk_mission.json',            search: ['Mission'],      placeholder: 'Rechercher une mission...', chartMetric: 'Taux défav. (%)', defaultSort: 'Avis défavorables' },
@@ -667,6 +693,7 @@ function setupAnalyses() {
     sec.innerHTML = `
       <div class="search-bar">
         <input type="text" id="search_${a.key}" placeholder="${a.placeholder}">
+        ${a.excludeBtpCol ? `<label class="exclude-checkbox"><input type="checkbox" id="excludebtp_${a.key}"><span>Exclure BTP Consultants</span></label>` : ''}
         <span class="result-count" id="count_${a.key}"></span>
       </div>
       <div class="chart-panel" id="chart_${a.key}"></div>
@@ -685,6 +712,10 @@ function setupAnalyses() {
       analysisUI[a.key].page = 1;
       renderAnalysis(a);
     }, 250));
+    sec.querySelector('#excludebtp_' + a.key)?.addEventListener('change', () => {
+      analysisUI[a.key].page = 1;
+      renderAnalysis(a);
+    });
   }
 }
 
@@ -755,6 +786,9 @@ function renderAnalysis(a) {
   if (q) {
     const keys = (a.search && a.search.length) ? a.search : cols;
     filtered = rows.filter(r => keys.some(k => String(r[k] ?? '').toLowerCase().includes(q)));
+  }
+  if (a.excludeBtpCol && document.getElementById('excludebtp_' + a.key)?.checked) {
+    filtered = filtered.filter(r => !isBtpName(r[a.excludeBtpCol]));
   }
   if (ui.sortCol && cols.includes(ui.sortCol)) {
     const c = ui.sortCol, dir = ui.sortDir, numeric = numericCols.has(c);
@@ -1024,6 +1058,20 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('searchContact').addEventListener('input', debounce(renderContacts, 250));
   document.getElementById('searchEntreprise').addEventListener('input', debounce(renderEntreprises, 250));
   document.getElementById('excludeSansSociete').addEventListener('change', renderEntreprises);
+
+  // Toggles « Exclure BTP Consultants » injectés dans les barres de recherche
+  const contactBar = document.querySelector('#viewContacts .search-bar');
+  if (contactBar && !document.getElementById('excludeBtpContacts')) {
+    contactBar.insertBefore(
+      makeExcludeToggle('excludeBtpContacts', 'Exclure BTP Consultants', renderContacts),
+      document.getElementById('contactCount'));
+  }
+  const entBar = document.querySelector('#viewEntreprises .search-bar');
+  if (entBar && !document.getElementById('excludeBtpEntreprises')) {
+    entBar.insertBefore(
+      makeExcludeToggle('excludeBtpEntreprises', 'Exclure BTP Consultants', renderEntreprises),
+      document.getElementById('entrepriseCount'));
+  }
 
   // Onglets Contacts / Entreprises (les onglets d'analyses ont leur propre handler)
   document.querySelectorAll('.tab[data-view="contacts"], .tab[data-view="entreprises"]').forEach(tab => {
