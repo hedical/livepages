@@ -4,6 +4,11 @@ const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 // Gain de temps : minutes économisées par AO analysé (= lead créé)
 const MINUTES_PER_AO_ANALYSE = 15;
 
+// Date de mise en place effective du module Analyse AO (cf. shared/utils.js).
+// Les marchés détectés avant cette date (données de test / backfill antérieures
+// au lancement) ne sont jamais comptabilisés, quel que soit le filtre de période.
+const MODULE_START_DATE = KPI.AO_MODULE_START_DATE;
+
 // Data URL : ANALYSE_AO_URL est exposée par le webhook passwordROI APRÈS auth.
 // Pas de fallback hardcodé — sinon l'URL fuiterait dans le JS et bypasserait le mot de passe.
 let DATA_URL = '';
@@ -108,6 +113,10 @@ function parseFunnelPayload(payload) {
     const leads = [];
 
     payload.data.forEach(m => {
+        // Floor de mise en place : ignorer les marchés détectés avant le go-live.
+        // (Les marchés sans date de détection valide sont conservés.)
+        if (!KPI.isAfterAOStart(m.dateDetection)) return;
+
         const marche = {
             marcheId: m.marcheId || '',
             refMarche: m.refMarche || '',
@@ -535,24 +544,22 @@ cumulToggleEl.addEventListener('change', e => {
 
 // ==================== AUTH + INIT ====================
 
-// Returns the AO_URL via the webhook (uses cached response if available).
+// Returns the AO_URL via the webhook.
+// Pas de cache : les URLs renvoyées sont SIGNÉES (validité 12h), une réponse
+// mise en cache servirait des liens expirés.
 async function authenticateAndGetURL() {
     const storedPassword = localStorage.getItem('roi_password');
     if (!storedPassword) {
         window.location.href = 'index.html';
         return null;
     }
+    localStorage.removeItem('roi_auth_result'); // purge l'ancien cache
 
-    const cached = localStorage.getItem('roi_auth_result');
     const tryParse = (text) => {
         // Look for ANALYSE_AO_URL = '...' (n8n webhook passwordROI response)
         const m = text.match(/ANALYSE_AO_URL\s*=\s*['"]([^'"]+)['"]/);
         return m ? m[1] : null;
     };
-    if (cached) {
-        const url = tryParse(cached);
-        if (url) return url;
-    }
 
     try {
         const response = await fetch(WEBHOOK_URL, {
@@ -566,7 +573,6 @@ async function authenticateAndGetURL() {
             return null;
         }
         const result = await response.text();
-        localStorage.setItem('roi_auth_result', result);
         return tryParse(result);
     } catch (e) {
         console.error('Authentication error:', e);

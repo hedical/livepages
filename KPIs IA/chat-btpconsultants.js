@@ -1,6 +1,8 @@
 // Configuration
-const CHAT_DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
-const POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+// URL remplacée par l'URL SIGNÉE du webhook après auth (cf. init) ;
+// fallback public conservé le temps de la transition bucket privé.
+let CHAT_DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
+let POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
 // State
 let allData = [];
@@ -1256,6 +1258,12 @@ if (settingsModal) {
 
 // Initialize
 async function init() {
+    // Auth + URLs signées (redirige vers index.html si mot de passe absent/refusé)
+    const dataUrls = await KPI.fetchDataUrls();
+    if (!dataUrls) return;
+    if (dataUrls.CHAT_BTP_URL) CHAT_DATA_URL = dataUrls.CHAT_BTP_URL;
+    if (dataUrls.POPULATION_CIBLE_URL) POPULATION_CSV_URL = dataUrls.POPULATION_CIBLE_URL;
+
     try {
         // Load parameters from localStorage
         loadParameters();

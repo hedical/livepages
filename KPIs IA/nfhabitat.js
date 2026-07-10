@@ -539,17 +539,11 @@ saveSettings.addEventListener('click', () => {
         try { Object.assign(parameters, JSON.parse(saved)); } catch (e) {}
     }
 
-    // 1. Try to reuse cached webhook response from index.html auth (no extra network call)
-    const cachedResult = localStorage.getItem('roi_auth_result');
-    if (cachedResult) {
-        const m = cachedResult.match(/NF_HABITAT_URL\s*=\s*['"]([^'"]+)['"]/);
-        if (m) DATA_URL = m[1];
-        // If cache exists, password was already validated → go straight to loadData
-        await loadData();
-        return;
-    }
+    // Pas de cache de réponse webhook : les URLs sont SIGNÉES (validité 12h),
+    // un cache servirait des liens expirés. On purge l'ancien.
+    localStorage.removeItem('roi_auth_result');
 
-    // 2. No cache: call webhook with stored password
+    // Call webhook with stored password
     const storedPwd = localStorage.getItem('roi_password');
     if (storedPwd) {
         const ok = await authenticateWithPassword(storedPwd);

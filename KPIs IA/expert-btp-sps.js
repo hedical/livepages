@@ -1,5 +1,7 @@
 // Configuration
-const EXPERT_DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
+// URL remplacée par l'URL SIGNÉE du webhook après auth (cf. init) ;
+// fallback public conservé le temps de la transition bucket privé.
+let EXPERT_DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
 
 // State
 let allData = [];
@@ -913,6 +915,11 @@ if (settingsModal) {
 
 // Initialize
 async function init() {
+    // Auth + URLs signées (redirige vers index.html si mot de passe absent/refusé)
+    const dataUrls = await KPI.fetchDataUrls();
+    if (!dataUrls) return;
+    if (dataUrls.EXPERT_BTP_SPS_URL) EXPERT_DATA_URL = dataUrls.EXPERT_BTP_SPS_URL;
+
     try {
         // Load parameters from localStorage
         loadParameters();

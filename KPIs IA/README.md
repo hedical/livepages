@@ -59,7 +59,41 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 
 - `index.html` : Structure HTML du tableau de bord
 - `app.js` : Logique JavaScript pour le traitement des données et l'affichage
+- `shared/utils.js` : Module partagé (parsing CSV/JSON, dates, prédicats métier, constantes)
+- `tests/utils.test.js` : Tests du module partagé
 - `README.md` : Documentation du projet
+
+## Développement
+
+### Module partagé (`shared/utils.js`)
+
+Toute fonction pure dupliquée entre plusieurs pages doit vivre dans `shared/utils.js`
+(namespace global `KPI`). Les pages qui l'utilisent le chargent AVANT leur script :
+
+```html
+<script src="shared/utils.js"></script>
+<script src="ma-page.js"></script>
+```
+
+Les fonctions locales des pages délèguent au module (même nom, même signature) pour
+ne pas casser les call sites existants. Pages migrées : `index.html` (app.js),
+`descriptif.html`, `retention.html`, `analyse-ao.html`.
+
+Constantes métier centralisées : `KPI.DESCRIPTIF_TYPE`, `KPI.AO_MODULE_START_DATE`
+(mise en place du module Analyse AO : 06/06/2026 — les marchés détectés avant sont exclus).
+
+### Tests
+
+```bash
+node --test tests/utils.test.js
+```
+
+Aucune dépendance requise (Node >= 18). À lancer avant tout commit touchant `shared/utils.js`.
+
+### Git
+
+Les secrets (`cred sf.txt`, `.env`) et les données de test (`sample_ao_data.json`)
+sont exclus via `.gitignore` et ne doivent JAMAIS être committés.
 
 ## Notes
 

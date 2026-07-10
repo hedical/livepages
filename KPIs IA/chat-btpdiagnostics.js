@@ -1,5 +1,7 @@
 // Configuration
-const CHAT_DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
+// URL remplacée par l'URL SIGNÉE du webhook après auth (cf. init) ;
+// fallback public conservé le temps de la transition bucket privé.
+let CHAT_DATA_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
 
 // State
 let allData = [];
@@ -891,6 +893,11 @@ if (settingsModal) {
 
 // Initialize
 async function init() {
+    // Auth + URLs signées (redirige vers index.html si mot de passe absent/refusé)
+    const dataUrls = await KPI.fetchDataUrls();
+    if (!dataUrls) return;
+    if (dataUrls.CHAT_BTPDIAG_URL) CHAT_DATA_URL = dataUrls.CHAT_BTPDIAG_URL;
+
     try {
         loadParameters();
         

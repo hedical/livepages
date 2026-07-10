@@ -1,20 +1,12 @@
 // ==================== CONFIG ====================
-const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
-const EXPERT_BTP_URL    = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
-const CHAT_BTP_URL      = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
-const EXPERT_CITAE_URL  = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json';
-const CHAT_CITAE_URL    = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json';
-const EXPERT_BTPDIAG_URL= 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpdiagnostics.json';
-const CHAT_BTPDIAG_URL  = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
+// Toutes les URLs de données (signées, 12h) viennent du webhook après auth —
+// plus aucune URL de bucket hardcodée ici (cf. KPI.fetchDataUrls).
 
 const DAY = 24 * 3600 * 1000;
 const HISTORY_START = new Date('2025-01-01').getTime();
-// Type des "vrais" descriptifs IA. Les lignes au type vide (RICT sans génération
-// IA, hasAi=false) ne sont PAS des usages et ne doivent pas compter en rétention.
-const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
-// Mise en place effective du module Analyse AO (UTC minuit) : les marchés détectés
-// avant cette date (test / backfill) ne comptent pas. Cf. app.js / analyse-ao.js.
-const AO_MODULE_START = new Date('2026-06-06');
+// Constantes métier centralisées (cf. shared/utils.js)
+const DESCRIPTIF_TYPE = KPI.DESCRIPTIF_TYPE;
+const AO_MODULE_START = KPI.AO_MODULE_START_DATE;
 
 const loadingEl = document.getElementById('loading');
 const errorEl   = document.getElementById('error');
@@ -30,9 +22,12 @@ function showError(msg) {
 }
 
 function parseDate(s) {
-    if (!s) return null;
-    const d = new Date(typeof s === 'string' ? s.replace(/\\/g, '') : s);
-    return isNaN(d.getTime()) ? null : d;
+    // Timestamps numériques supportés localement ; le reste est délégué (cf. shared/utils.js)
+    if (typeof s === 'number') {
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+    }
+    return KPI.parseFrenchDate(s);
 }
 
 function formatPct(v) {
@@ -52,58 +47,17 @@ function monthLabel(key) {
 
 // ==================== CSV PARSER (light) ====================
 function parseCSVLine(line) {
-    const out = [];
-    let cur = '';
-    let q = false;
-    for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        const n = line[i+1];
-        if (c === '"') {
-            if (q && n === '"') { cur += '"'; i++; }
-            else q = !q;
-        } else if (c === ',' && !q) {
-            out.push(cur); cur = '';
-        } else {
-            cur += c;
-        }
-    }
-    out.push(cur);
-    return out;
+    return KPI.parseCSVLine(line);
 }
 
-// Detect column index by lowercase substring match (priority = pattern order)
+// Detect column index by lowercase substring match (cf. shared/utils.js)
 function findIdx(headers, ...patterns) {
-    for (const pat of patterns) {
-        for (let i = 0; i < headers.length; i++) {
-            const h = headers[i].toLowerCase();
-            let ok = true;
-            for (const sub of pat) {
-                if (sub.startsWith('!')) {
-                    if (h.includes(sub.substring(1))) { ok = false; break; }
-                } else {
-                    if (!h.includes(sub)) { ok = false; break; }
-                }
-            }
-            if (ok) return i;
-        }
-    }
-    return -1;
+    return KPI.findIdx(headers, ...patterns);
 }
 
-// Like findIdx but returns the matching KEY name (for JSON objects). null if none.
+// Like findIdx but returns the matching KEY name (cf. shared/utils.js)
 function findKey(keys, ...patterns) {
-    for (const pat of patterns) {
-        for (const k of keys) {
-            const lk = k.toLowerCase();
-            let ok = true;
-            for (const sub of pat) {
-                if (sub.startsWith('!')) { if (lk.includes(sub.substring(1))) { ok = false; break; } }
-                else if (!lk.includes(sub)) { ok = false; break; }
-            }
-            if (ok) return k;
-        }
-    }
-    return null;
+    return KPI.findKey(keys, ...patterns);
 }
 
 // ==================== EVENT EXTRACTION ====================
@@ -225,8 +179,7 @@ function eventsFromAO(rawText) {
     if (!payload || !Array.isArray(payload.data)) return [];
     const events = [];
     payload.data.forEach(m => {
-        const det = parseDate(m.dateDetection);
-        if (det && det < AO_MODULE_START) return; // marché détecté avant le go-live → ignoré
+        if (!KPI.isAfterAOStart(m.dateDetection)) return; // marché détecté avant le go-live → ignoré
         (Array.isArray(m.leads) ? m.leads : []).forEach(l => {
             const owner = ((l.ownerName || '') + '').trim().toLowerCase();
             const d = parseDate(l.dateCreation);
@@ -255,38 +208,12 @@ function eventsFromChatExpert(rawText) {
 
 // ==================== AUTH + FETCH ====================
 async function loadAllData() {
-    const password = localStorage.getItem('roi_password');
-    if (!password) {
-        window.location.href = 'index.html';
-        return null;
-    }
-
     loadingTextEl.textContent = 'Authentification…';
-    let urls;
-    try {
-        const r = await fetch(WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: password
-        });
-        if (!r.ok) {
-            localStorage.removeItem('roi_password');
-            window.location.href = 'index.html';
-            return null;
-        }
-        const body = await r.text();
-        urls = {
-            DESCRIPTIF:   (body.match(/DESCRIPTIF_URL = '([^']+)'/)   || [])[1],
-            AUTOCONTACT:  (body.match(/AUTOCONTACT_URL = '([^']+)'/)  || [])[1],
-            COMPARATEUR:  (body.match(/COMPARATEUR_URL = '([^']+)'/)  || [])[1],
-            ANALYSE_AO:   (body.match(/ANALYSE_AO_URL = '([^']+)'/)   || [])[1]
-        };
-    } catch(e) {
-        showError('Échec authentification webhook : ' + e.message);
-        return null;
-    }
+    // Auth centralisée : redirige vers index.html si mot de passe absent/refusé
+    const urls = await KPI.fetchDataUrls();
+    if (!urls) return null;
 
-    loadingTextEl.textContent = 'Chargement des données IA (9 sources en parallèle)…';
+    loadingTextEl.textContent = 'Chargement des données IA (10 sources en parallèle)…';
 
     const fetchText = url => url
         ? fetch(url).then(r => r.ok ? r.text() : '').catch(() => '')
@@ -298,16 +225,16 @@ async function loadAllData() {
         expCitaeRaw, chatCitaeRaw,
         expBtpDiagRaw, chatBtpDiagRaw
     ] = await Promise.all([
-        fetchText(urls.DESCRIPTIF),
-        fetchText(urls.AUTOCONTACT),
-        fetchText(urls.COMPARATEUR),
-        fetchText(urls.ANALYSE_AO),
-        fetchText(EXPERT_BTP_URL),
-        fetchText(CHAT_BTP_URL),
-        fetchText(EXPERT_CITAE_URL),
-        fetchText(CHAT_CITAE_URL),
-        fetchText(EXPERT_BTPDIAG_URL),
-        fetchText(CHAT_BTPDIAG_URL)
+        fetchText(urls.DESCRIPTIF_URL),
+        fetchText(urls.AUTOCONTACT_URL),
+        fetchText(urls.COMPARATEUR_URL),
+        fetchText(urls.ANALYSE_AO_URL),
+        fetchText(urls.EXPERT_BTP_URL),
+        fetchText(urls.CHAT_BTP_URL),
+        fetchText(urls.EXPERT_CITAE_URL),
+        fetchText(urls.CHAT_CITAE_URL),
+        fetchText(urls.EXPERT_BTPDIAG_URL),
+        fetchText(urls.CHAT_BTPDIAG_URL)
     ]);
 
     loadingTextEl.textContent = 'Parsing et agrégation…';

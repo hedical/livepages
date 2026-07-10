@@ -14,14 +14,15 @@ const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordadoption';
 let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
 let COMPARATEUR_URL = '';
-// Public sources — BTP Consultants Contrôle Technique
-const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
-const CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
-const GEOTECH_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/analyse_geotechnique.json';
-const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+// Sources BTP Consultants CT + SPS : remplacées par les URLs SIGNÉES du webhook
+// après auth (fallback public conservé le temps de la transition bucket privé).
+let EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
+let CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
+let GEOTECH_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/analyse_geotechnique.json';
+let POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 // SPS sources — utilisées UNIQUEMENT pour extraire les emails SPS à exclure
-const EXPERT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
-const CHAT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json';
+let EXPERT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
+let CHAT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json';
 
 // Constants
 const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
@@ -1359,13 +1360,27 @@ async function authenticateWithPassword(password) {
         const response = await fetch(WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: password });
         if (!response.ok) return false;
         const result = await response.text();
-        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
-        const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
-        const comparateurMatch = result.match(/COMPARATEUR_URL = '([^']+)'/);
+        const urlRegex = (name) => result.match(new RegExp(name + `\\s*=\\s*['"]([^'"]+)['"]`));
+        const descriptifMatch = urlRegex('DESCRIPTIF_URL');
+        const autocontactMatch = urlRegex('AUTOCONTACT_URL');
+        const comparateurMatch = urlRegex('COMPARATEUR_URL');
         if (descriptifMatch && autocontactMatch && comparateurMatch) {
             DESCRIPTIF_URL = descriptifMatch[1];
             AUTOCONTACT_URL = autocontactMatch[1];
             COMPARATEUR_URL = comparateurMatch[1];
+            // URLs signées chat/expert/geotech/population/SPS (remplacent les fallbacks publics)
+            const expertBtpMatch    = urlRegex('EXPERT_BTP_URL');
+            const chatBtpMatch      = urlRegex('CHAT_BTP_URL');
+            const geotechMatch      = urlRegex('GEOTECH_URL');
+            const populationMatch   = urlRegex('POPULATION_CIBLE_URL');
+            const expertBtpSpsMatch = urlRegex('EXPERT_BTP_SPS_URL');
+            const chatBtpSpsMatch   = urlRegex('CHAT_BTP_SPS_URL');
+            if (expertBtpMatch)    EXPERT_BTP_URL     = expertBtpMatch[1];
+            if (chatBtpMatch)      CHAT_BTP_URL       = chatBtpMatch[1];
+            if (geotechMatch)      GEOTECH_URL        = geotechMatch[1];
+            if (populationMatch)   POPULATION_URL     = populationMatch[1];
+            if (expertBtpSpsMatch) EXPERT_BTP_SPS_URL = expertBtpSpsMatch[1];
+            if (chatBtpSpsMatch)   CHAT_BTP_SPS_URL   = chatBtpSpsMatch[1];
             return true;
         }
         return false;

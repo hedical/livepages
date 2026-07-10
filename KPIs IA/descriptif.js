@@ -1,7 +1,9 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
-const POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
-const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
+// URL population : remplacée par l'URL signée du webhook après auth
+// (fallback public conservé le temps de la transition bucket privé).
+let POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+const DESCRIPTIF_TYPE = KPI.DESCRIPTIF_TYPE; // cf. shared/utils.js
 
 // Data URL will be fetched from webhook after authentication
 let DATA_URL = '';
@@ -99,50 +101,7 @@ function parseNumber(value) {
 }
 
 function parseDate(dateString) {
-    if (!dateString || dateString.trim() === '') {
-        return null;
-    }
-    
-    // Remove backslashes that might be escaping commas
-    let cleanDate = dateString.replace(/\\/g, '');
-    
-    // Try standard date parsing first
-    let date = new Date(cleanDate);
-    
-    // If that fails, try to parse different formats
-    if (isNaN(date.getTime())) {
-        // Try format: "DD Month, YYYY, HH:MM" or "DD Month, YYYY" (e.g., "5 décembre, 2025, 15:33" or "25 octobre, 2025")
-        const frenchMonths = {
-            'janvier': 0, 'février': 1, 'fevrier': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
-            'juillet': 6, 'août': 7, 'aout': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11, 'decembre': 11
-        };
-        
-        // Match with optional time part: "DD Month, YYYY" or "DD Month, YYYY, HH:MM"
-        const match = cleanDate.match(/(\d+)\s+([a-zàâäéèêëïôùûü]+)[,\s]+(\d{4})/i);
-        if (match) {
-            const day = parseInt(match[1]);
-            const monthName = match[2].toLowerCase().trim();
-            const year = parseInt(match[3]);
-            
-            if (frenchMonths[monthName] !== undefined) {
-                date = new Date(year, frenchMonths[monthName], day);
-                
-                // Try to parse time if present
-                const timeMatch = cleanDate.match(/(\d{1,2}):(\d{2})/);
-                if (timeMatch) {
-                    const hours = parseInt(timeMatch[1]);
-                    const minutes = parseInt(timeMatch[2]);
-                    date.setHours(hours, minutes, 0, 0);
-                }
-            }
-        }
-    }
-    
-    if (isNaN(date.getTime())) {
-        return null;
-    }
-    
-    return date;
+    return KPI.parseFrenchDate(dateString);
 }
 
 // Returns {startDate, endDate} for the current month (YYYY-MM-DD)
@@ -194,32 +153,19 @@ function getFirstDate(data) {
     return earliestDate;
 }
 
-// Format number with thousands separator
+// Format number with thousands separator (cf. shared/utils.js)
 function formatNumber(num) {
-    return new Intl.NumberFormat('fr-FR').format(Math.round(num));
+    return KPI.formatNumber(num);
 }
 
-// Extract plain text from HTML string
-const HTML_TAG_RE = /<[^>]+>/g;
+// Extract plain text from HTML string (cf. shared/utils.js)
 function extractText(html) {
-    if (!html || typeof html !== 'string') return '';
-    const withBreaks = html.replace(/<\/p>/gi, '\n\n');
-    let text = withBreaks.replace(HTML_TAG_RE, '');
-    text = text
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/[*_`]/g, '');
-    return text.replace(/\s+/g, ' ').trim();
+    return KPI.extractText(html);
 }
 
-// Count words in text (only words, not numbers)
+// Count words in text (only words, not numbers) (cf. shared/utils.js)
 function countWords(text) {
-    if (!text || typeof text !== 'string') return 0;
-    // Match only sequences of letters (including accented characters)
-    const words = text.match(/[a-zA-ZÀ-ÿ]+/g);
-    return words ? words.length : 0;
+    return KPI.countWords(text);
 }
 
 // Load parameters from localStorage
@@ -340,80 +286,14 @@ function updateGains(descriptifsCount, totalRictCount, uniqueUsers) {
     gainEuroMaxProjectionEl.textContent = `Projection max année: ${formatNumber(maxProjectionGains.euroGain)} €`;
 }
 
-// Helper function to parse a CSV line with quoted values
+// Helper function to parse a CSV line with quoted values (cf. shared/utils.js)
 function parseCSVLine(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            values.push(current.trim());
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    values.push(current.trim());
-    return values;
+    return KPI.parseCSVLine(line);
 }
 
-// Full CSV parser that correctly handles quoted fields containing newlines
+// Full CSV parser that correctly handles quoted fields containing newlines (cf. shared/utils.js)
 function parseFullCSV(csvString) {
-    const rows = [];
-    let currentRow = [];
-    let currentField = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < csvString.length; i++) {
-        const char = csvString[i];
-        const next = csvString[i + 1];
-
-        if (char === '"') {
-            if (inQuotes && next === '"') {
-                // Escaped quote ""
-                currentField += '"';
-                i++;
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (char === ',' && !inQuotes) {
-            currentRow.push(currentField.trim());
-            currentField = '';
-        } else if (char === '\r' && next === '\n' && !inQuotes) {
-            // Windows CRLF line ending
-            currentRow.push(currentField.trim());
-            if (currentRow.some(f => f !== '')) rows.push(currentRow);
-            currentRow = [];
-            currentField = '';
-            i++; // skip the \n
-        } else if (char === '\n' && !inQuotes) {
-            currentRow.push(currentField.trim());
-            if (currentRow.some(f => f !== '')) rows.push(currentRow);
-            currentRow = [];
-            currentField = '';
-        } else if (char === '\r' && !inQuotes) {
-            // Lone \r — treat as line ending
-            currentRow.push(currentField.trim());
-            if (currentRow.some(f => f !== '')) rows.push(currentRow);
-            currentRow = [];
-            currentField = '';
-        } else {
-            currentField += char;
-        }
-    }
-
-    // Flush last field/row
-    if (currentField || currentRow.length > 0) {
-        currentRow.push(currentField.trim());
-        if (currentRow.some(f => f !== '')) rows.push(currentRow);
-    }
-
-    return rows;
+    return KPI.parseFullCSV(csvString);
 }
 
 // Fix encoding issues in text (convert from Latin-1/Windows-1252 to UTF-8)
@@ -450,26 +330,9 @@ function fixEncoding(text) {
     return fixed;
 }
 
-// Helper function to parse CSV line with quoted values (handles commas inside quotes)
+// Helper function to parse CSV line with quoted values (cf. shared/utils.js)
 function parseCSVLineWithCommas(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            values.push(current.trim());
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    values.push(current.trim());
-    return values;
+    return KPI.parseCSVLine(line);
 }
 
 // Extract CSV content from "data" field if present
@@ -857,14 +720,11 @@ function filterYieldAffairs(data) {
     });
 }
 
+// Ne garde que les vrais descriptifs IA (type vide = RICT sans génération,
+// exclu). Logique centralisée et testée dans shared/utils.js.
 function filterByType(data, type) {
-    // Si aucun item n'a de type (query Metabase déjà filtrée), on passe tout
-    const anyHasType = data.some(item => item.type && item.type.trim() !== '');
-    if (!anyHasType) return data;
-    // Ne garder QUE les lignes dont AIDeliverable_type contient le type recherché.
-    // Les lignes au type vide (RICT sans génération IA, hasAi=false) sont exclues :
-    // sinon elles gonflent "Descriptifs générés" au-delà du nombre total de RICT.
-    return data.filter((item) => item.type && item.type.includes(type));
+    const anyHasType = KPI.hasAnyType(data);
+    return data.filter((item) => KPI.isDescriptifItem(item, anyHasType));
 }
 
 function filterByDateRange(data, startDate, endDate) {
@@ -2081,10 +1941,7 @@ function updateAgencyTableHeaders() {
  * Escape HTML to prevent XSS
  */
 function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return KPI.escapeHtml(str);
 }
 
 startDateFilterEl.addEventListener('change', (e) => {
@@ -2344,10 +2201,15 @@ async function authenticateAndGetURL() {
         }
         
         const result = await response.text();
-        const descriptifMatch = result.match(/DESCRIPTIF_URL = '([^']+)'/);
-        
-        if (descriptifMatch) {
-            return descriptifMatch[1];
+        const urls = KPI.parseUrlsResponse(result);
+
+        // URL population signée (le webhook l'expose après auth)
+        if (urls.POPULATION_CIBLE_URL) {
+            POPULATION_CSV_URL = urls.POPULATION_CIBLE_URL;
+        }
+
+        if (urls.DESCRIPTIF_URL) {
+            return urls.DESCRIPTIF_URL;
         }
         
         window.location.href = 'index.html';

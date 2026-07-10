@@ -1,4 +1,6 @@
 // Configuration
+// URLs remplacées par les URLs SIGNÉES du webhook après auth (cf. ensureDataUrls),
+// fallback public conservé le temps de la transition bucket privé.
 const DATA_URLS = {
     'chat-btp': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json',
     'expert-btp': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json',
@@ -7,7 +9,25 @@ const DATA_URLS = {
 };
 // Liste maître des agences (toutes filiales) — utilisée pour peupler le filtre même
 // si certaines agences n'ont aucun chat dans la source sélectionnée.
-const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+let POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+
+// Auth unique par session de page : récupère les URLs signées et remplace les
+// fallbacks publics. Redirige vers index.html si mot de passe absent/refusé.
+let _dataUrlsPromise = null;
+function ensureDataUrls() {
+    if (!_dataUrlsPromise) {
+        _dataUrlsPromise = KPI.fetchDataUrls().then(urls => {
+            if (!urls) return null;
+            if (urls.CHAT_BTP_URL)         DATA_URLS['chat-btp']    = urls.CHAT_BTP_URL;
+            if (urls.EXPERT_BTP_URL)       DATA_URLS['expert-btp']  = urls.EXPERT_BTP_URL;
+            if (urls.CHAT_CITAE_URL)       DATA_URLS['chat-citae']  = urls.CHAT_CITAE_URL;
+            if (urls.EXPERT_CITAE_URL)     DATA_URLS['expert-citae']= urls.EXPERT_CITAE_URL;
+            if (urls.POPULATION_CIBLE_URL) POPULATION_URL           = urls.POPULATION_CIBLE_URL;
+            return urls;
+        });
+    }
+    return _dataUrlsPromise;
+}
 
 // Global state
 let allRecords = [];
@@ -266,6 +286,9 @@ async function loadKnownAgencies() {
 async function loadData() {
     try {
         loadingOverlay.classList.remove('hidden');
+
+        // Auth + URLs signées (une seule fois par session de page)
+        await ensureDataUrls();
 
         // Charge la liste maître des agences en parallèle (1 seule fois, mis en cache)
         const knownAgenciesPromise = allKnownAgencies.length === 0

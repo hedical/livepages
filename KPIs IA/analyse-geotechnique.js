@@ -1,6 +1,8 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
-const POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+// URL population : remplacée par l'URL signée du webhook après auth
+// (fallback public conservé le temps de la transition bucket privé).
+let POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
 // Data URL fetched from the webhook after authentication (n8n must expose GEOTECH_URL).
 let DATA_URL = '';
@@ -532,24 +534,21 @@ cumulToggleEl.addEventListener('change', e => {
 
 // ==================== AUTH + INIT ====================
 
-// Returns the GEOTECH_URL via the webhook (uses cached response if available).
+// Returns the GEOTECH_URL via the webhook.
+// Pas de cache : les URLs renvoyées sont SIGNÉES (validité 12h), une réponse
+// mise en cache servirait des liens expirés.
 async function authenticateAndGetURL() {
     const storedPassword = localStorage.getItem('roi_password');
     if (!storedPassword) {
         window.location.href = 'index.html';
         return null;
     }
+    localStorage.removeItem('roi_auth_result'); // purge l'ancien cache
 
-    // Use cached response when present (saves a webhook round-trip after returning from index).
-    const cached = localStorage.getItem('roi_auth_result');
     const tryParse = (text) => {
         const m = text.match(/GEOTECH_URL\s*=\s*['"]([^'"]+)['"]/);
         return m ? m[1] : null;
     };
-    if (cached) {
-        const url = tryParse(cached);
-        if (url) return url;
-    }
 
     try {
         const response = await fetch(WEBHOOK_URL, {
@@ -563,7 +562,9 @@ async function authenticateAndGetURL() {
             return null;
         }
         const result = await response.text();
-        localStorage.setItem('roi_auth_result', result);
+        // URL population signée exposée par le webhook
+        const popMatch = result.match(/POPULATION_CIBLE_URL\s*=\s*['"]([^'"]+)['"]/);
+        if (popMatch) POPULATION_CSV_URL = popMatch[1];
         return tryParse(result);
     } catch (e) {
         console.error('Authentication error:', e);

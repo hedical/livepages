@@ -8,27 +8,21 @@ let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
 let AO_URL = ''; // exposée par le webhook passwordROI sous le nom ANALYSE_AO_URL ; pas de fallback hardcodé
-// Expert BTP Consultants URL (public)
-const EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
-// Chat BTP Consultants URL (public)
-const CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
-// Expert Citae URL (public)
-const EXPERT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json';
-// Chat Citae URL (public)
-const CHAT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json';
-// Expert BTP Diagnostics URL (public)
-const EXPERT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpdiagnostics.json';
-// Chat BTP Diagnostics URL (public)
-const CHAT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
-// Expert BTP Consultants SPS URL (public) — même domaine email que BTP Consultants mais BU distincte
-const EXPERT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
-// Chat BTP Consultants SPS URL (public)
-const CHAT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json';
-// Default Population URL (public)
-const POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+// URLs chat/expert/population : remplacées par les URLs SIGNÉES du webhook
+// après auth (fallback public conservé le temps de la transition bucket privé).
+let EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
+let CHAT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json';
+let EXPERT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json';
+let CHAT_CITAE_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json';
+let EXPERT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpdiagnostics.json';
+let CHAT_BTPDIAG_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json';
+// SPS : même domaine email que BTP Consultants mais BU distincte
+let EXPERT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json';
+let CHAT_BTP_SPS_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json';
+let POPULATION_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 
-// Constants
-const DESCRIPTIF_TYPE = 'DESCRIPTIF_SOMMAIRE_DES_TRAVAUX';
+// Constants (cf. shared/utils.js)
+const DESCRIPTIF_TYPE = KPI.DESCRIPTIF_TYPE;
 const AUTOCONTACT_TYPE = 'AUTOCONTACT';
 
 // Vrai si le dataset descriptif contient au moins une ligne avec un type renseigné.
@@ -36,14 +30,10 @@ const AUTOCONTACT_TYPE = 'AUTOCONTACT';
 let descriptifTypePresent = false;
 
 // Prédicat : une ligne est un "Descriptif sommaire des travaux".
-// On ne garde QUE les lignes dont AIDeliverable_type contient DESCRIPTIF_TYPE.
-// Les lignes au type vide (RICT sans génération IA, hasAi=false) sont exclues,
-// sinon elles gonflent le nombre de descriptifs au-delà du nombre total de RICT.
-// Garde-fou : si AUCUNE ligne n'a de type (query Metabase déjà filtrée en amont),
-// on passe tout pour ne pas casser ce format pré-filtré.
+// Logique centralisée et testée dans shared/utils.js (les lignes au type vide,
+// RICT sans génération IA, sont exclues — garde-fou passthrough si query pré-filtrée).
 function isDescriptifRow(item) {
-    if (!descriptifTypePresent) return true;
-    return !!(item.type && item.type.includes(DESCRIPTIF_TYPE));
+    return KPI.isDescriptifItem(item, descriptifTypePresent);
 }
 
 // Parameters for gains calculation (must match descriptif.js and autocontact.js)
@@ -54,9 +44,8 @@ const MINUTES_PER_MESSAGE = 2.8125; // For chat tools (BTP and Citae)
 const MINUTES_PER_MESSAGE_EXPERT = 5; // For expert technique tools (BTP and Citae)
 const HOURS_PER_POINT_NF = 0.02816; // NF Habitat: hours gained per point checked
 const MINUTES_PER_AO_ANALYSE = 15; // Analyse AO: minutes gagnées par AO analysé (lead créé)
-// Date de mise en place effective du module Analyse AO. Les marchés détectés avant
-// cette date (données de test / backfill) ne sont jamais comptabilisés.
-const AO_MODULE_START_DATE = new Date('2026-06-06'); // UTC minuit, cohérent avec dateFilter
+// Date de mise en place effective du module Analyse AO (cf. shared/utils.js).
+const AO_MODULE_START_DATE = KPI.AO_MODULE_START_DATE;
 const NF_HABITAT_REVENUE = 7000000; // NF Habitat specific revenue base
 const EURO_PER_MESSAGE = 1.5; // For chat and expert tools (BTP and Citae)
 const ANNUAL_HOURS = 1607;
@@ -198,98 +187,28 @@ const analyseAoOppEl      = document.getElementById('analyse-ao-opp');
 
 // ==================== UTILITY FUNCTIONS ====================
 
-// Extract plain text from HTML string
-const HTML_TAG_RE = /<[^>]+>/g;
+// Extract plain text from HTML string (cf. shared/utils.js)
 function extractText(html) {
-    if (!html || typeof html !== 'string') return '';
-    const withBreaks = html.replace(/<\/p>/gi, '\n\n');
-    let text = withBreaks.replace(HTML_TAG_RE, '');
-    text = text
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/[*_`]/g, '');
-    return text.replace(/\s+/g, ' ').trim();
+    return KPI.extractText(html);
 }
 
-// Count words in text (only words, not numbers)
+// Count words in text (only words, not numbers) (cf. shared/utils.js)
 function countWords(text) {
-    if (!text || typeof text !== 'string') return 0;
-    // Match only sequences of letters (including accented characters)
-    const words = text.match(/[a-zA-ZÀ-ÿ]+/g);
-    return words ? words.length : 0;
+    return KPI.countWords(text);
 }
 
 /**
- * Helper function to parse a CSV line with quoted values
+ * Helper function to parse a CSV line with quoted values (cf. shared/utils.js)
  */
 function parseCSVLine(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        const nextChar = i + 1 < line.length ? line[i + 1] : null;
-        
-        if (char === '"') {
-            if (inQuotes && nextChar === '"') {
-                // This is an escaped quote ("") inside a quoted value
-                // Add a single quote to the result
-                current += '"';
-                i++; // Skip the next quote
-            } else {
-                // This is a quote that starts or ends a quoted value
-                inQuotes = !inQuotes;
-            }
-        } else if (char === ',' && !inQuotes) {
-            values.push(current);
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    values.push(current);
-    return values;
+    return KPI.parseCSVLine(line);
 }
 
 /**
- * Full CSV parser that correctly handles quoted fields containing newlines
+ * Full CSV parser that correctly handles quoted fields containing newlines (cf. shared/utils.js)
  */
 function parseFullCSV(csvString) {
-    const rows = [];
-    let currentRow = [];
-    let currentField = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < csvString.length; i++) {
-        const char = csvString[i];
-        const next = csvString[i + 1];
-
-        if (char === '"') {
-            if (inQuotes && next === '"') { currentField += '"'; i++; }
-            else { inQuotes = !inQuotes; }
-        } else if (char === ',' && !inQuotes) {
-            currentRow.push(currentField.trim());
-            currentField = '';
-        } else if (char === '\r' && next === '\n' && !inQuotes) {
-            currentRow.push(currentField.trim());
-            if (currentRow.some(f => f !== '')) rows.push(currentRow);
-            currentRow = []; currentField = ''; i++;
-        } else if ((char === '\n' || char === '\r') && !inQuotes) {
-            currentRow.push(currentField.trim());
-            if (currentRow.some(f => f !== '')) rows.push(currentRow);
-            currentRow = []; currentField = '';
-        } else {
-            currentField += char;
-        }
-    }
-    if (currentField || currentRow.length > 0) {
-        currentRow.push(currentField.trim());
-        if (currentRow.some(f => f !== '')) rows.push(currentRow);
-    }
-    return rows;
+    return KPI.parseFullCSV(csvString);
 }
 
 /**
@@ -312,47 +231,7 @@ function extractAgency(contractNumber) {
  * Parses a French date string into a Date object.
  */
 function parseFrenchDate(dateString) {
-    if (!dateString) return null;
-    
-    // Remove backslashes
-    let cleanDate = dateString.replace(/\\/g, '');
-    
-    // Try standard parsing
-    let date = new Date(cleanDate);
-    
-    // If that fails, try French format
-    if (isNaN(date.getTime())) {
-        const months = {
-            'janvier': 0, 'février': 1, 'fevrier': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
-            'juillet': 6, 'août': 7, 'aout': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11, 'decembre': 11
-        };
-        
-        // Match with optional time part: "DD Month, YYYY" or "DD Month, YYYY, HH:MM"
-        const match = cleanDate.match(/(\d+)\s+([a-zàâäéèêëïôùûü]+)[,\s]+(\d{4})/i);
-        if (match) {
-            const day = parseInt(match[1]);
-            const monthName = match[2].toLowerCase().trim();
-            const year = parseInt(match[3]);
-            
-            if (months[monthName] !== undefined) {
-                date = new Date(year, months[monthName], day);
-                
-                // Try to parse time if present
-                const timeMatch = cleanDate.match(/(\d{1,2}):(\d{2})/);
-                if (timeMatch) {
-                    const hours = parseInt(timeMatch[1]);
-                    const minutes = parseInt(timeMatch[2]);
-                    date.setHours(hours, minutes, 0, 0);
-                }
-            }
-        }
-    }
-    
-    if (isNaN(date.getTime())) {
-        return null;
-    }
-    
-    return date;
+    return KPI.parseFrenchDate(dateString);
 }
 
 // ==================== DATA PARSING ====================
@@ -612,21 +491,7 @@ function extractMaxPage(longResultString) {
  * match a key earlier in the object.
  */
 function findKey(keys, ...patterns) {
-    for (const pattern of patterns) {
-        for (const key of keys) {
-            const lk = (key || '').toLowerCase();
-            let ok = true;
-            for (const sub of pattern) {
-                if (sub.startsWith('!')) {
-                    if (lk.includes(sub.substring(1))) { ok = false; break; }
-                } else {
-                    if (!lk.includes(sub)) { ok = false; break; }
-                }
-            }
-            if (ok) return key;
-        }
-    }
-    return null;
+    return KPI.findKey(keys, ...patterns);
 }
 
 /**
@@ -831,10 +696,7 @@ function parseAOPayload(payload) {
     return payload.data
         // Floor de mise en place : ignorer les marchés détectés avant le go-live.
         // (Les marchés sans date de détection valide sont conservés.)
-        .filter(m => {
-            const d = parseFrenchDate(m.dateDetection);
-            return !d || d >= AO_MODULE_START_DATE;
-        })
+        .filter(m => KPI.isAfterAOStart(m.dateDetection))
         .map(m => ({
             marcheId: m.marcheId || '',
             refMarche: m.refMarche || '',
@@ -1028,26 +890,9 @@ function fixEncoding(text) {
  * Parse Population Data CSV (using same logic as descriptif.js)
  * Format: DR;Agence;Effectif
  */
-// Helper function to parse CSV line with quoted values (handles commas inside quotes)
+// Helper function to parse CSV line with quoted values (cf. shared/utils.js)
 function parseCSVLineWithCommas(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            values.push(current.trim());
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    values.push(current.trim());
-    return values;
+    return KPI.parseCSVLine(line);
 }
 
 // Extract CSV content from "data" field if present
@@ -1878,10 +1723,10 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
 }
 
 /**
- * Format number with thousands separator
+ * Format number with thousands separator (cf. shared/utils.js)
  */
 function formatNumber(num) {
-    return new Intl.NumberFormat('fr-FR').format(Math.round(num));
+    return KPI.formatNumber(num);
 }
 
 // ==================== UPDATE UI ====================
@@ -2417,14 +2262,34 @@ async function authenticateWithPassword(password) {
             if (geotechMatch) GEOTECH_URL = geotechMatch[1];
             if (aoMatch) AO_URL = aoMatch[1];
 
-            // Cache the full webhook response so other pages (nfhabitat.js, etc.)
-            // can reuse it without re-calling the webhook
-            localStorage.setItem('roi_auth_result', result);
+            // URLs signées chat/expert/population (remplacent les fallbacks publics)
+            const expertBtpMatch     = urlRegex('EXPERT_BTP_URL');
+            const chatBtpMatch       = urlRegex('CHAT_BTP_URL');
+            const expertCitaeMatch   = urlRegex('EXPERT_CITAE_URL');
+            const chatCitaeMatch     = urlRegex('CHAT_CITAE_URL');
+            const expertBtpDiagMatch = urlRegex('EXPERT_BTPDIAG_URL');
+            const chatBtpDiagMatch   = urlRegex('CHAT_BTPDIAG_URL');
+            const expertBtpSpsMatch  = urlRegex('EXPERT_BTP_SPS_URL');
+            const chatBtpSpsMatch    = urlRegex('CHAT_BTP_SPS_URL');
+            const populationMatch    = urlRegex('POPULATION_CIBLE_URL');
+            if (expertBtpMatch)     EXPERT_BTP_URL     = expertBtpMatch[1];
+            if (chatBtpMatch)       CHAT_BTP_URL       = chatBtpMatch[1];
+            if (expertCitaeMatch)   EXPERT_CITAE_URL   = expertCitaeMatch[1];
+            if (chatCitaeMatch)     CHAT_CITAE_URL     = chatCitaeMatch[1];
+            if (expertBtpDiagMatch) EXPERT_BTPDIAG_URL = expertBtpDiagMatch[1];
+            if (chatBtpDiagMatch)   CHAT_BTPDIAG_URL   = chatBtpDiagMatch[1];
+            if (expertBtpSpsMatch)  EXPERT_BTP_SPS_URL = expertBtpSpsMatch[1];
+            if (chatBtpSpsMatch)    CHAT_BTP_SPS_URL   = chatBtpSpsMatch[1];
+            if (populationMatch)    POPULATION_URL     = populationMatch[1];
+
+            // Pas de cache de la réponse (roi_auth_result) : les URLs sont
+            // SIGNÉES (validité 12h), un cache servirait des liens expirés.
+            localStorage.removeItem('roi_auth_result');
 
             console.log('Authentication successful');
             return true;
         }
-        
+
         return false;
     } catch (error) {
         console.error('Authentication error:', error);

@@ -1,6 +1,8 @@
 // Configuration
 const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
-const POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
+// URL population : remplacée par l'URL signée du webhook après auth
+// (fallback public conservé le temps de la transition bucket privé).
+let POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/population_cible.csv';
 const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1vUrqckVmTD8yePcsAbVzKy_pTp7zuSIwkRaAi0Jbwhw/export?format=csv&gid=1039655127';
 
 // Data URL will be fetched from webhook after authentication
@@ -1778,8 +1780,12 @@ async function authenticateAndGetURL() {
         }
         
         const result = await response.text();
+        // URL population signée exposée par le webhook
+        const popMatch = result.match(/POPULATION_CIBLE_URL\s*=\s*['"]([^'"]+)['"]/);
+        if (popMatch) POPULATION_CSV_URL = popMatch[1];
+
         const autocontactMatch = result.match(/AUTOCONTACT_URL = '([^']+)'/);
-        
+
         if (autocontactMatch) {
             return autocontactMatch[1];
         }
