@@ -493,25 +493,52 @@ Le workflow n8n doit fetch `/api/card/139/query/json` (binary streaming), puis u
 
 **URL :** `https://metabase.btp-force.cloud/question/158`
 **Collection :** KPI IA (id 17)
-**Source :** Table `AnalyticEvent` (id 74) — même log d'events que la card 139 (géotech), filtré sur les events acoustique.
-**Consommé par :** tuile index + `analyse-acoustique.html` (brique qualité — pas de gain heures/€, dédup par `DeliverableId` côté front).
-**Créée le 10/07/2026** via l'API Metabase (clone de la dataset_query de la card 139, filtre modifié).
+**Source :** Table `AIDeliverable` filtrée `type = 'ETUDE_ACOUSTIQUE'` — **PAS `AnalyticEvent`** :
+contrairement à la géotech, le module acoustique ne journalise aucun event frontend
+(vérifié le 10/07/2026 : `AnalyticEvent` ne contient que `Open Documents Tab` et les 2 events Geotech).
+**Consommé par :** tuile index + `analyse-acoustique.html` (brique qualité — pas de gain heures/€).
+**KPIs :** opérations IA (= générations, dédup `DeliverableId`), affaires uniques (`ContractNumber`), utilisateurs uniques.
 
 ### SQL
 
-Identique à la card 139 (mêmes colonnes/alias), seule la clause `WHERE` change :
+Chaîne de jointure identique à la card 137 (comparateur). Les noms de colonnes sont
+**alignés sur la card 139** (`EventId`/`EventName`/`EventDate`/`DeliverableId`...) pour
+garder le parseur front commun aux deux briques AnalyticEvent/AIDeliverable ;
+`ReportId`/`NoticesCount` etc. sont NULL/0.
 
 ```sql
-WHERE "name" ILIKE '%acousti%'
-  AND (
-    "properties"->'subAffair'->>'contractNumber' IS NULL
-    OR "properties"->'subAffair'->>'contractNumber' NOT ILIKE '%YIELD%'
-  )
+SELECT
+    aid."id"                    AS "EventId",
+    aid."type"::text            AS "EventName",       -- 'ETUDE_ACOUSTIQUE'
+    aid."createdAt"             AS "EventDate",
+    aid."id"                    AS "DeliverableId",
+    NULL AS "DocumentId", NULL AS "ReportId", NULL AS "ReportName",
+    0 AS "NoticesCount", NULL AS "FirstNoticeId", NULL AS "FirstNoticeNumber",
+    sad."contractNumber"        AS "ContractNumber",
+    sa."userId"                 AS "SubAffairUserId",
+    u."email"                   AS "UserEmail",
+    NULL AS "UserFirstname", NULL AS "UserLastname",
+    NULL AS "UserPosition", NULL AS "UserRole", NULL AS "UserIsEnabled",
+    a."management"              AS "DR",
+    a."productionService"       AS "Agence"
+FROM "AIDeliverable" aid
+LEFT JOIN "AIProject" ap ON ap."id" = aid."aiProjectId"
+LEFT JOIN "SubAffair" sa ON sa."id" = ap."subAffairId"
+LEFT JOIN "SubAffairDetail" sad ON sad."id" = sa."subAffairDetailId"
+LEFT JOIN "User" u ON u."id" = sa."userId"
+LEFT JOIN "AgencyToUser" atu ON atu."userId" = u."id" AND atu."isMain" = true
+LEFT JOIN "Agency" a ON a."id" = atu."agencyId"
+WHERE aid."type"::text = 'ETUDE_ACOUSTIQUE'
+  AND (sad."contractNumber" IS NULL OR sad."contractNumber" NOT LIKE '%YIELD%')
+ORDER BY aid."createdAt" DESC
 ```
 
-> `ILIKE '%acousti%'` couvre les variantes `Acoustic` / `Acoustique`. Le front filtre en plus
-> sur `EventName` commençant par `Create Notice From AI Acousti` / `Create Report From AI Acousti`
-> (tolérant casse) — mettre à jour ce préfixe si AnalyzTech nomme les events différemment.
+### Volume (10/07/2026)
+
+- 10 livrables `ETUDE_ACOUSTIQUE` en base, dont **9 tests YIELD-STUDIO** (exclus) →
+  **1 ligne** en sortie (première exécution production le 08/06/2026).
+- Le front accepte aussi les futurs events `Create Notice/Report From AI Acousti*`
+  si AnalyzTech instrumente un jour le tracking frontend comme pour la géotech.
 
 ### Câblage n8n / Supabase (workflow « ROI Global ») — ✅ EN PLACE (10/07/2026)
 

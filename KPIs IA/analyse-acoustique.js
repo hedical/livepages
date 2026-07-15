@@ -42,8 +42,8 @@ const cumulToggleEl = document.getElementById('cumul-toggle');
 
 // KPI Elements
 const totalOperationsEl = document.getElementById('total-operations');
-const totalNoticesEl = document.getElementById('total-notices');
-const totalReportsEl = document.getElementById('total-reports');
+const totalContractsEl = document.getElementById('total-contracts');
+const totalAgenciesEl = document.getElementById('total-agencies');
 const totalUsersEl = document.getElementById('total-users');
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -103,11 +103,13 @@ function parseAcoustiqueJSON(jsonArray) {
     const data = [];
     jsonArray.forEach(item => {
         const eventName = (item['EventName'] || '').trim();
-        // Tolérant (casse/variante Acoustic|Acoustique) : le nom exact de l'event
-        // acoustique n'est pas figé — on filtre sur le préfixe.
+        // Source = AIDeliverable type ETUDE_ACOUSTIQUE (card 158) — chaque ligne
+        // est une génération IA. Les préfixes Create Notice/Report sont conservés
+        // au cas où AnalyzTech instrumenterait un jour les events frontend.
         const isNotice = /^Create Notice From AI Acousti/i.test(eventName);
         const isReport = /^Create Report From AI Acousti/i.test(eventName);
-        if (!isNotice && !isReport) return; // le fichier peut contenir d'autres types d'events
+        const isGeneration = /ACOUSTI/i.test(eventName);
+        if (!isNotice && !isReport && !isGeneration) return;
 
         const contractNumber = (item['ContractNumber'] || '').trim();
         const agencyCode = extractAgency(contractNumber);
@@ -223,20 +225,20 @@ function processData(data, currentFilters, skipDateFilter = false) {
 
     const uniqueUsers = new Set();
     const uniqueDeliverables = new Set();
-    let totalNotices = 0;
-    let totalReports = 0;
+    const uniqueContracts = new Set();
+    const uniqueAgencies = new Set();
 
     filtered.forEach(item => {
         if (item.email) uniqueUsers.add(item.email);
         if (item.deliverableId) uniqueDeliverables.add(item.deliverableId);
-        if (item.isNotice) totalNotices += item.noticesCount || 1;
-        if (item.isReport) totalReports++;
+        if (item.contractNumber) uniqueContracts.add(item.contractNumber);
+        if (item.agency) uniqueAgencies.add(item.agency);
     });
 
     return {
         totalOperations: uniqueDeliverables.size,
-        totalNotices,
-        totalReports,
+        totalContracts: uniqueContracts.size,
+        totalAgencies: uniqueAgencies.size,
         totalUsers: uniqueUsers.size,
         filteredData: filtered,
     };
@@ -294,7 +296,7 @@ function sortTable(column) {
 window.sortTable = sortTable;
 
 function updateSortIcons() {
-    const columns = ['dr', 'agency', 'operations', 'notices', 'reports', 'users', 'rate'];
+    const columns = ['dr', 'agency', 'operations', 'contracts', 'users', 'rate'];
     columns.forEach(col => {
         const icon = document.getElementById(`sort-icon-${col}`);
         if (!icon) return;
@@ -316,8 +318,7 @@ function updateAgencyTable(data) {
         if (!agencyStats[item.agency]) {
             agencyStats[item.agency] = {
                 operations: new Set(),
-                notices: 0,
-                reports: 0,
+                contracts: new Set(),
                 users: new Set(),
                 agencyCode: item.agencyCode,
                 direction: item.direction || (item.agencyCode ? agencyToDR[item.agencyCode] : ''),
@@ -325,8 +326,7 @@ function updateAgencyTable(data) {
         }
         const s = agencyStats[item.agency];
         if (item.deliverableId) s.operations.add(item.deliverableId);
-        if (item.isNotice) s.notices += item.noticesCount || 1;
-        if (item.isReport) s.reports++;
+        if (item.contractNumber) s.contracts.add(item.contractNumber);
         if (item.email) s.users.add(item.email);
     });
 
@@ -337,8 +337,7 @@ function updateAgencyTable(data) {
             case 'dr':         cmp = (agencyStats[a].direction || '').localeCompare(agencyStats[b].direction || ''); break;
             case 'agency':     cmp = a.localeCompare(b); break;
             case 'operations': cmp = agencyStats[a].operations.size - agencyStats[b].operations.size; break;
-            case 'notices':    cmp = agencyStats[a].notices - agencyStats[b].notices; break;
-            case 'reports':    cmp = agencyStats[a].reports - agencyStats[b].reports; break;
+            case 'contracts':  cmp = agencyStats[a].contracts.size - agencyStats[b].contracts.size; break;
             case 'users':      cmp = agencyStats[a].users.size - agencyStats[b].users.size; break;
             case 'rate': {
                 const codeA = agencyStats[a].agencyCode;
@@ -358,7 +357,7 @@ function updateAgencyTable(data) {
     agencyTableBodyEl.innerHTML = '';
     if (sorted.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="7" class="px-6 py-4 text-center text-gray-500">Aucune donnée disponible pour cette période</td>`;
+        row.innerHTML = `<td colspan="6" class="px-6 py-4 text-center text-gray-500">Aucune donnée disponible pour cette période</td>`;
         agencyTableBodyEl.appendChild(row);
         return;
     }
@@ -375,8 +374,7 @@ function updateAgencyTable(data) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${dr}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${agency}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-semibold">${s.operations.size}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${s.notices}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${s.reports}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${s.contracts.size}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${s.users.size}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm ${effectif > 0 ? 'text-blue-600 font-semibold' : 'text-gray-500'}">
                 ${effectif > 0 ? `${tauxAdoption}%` : '-'}
@@ -402,11 +400,10 @@ function updateChart(data) {
         if (!date) return;
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         if (!monthGroups[key]) {
-            monthGroups[key] = { deliverables: new Set(), notices: 0, reports: 0 };
+            monthGroups[key] = { deliverables: new Set(), contracts: new Set() };
         }
         if (item.deliverableId) monthGroups[key].deliverables.add(item.deliverableId);
-        if (item.isNotice) monthGroups[key].notices += item.noticesCount || 1;
-        if (item.isReport) monthGroups[key].reports++;
+        if (item.contractNumber) monthGroups[key].contracts.add(item.contractNumber);
     });
 
     const sortedMonths = Object.keys(monthGroups).sort();
@@ -416,8 +413,7 @@ function updateChart(data) {
         return `${monthNames[parseInt(month) - 1]} ${year}`;
     });
     const opsData = sortedMonths.map(k => monthGroups[k].deliverables.size);
-    const noticesData = sortedMonths.map(k => monthGroups[k].notices);
-    const reportsData = sortedMonths.map(k => monthGroups[k].reports);
+    const contractsData = sortedMonths.map(k => monthGroups[k].contracts.size);
 
     const canvas = document.getElementById('dateChart');
     if (!canvas) return;
@@ -437,18 +433,10 @@ function updateChart(data) {
                     borderRadius: 6,
                 },
                 {
-                    label: 'Notices créées',
-                    data: noticesData,
+                    label: 'Affaires uniques',
+                    data: contractsData,
                     backgroundColor: 'rgba(16, 185, 129, 0.75)',
                     borderColor: 'rgba(5, 150, 105, 1)',
-                    borderWidth: 2,
-                    borderRadius: 6,
-                },
-                {
-                    label: 'Rapports créés',
-                    data: reportsData,
-                    backgroundColor: 'rgba(139, 92, 246, 0.75)',
-                    borderColor: 'rgba(109, 40, 217, 1)',
                     borderWidth: 2,
                     borderRadius: 6,
                 },
@@ -487,8 +475,8 @@ function updateKPIs() {
     const kpis = processData(allData, filters, isCumulativeMode);
 
     totalOperationsEl.textContent = formatNumber(kpis.totalOperations);
-    totalNoticesEl.textContent = formatNumber(kpis.totalNotices);
-    totalReportsEl.textContent = formatNumber(kpis.totalReports);
+    totalContractsEl.textContent = formatNumber(kpis.totalContracts);
+    totalAgenciesEl.textContent = formatNumber(kpis.totalAgencies);
     totalUsersEl.textContent = formatNumber(kpis.totalUsers);
 
     const firstDate = getFirstDate(allData);

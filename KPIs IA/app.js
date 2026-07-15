@@ -183,8 +183,7 @@ const analyseGeoUsersEl = document.getElementById('analyse-geo-users');
 
 // Analyse Acoustique (BTP Consultants) elements
 const analyseAcouCountEl = document.getElementById('analyse-acou-count');
-const analyseAcouNoticesEl = document.getElementById('analyse-acou-notices');
-const analyseAcouReportsEl = document.getElementById('analyse-acou-reports');
+const analyseAcouContractsEl = document.getElementById('analyse-acou-contracts');
 const analyseAcouUsersEl = document.getElementById('analyse-acou-users');
 
 // Analyse AO (BTP Consultants) elements
@@ -636,7 +635,7 @@ function parseComparateurJSON(jsonArray) {
  * Parse direct JSON array from Metabase card 139 (Analyse Géotechnique).
  * One row per AnalyticEvent (Notice or Report). Front-end dedupes operations via DeliverableId.
  */
-function parseAnalyticEventsJSON(jsonArray, noticeRe, reportRe, label) {
+function parseAnalyticEventsJSON(jsonArray, noticeRe, reportRe, label, keepRe) {
     if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
         return [];
     }
@@ -645,7 +644,9 @@ function parseAnalyticEventsJSON(jsonArray, noticeRe, reportRe, label) {
         const eventName = (item['EventName'] || '').trim();
         const isNotice = noticeRe.test(eventName);
         const isReport = reportRe.test(eventName);
-        if (!isNotice && !isReport) return;
+        // keepRe (optionnel) : garde aussi les lignes "génération" qui ne sont
+        // ni Notice ni Report (ex. AIDeliverable type ETUDE_ACOUSTIQUE).
+        if (!isNotice && !isReport && !(keepRe && keepRe.test(eventName))) return;
         const contractNumber = (item['ContractNumber'] || '').trim();
         let agencyCode = null;
         const m = contractNumber.match(/C-([A-Z0-9]+)-/);
@@ -674,11 +675,14 @@ function parseGeotechJSON(jsonArray) {
         /^Create Notice From AI Geotech$/i, /^Create Report From AI Geotech$/i, 'geotech');
 }
 
-// Acoustique : nom d'event toléré (Acoustic|Acoustique, casse libre) — le nom
-// exact n'est pas figé côté AnalyzTech, on filtre sur le préfixe.
+// Acoustique : source AIDeliverable type ETUDE_ACOUSTIQUE (card 158) — chaque
+// ligne est une génération IA (pas d'events frontend Notice/Report comme la
+// géotech). Les préfixes Create sont conservés au cas où AnalyzTech
+// instrumenterait un jour le tracking.
 function parseAcoustiqueJSON(jsonArray) {
     return parseAnalyticEventsJSON(jsonArray,
-        /^Create Notice From AI Acousti/i, /^Create Report From AI Acousti/i, 'acoustique');
+        /^Create Notice From AI Acousti/i, /^Create Report From AI Acousti/i, 'acoustique',
+        /ACOUSTI/i);
 }
 
 /**
@@ -1664,10 +1668,23 @@ function processGeotechData(data) {
     };
 }
 
-// Même logique que geotech : brique qualité basée sur AnalyticEvent
-// (dédup par DeliverableId, pas de gain h/€).
+// Brique qualité (pas de gain h/€), source AIDeliverable : opérations
+// (dédup DeliverableId), affaires uniques, utilisateurs uniques.
 function processAcoustiqueData(data) {
-    return processGeotechData(data);
+    const filtered = getFilteredData(data);
+    const uniqueUsers = new Set();
+    const uniqueDeliverables = new Set();
+    const uniqueContracts = new Set();
+    filtered.forEach(item => {
+        if (item.email) uniqueUsers.add(item.email);
+        if (item.deliverableId) uniqueDeliverables.add(item.deliverableId);
+        if (item.contractNumber) uniqueContracts.add(item.contractNumber);
+    });
+    return {
+        totalOperations: uniqueDeliverables.size,
+        uniqueContracts: uniqueContracts.size,
+        uniqueUsers: uniqueUsers.size,
+    };
 }
 
 /**
@@ -2103,8 +2120,7 @@ function updateKPIs() {
 
     // Analyse Acoustique tile
     if (analyseAcouCountEl) analyseAcouCountEl.textContent = formatNumber(acoustiqueStats.totalOperations);
-    if (analyseAcouNoticesEl) analyseAcouNoticesEl.textContent = formatNumber(acoustiqueStats.totalNotices);
-    if (analyseAcouReportsEl) analyseAcouReportsEl.textContent = formatNumber(acoustiqueStats.totalReports);
+    if (analyseAcouContractsEl) analyseAcouContractsEl.textContent = formatNumber(acoustiqueStats.uniqueContracts);
     if (analyseAcouUsersEl) analyseAcouUsersEl.textContent = formatNumber(acoustiqueStats.uniqueUsers);
 
     // Analyse AO stats (funnel : captés → filtrés → analysés → opportunité)
