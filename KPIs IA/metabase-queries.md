@@ -31,6 +31,7 @@
 | **137** | KPIs IA - Comparateur Indices (SQL) | ~214 lignes, <1 MB | dashboards index + `comparateur.html` |
 | **138** | KPIs IA - Descriptif Sommaire LEAN (SQL) | ~10 700 lignes, ~5.5 MB | dashboards index + `descriptif.html` (sans le HTML brut, juste les comptes de mots et flag IA) |
 | **139** | KPIs IA - Analyse Géotechnique (SQL) | ~24 lignes, <50 KB | dashboards index + `analyse-geotechnique.html` (brique qualité — pas de gain heures/€) |
+| **158** | KPIs IA - Analyse Acoustique (SQL) | 0 ligne au lancement (module neuf) | dashboards index + `analyse-acoustique.html` (clone card 139, filtre `ILIKE '%acousti%'`) |
 | **n/a — Salesforce REST** | API XPL Funnel | ~5 000 marchés / ~250 leads, ~800 KB | dashboards index + `analyse-ao.html` (funnel IA AO — n'utilise PAS Metabase, voir section dédiée) |
 
 > ⚠️ **134 vs 138** : 134 garde le HTML brut des descriptions (utile pour comparer texte source vs sortie IA), 138 strip le HTML et précalcule `descriptionWordCount` + `hasAi`. Pour les dashboards qui ne font que compter, prends **138** (20× plus léger).
@@ -485,6 +486,47 @@ GEOTECH_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public
 ```
 
 Le workflow n8n doit fetch `/api/card/139/query/json` (binary streaming), puis upload sur Supabase Storage à cette URL. Sans ce câblage, la tuile dashboard affiche 0 et la page détail affiche un message d'erreur clair.
+
+---
+
+## Card 158 — Analyse Acoustique
+
+**URL :** `https://metabase.btp-force.cloud/question/158`
+**Collection :** KPI IA (id 17)
+**Source :** Table `AnalyticEvent` (id 74) — même log d'events que la card 139 (géotech), filtré sur les events acoustique.
+**Consommé par :** tuile index + `analyse-acoustique.html` (brique qualité — pas de gain heures/€, dédup par `DeliverableId` côté front).
+**Créée le 10/07/2026** via l'API Metabase (clone de la dataset_query de la card 139, filtre modifié).
+
+### SQL
+
+Identique à la card 139 (mêmes colonnes/alias), seule la clause `WHERE` change :
+
+```sql
+WHERE "name" ILIKE '%acousti%'
+  AND (
+    "properties"->'subAffair'->>'contractNumber' IS NULL
+    OR "properties"->'subAffair'->>'contractNumber' NOT ILIKE '%YIELD%'
+  )
+```
+
+> `ILIKE '%acousti%'` couvre les variantes `Acoustic` / `Acoustique`. Le front filtre en plus
+> sur `EventName` commençant par `Create Notice From AI Acousti` / `Create Report From AI Acousti`
+> (tolérant casse) — mettre à jour ce préfixe si AnalyzTech nomme les events différemment.
+
+### Câblage n8n / Supabase (workflow « ROI Global ») — ✅ EN PLACE (10/07/2026)
+
+- Chaîne de refresh : `Acoustique` (card 158 `/query/csv`) → `Convert to File16` (toJson)
+  → `POST Acoustique` (upsert `analyse_acoustique.json`), branchée sur le webhook
+  `refresh-kpis` et vers `Respond to Webhook` — miroir exact de la chaîne géotech.
+- Nœud `Sign URLs` : 16 paths (dont `analyse_acoustique.json`).
+- Nœud `Build signed response` : mapping `ANALYSE_ACOUSTIQUE_URL` ajouté, et le nœud
+  est désormais **tolérant** : un fichier en erreur de signature est ignoré (le front
+  affiche 0 pour cette brique) au lieu de faire tomber tout le webhook ; il ne throw
+  que si AUCUNE URL n'est signée.
+- Le fichier a été primé manuellement dans le bucket (format n8n `[{data: "csv"}]`) —
+  les refresh suivants le mettront à jour automatiquement.
+
+Le front tolère l'absence de `ANALYSE_ACOUSTIQUE_URL` : tuile à 0 + message clair sur la page détail.
 
 ---
 

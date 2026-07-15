@@ -8,6 +8,7 @@ let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
 let AO_URL = ''; // exposée par le webhook passwordROI sous le nom ANALYSE_AO_URL ; pas de fallback hardcodé
+let ACOUSTIQUE_URL = ''; // exposée par le webhook sous le nom ANALYSE_ACOUSTIQUE_URL ; pas de fallback hardcodé
 // URLs chat/expert/population : remplacées par les URLs SIGNÉES du webhook
 // après auth (fallback public conservé le temps de la transition bucket privé).
 let EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
@@ -72,6 +73,7 @@ let expertBtpSpsData = []; // BTP Consultants SPS — BU distincte, emails @btp-
 let chatBtpSpsData = [];
 let nfHabitatData = [];
 let geotechData = [];
+let acoustiqueData = [];
 let aoMarches = []; // [{marcheId, refMarche, typeAvis, dateDetection, leads:[...]}]
 let agencyPopulation = {}; // {agencyCode: effectif}
 let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
@@ -178,6 +180,12 @@ const analyseGeoOpsEl = document.getElementById('analyse-geo-ops');
 const analyseGeoNoticesEl = document.getElementById('analyse-geo-notices');
 const analyseGeoReportsEl = document.getElementById('analyse-geo-reports');
 const analyseGeoUsersEl = document.getElementById('analyse-geo-users');
+
+// Analyse Acoustique (BTP Consultants) elements
+const analyseAcouCountEl = document.getElementById('analyse-acou-count');
+const analyseAcouNoticesEl = document.getElementById('analyse-acou-notices');
+const analyseAcouReportsEl = document.getElementById('analyse-acou-reports');
+const analyseAcouUsersEl = document.getElementById('analyse-acou-users');
 
 // Analyse AO (BTP Consultants) elements
 const analyseAoCaptesEl   = document.getElementById('analyse-ao-captes');
@@ -628,15 +636,15 @@ function parseComparateurJSON(jsonArray) {
  * Parse direct JSON array from Metabase card 139 (Analyse Géotechnique).
  * One row per AnalyticEvent (Notice or Report). Front-end dedupes operations via DeliverableId.
  */
-function parseGeotechJSON(jsonArray) {
+function parseAnalyticEventsJSON(jsonArray, noticeRe, reportRe, label) {
     if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
         return [];
     }
     const data = [];
     jsonArray.forEach(item => {
         const eventName = (item['EventName'] || '').trim();
-        const isNotice = eventName === 'Create Notice From AI Geotech';
-        const isReport = eventName === 'Create Report From AI Geotech';
+        const isNotice = noticeRe.test(eventName);
+        const isReport = reportRe.test(eventName);
         if (!isNotice && !isReport) return;
         const contractNumber = (item['ContractNumber'] || '').trim();
         let agencyCode = null;
@@ -657,15 +665,27 @@ function parseGeotechJSON(jsonArray) {
             direction: (item['DR'] || '').trim(),
         });
     });
-    console.log('Parsed', data.length, 'geotech events from direct JSON');
+    console.log('Parsed', data.length, label, 'events from direct JSON');
     return data;
 }
 
+function parseGeotechJSON(jsonArray) {
+    return parseAnalyticEventsJSON(jsonArray,
+        /^Create Notice From AI Geotech$/i, /^Create Report From AI Geotech$/i, 'geotech');
+}
+
+// Acoustique : nom d'event toléré (Acoustic|Acoustique, casse libre) — le nom
+// exact n'est pas figé côté AnalyzTech, on filtre sur le préfixe.
+function parseAcoustiqueJSON(jsonArray) {
+    return parseAnalyticEventsJSON(jsonArray,
+        /^Create Notice From AI Acousti/i, /^Create Report From AI Acousti/i, 'acoustique');
+}
+
 /**
- * Parse geotech CSV envelope (n8n format: [{ data: "csv..." }]).
+ * Parse AnalyticEvents CSV envelope (n8n format: [{ data: "csv..." }]).
  * The CSV is simple — no commas in fields — so we split on comma directly.
  */
-function parseGeotechCSV(csvString) {
+function parseAnalyticEventsCSV(csvString, jsonParser) {
     if (!csvString || typeof csvString !== 'string') return [];
     const lines = csvString.split('\n').filter(l => l.trim() !== '');
     if (lines.length < 2) return [];
@@ -681,7 +701,15 @@ function parseGeotechCSV(csvString) {
         });
         rows.push(row);
     }
-    return parseGeotechJSON(rows);
+    return jsonParser(rows);
+}
+
+function parseGeotechCSV(csvString) {
+    return parseAnalyticEventsCSV(csvString, parseGeotechJSON);
+}
+
+function parseAcoustiqueCSV(csvString) {
+    return parseAnalyticEventsCSV(csvString, parseAcoustiqueJSON);
 }
 
 /**
@@ -1047,6 +1075,7 @@ function extractDirectionsAndAgencies() {
     processItems(expertBTPDiagData);
     processItems(chatBTPDiagData);
     processItems(geotechData);
+    processItems(acoustiqueData);
 
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
@@ -1635,6 +1664,12 @@ function processGeotechData(data) {
     };
 }
 
+// Même logique que geotech : brique qualité basée sur AnalyticEvent
+// (dédup par DeliverableId, pas de gain h/€).
+function processAcoustiqueData(data) {
+    return processGeotechData(data);
+}
+
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
@@ -1934,6 +1969,7 @@ function updateKPIs() {
     const autocontactStats = processAutocontactData(autocontactData);
     const comparateurStats = processComparateurData(comparateurData);
     const geotechStats = processGeotechData(geotechData);
+    const acoustiqueStats = processAcoustiqueData(acoustiqueData);
     const expertBTPStats = processExpertBTPData(expertBTPData);
     const chatBTPStats = processChatBTPData(chatBTPData);
     const expertCitaeStats = processExpertCitaeData(expertCitaeData);
@@ -1947,7 +1983,7 @@ function updateKPIs() {
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
     // For geotech, use totalOperations (distinct DeliverableId) — one operation = 1 notice + 1 report, so we dedup.
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations + acoustiqueStats.totalOperations;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => isDescriptifRow(item)).forEach(item => {
@@ -1969,6 +2005,10 @@ function updateKPIs() {
     });
 
     getFilteredData(geotechData).forEach(item => {
+        if (item.email) allUsers.add(item.email);
+    });
+
+    getFilteredData(acoustiqueData).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
 
@@ -2060,6 +2100,12 @@ function updateKPIs() {
     if (analyseGeoNoticesEl) analyseGeoNoticesEl.textContent = formatNumber(geotechStats.totalNotices);
     if (analyseGeoReportsEl) analyseGeoReportsEl.textContent = formatNumber(geotechStats.totalReports);
     if (analyseGeoUsersEl) analyseGeoUsersEl.textContent = formatNumber(geotechStats.uniqueUsers);
+
+    // Analyse Acoustique tile
+    if (analyseAcouCountEl) analyseAcouCountEl.textContent = formatNumber(acoustiqueStats.totalOperations);
+    if (analyseAcouNoticesEl) analyseAcouNoticesEl.textContent = formatNumber(acoustiqueStats.totalNotices);
+    if (analyseAcouReportsEl) analyseAcouReportsEl.textContent = formatNumber(acoustiqueStats.totalReports);
+    if (analyseAcouUsersEl) analyseAcouUsersEl.textContent = formatNumber(acoustiqueStats.uniqueUsers);
 
     // Analyse AO stats (funnel : captés → filtrés → analysés → opportunité)
     const aoStats = processAOData(aoMarches);
@@ -2253,6 +2299,7 @@ async function authenticateWithPassword(password) {
         const nfHabitatMatch   = urlRegex('NF_HABITAT_URL');
         const geotechMatch     = urlRegex('GEOTECH_URL');
         const aoMatch          = urlRegex('ANALYSE_AO_URL');
+        const acoustiqueMatch  = urlRegex('ANALYSE_ACOUSTIQUE_URL');
 
         if (descriptifMatch && autocontactMatch && comparateurMatch) {
             DESCRIPTIF_URL = descriptifMatch[1];
@@ -2261,6 +2308,7 @@ async function authenticateWithPassword(password) {
             if (nfHabitatMatch) NF_HABITAT_URL = nfHabitatMatch[1];
             if (geotechMatch) GEOTECH_URL = geotechMatch[1];
             if (aoMatch) AO_URL = aoMatch[1];
+            if (acoustiqueMatch) ACOUSTIQUE_URL = acoustiqueMatch[1];
 
             // URLs signées chat/expert/population (remplacent les fallbacks publics)
             const expertBtpMatch     = urlRegex('EXPERT_BTP_URL');
@@ -2477,6 +2525,46 @@ async function loadData() {
             }
         } else {
             console.log('No GEOTECH_URL configured — analyse géotechnique tile will show 0.');
+        }
+
+        // Load Analyse acoustique data (optional — depends on n8n exposing ANALYSE_ACOUSTIQUE_URL)
+        if (ACOUSTIQUE_URL) {
+            console.log('Loading acoustique data...');
+            try {
+                const acoustiqueResponse = await fetch(ACOUSTIQUE_URL);
+                if (acoustiqueResponse.ok) {
+                    const acoustiqueRaw = await acoustiqueResponse.text();
+                    let payload = null;
+                    try { payload = JSON.parse(acoustiqueRaw); } catch (_) { /* raw CSV fallthrough */ }
+
+                    if (payload === null) {
+                        // Raw CSV without JSON envelope
+                        acoustiqueData = parseAcoustiqueCSV(acoustiqueRaw);
+                    } else if (Array.isArray(payload) && payload.length && payload[0].data && typeof payload[0].data === 'string') {
+                        // n8n envelope: [{ data: "<csv-or-json>" }]
+                        const inner = payload[0].data;
+                        let innerJson = null;
+                        try { innerJson = JSON.parse(inner); } catch (_) { /* CSV */ }
+                        acoustiqueData = Array.isArray(innerJson) ? parseAcoustiqueJSON(innerJson) : parseAcoustiqueCSV(inner);
+                    } else if (payload && payload.data && typeof payload.data === 'string') {
+                        // { data: "<csv-or-json>" }
+                        const inner = payload.data;
+                        let innerJson = null;
+                        try { innerJson = JSON.parse(inner); } catch (_) {}
+                        acoustiqueData = Array.isArray(innerJson) ? parseAcoustiqueJSON(innerJson) : parseAcoustiqueCSV(inner);
+                    } else if (Array.isArray(payload)) {
+                        // Direct JSON array
+                        acoustiqueData = parseAcoustiqueJSON(payload);
+                    }
+                    console.log('Loaded', acoustiqueData.length, 'acoustique events');
+                } else {
+                    console.warn('Acoustique URL responded with status', acoustiqueResponse.status);
+                }
+            } catch (e) {
+                console.warn('Failed to load acoustique data:', e);
+            }
+        } else {
+            console.log('No ANALYSE_ACOUSTIQUE_URL configured — analyse acoustique tile will show 0.');
         }
 
         // Load Analyse AO data (optional — depends on n8n exposing ANALYSE_AO_URL)
