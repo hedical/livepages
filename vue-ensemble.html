@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vue d'ensemble — Affaire Test Estelle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16203A; --ink-soft:#5A6784; --ink-faint:#8A96AE;
+    --blue:#2947E8; --blue-weak:#EAEEFF; --blue-line:#C9D3FB;
+    --violet:#6C4BF0; --violet-weak:#F0EBFF; --violet-line:#DCD2FB;
+    --amber:#C77414; --amber-weak:#FDF1E2; --amber-line:#F4DBB4;
+    --green:#0F8A63; --green-weak:#E5F5EE; --green-line:#BCE6D3;
+    --teal:#0E8794; --teal-weak:#E2F4F5; --teal-line:#B6E2E6;
+    --slate:#8A96AE; --slate-weak:#EDEFF5; --slate-line:#D3D9E6;
+    --red:#C0392B; --red-weak:#FBEBE9; --red-line:#F0C7C2;
+    --paper:#FFFFFF; --canvas:#F3F5FA; --canvas-2:#EEF1F8;
+    --line:#E4E9F2; --line-soft:#EDF0F6;
+    --shadow:0 1px 2px rgba(22,32,58,.06), 0 6px 20px rgba(22,32,58,.05);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:'Inter',system-ui,sans-serif; background:var(--canvas); color:var(--ink);
+    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  a{text-decoration:none; color:inherit;}
+
+  /* TOPBAR */
+  .topbar{display:flex; align-items:center; gap:20px; padding:11px 22px; background:var(--paper);
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:30;}
+  .logo{width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,#F5A623,#E8890B);
+    color:#fff; font-family:'Archivo'; font-weight:800; font-size:17px; display:grid; place-items:center;
+    box-shadow:0 2px 8px rgba(232,137,11,.35); position:relative;}
+  .logo sup{position:absolute; top:3px; right:5px; font-size:8px;}
+  .nav{display:flex; gap:4px;}
+  .nav a{font-weight:600; font-size:13px; color:var(--ink-soft); padding:7px 13px; border-radius:9px;}
+  .nav a.active{color:var(--blue); background:var(--blue-weak);}
+  .top-right{margin-left:auto; display:flex; align-items:center; gap:12px;}
+  .adminpill{font-size:11.5px; font-weight:600; color:var(--blue); background:var(--blue-weak); padding:6px 12px; border-radius:20px;}
+  .ynor{display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:var(--violet-weak);
+    color:var(--violet); font-weight:600; font-size:12.5px; border:1px solid var(--violet-line);}
+  .ynor .dot{width:7px; height:7px; border-radius:50%; background:var(--violet); box-shadow:0 0 0 3px rgba(108,75,240,.18);}
+  .avatar{width:31px; height:31px; border-radius:50%; background:var(--ink); color:#fff; display:grid; place-items:center; font-weight:600; font-size:12px;}
+
+  /* AFFAIRE HEADER */
+  .affbar{background:var(--paper); border-bottom:1px solid var(--line); padding:14px 26px 0;}
+  .crumb{font-size:12px; color:var(--ink-faint); margin-bottom:10px; display:flex; align-items:center; gap:7px;}
+  .crumb a:hover{color:var(--blue);}
+  .affhead{display:flex; align-items:flex-start; gap:16px;}
+  .affhead .tt{flex:1 1 auto;}
+  .affhead h1{font-family:'Archivo'; font-weight:800; font-size:22px; letter-spacing:-.02em; display:flex; align-items:center; gap:11px;}
+  .agence{font-family:'IBM Plex Mono'; font-size:10px; font-weight:600; padding:3px 8px; border-radius:6px; background:var(--blue-weak); color:var(--blue);}
+  .affref{font-family:'IBM Plex Mono'; font-size:11px; color:var(--ink-faint); margin-top:4px;}
+  .missions{display:flex; gap:5px; flex-wrap:wrap; margin-top:10px;}
+  .mm{font-family:'IBM Plex Mono'; font-size:10px; font-weight:600; padding:3px 7px; border-radius:6px; background:var(--canvas-2); color:var(--ink-soft);}
+  .head-actions{display:flex; flex-direction:column; align-items:flex-end; gap:10px;}
+  .status-glob{font-size:12px; font-weight:600; padding:6px 13px; border-radius:20px; background:var(--amber-weak); color:var(--amber); display:flex; align-items:center; gap:7px;}
+  .status-glob .pulse{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .btn-atelier{background:var(--blue); color:#fff; font-weight:600; font-size:13px; padding:9px 16px; border-radius:10px; display:flex; align-items:center; gap:8px;}
+  .btn-atelier:hover{background:#1E3AD0;}
+  .tabs{display:flex; gap:2px; margin-top:16px;}
+  .tabs a{font-weight:600; font-size:13px; color:var(--ink-soft); padding:11px 15px; border-bottom:2px solid transparent;}
+  .tabs a.active{color:var(--blue); border-color:var(--blue);}
+  .tabs a:hover:not(.active){color:var(--ink);}
+  .spark{color:var(--violet); font-size:11px;}
+
+  /* PAGE */
+  .page{padding:22px 26px 40px; max-width:1240px; margin:0 auto;}
+
+  /* metric strip */
+  .metrics{display:flex; background:var(--paper); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; margin-bottom:20px;}
+  .metric{flex:1 1 0; padding:15px 20px; display:flex; flex-direction:column; gap:4px;}
+  .metric + .metric{border-left:1px solid var(--line);}
+  .metric .num{font-family:'Archivo'; font-weight:700; font-size:25px; letter-spacing:-.02em; line-height:1;}
+  .metric .lbl{font-size:11.5px; color:var(--ink-soft); font-weight:500;}
+  .metric .num.g{color:var(--green);} .metric .num.a{color:var(--amber);} .metric .num.r{color:var(--red);}
+
+  .grid{display:grid; grid-template-columns:1.7fr 1fr; gap:20px; align-items:start;}
+  .panel{background:var(--paper); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); margin-bottom:20px;}
+  .panel-h{padding:15px 20px 0; display:flex; align-items:center; gap:10px;}
+  .panel-h h2{font-family:'Archivo'; font-weight:700; font-size:14px; letter-spacing:-.01em;}
+  .panel-h .h-sub{margin-left:auto; font-size:11px; color:var(--ink-faint);}
+  .panel-b{padding:15px 20px 20px;}
+
+  /* fiche identité */
+  .desc{font-size:13px; color:var(--ink); line-height:1.55; padding:13px 15px; background:var(--canvas); border-radius:11px; margin-bottom:16px; border-left:3px solid var(--blue-line);}
+  .facts{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:11px; overflow:hidden;}
+  .fact{background:var(--paper); padding:11px 14px;}
+  .fact .k{font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint);}
+  .fact .v{font-size:13px; font-weight:500; margin-top:3px;}
+  .fact .v.mono{font-family:'IBM Plex Mono'; font-size:12.5px;}
+
+  /* verdicts par volet */
+  .volet{display:flex; align-items:center; gap:13px; padding:11px 0; border-bottom:1px solid var(--line-soft);}
+  .volet:last-child{border:none;}
+  .vcode{font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:600; width:44px; text-align:center; padding:4px 0; border-radius:6px; background:var(--canvas-2); color:var(--ink-soft); flex:0 0 auto;}
+  .vname{font-weight:500; font-size:13px; flex:1 1 auto;}
+  .vname small{display:block; color:var(--ink-faint); font-size:11px; font-weight:400;}
+  .vprog{width:80px; height:5px; background:var(--canvas-2); border-radius:5px; overflow:hidden; flex:0 0 auto;}
+  .vprog i{display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--violet));}
+  .verdict{font-size:10.5px; font-weight:600; padding:4px 10px; border-radius:20px; flex:0 0 auto; width:104px; text-align:center;}
+  .vd-F{background:var(--green-weak); color:var(--green);}
+  .vd-S{background:var(--amber-weak); color:var(--amber);}
+  .vd-D{background:var(--red-weak); color:var(--red);}
+  .vd-C{background:var(--blue-weak); color:var(--blue);}
+  .vd-N{background:var(--canvas-2); color:var(--ink-faint);}
+
+  /* donut */
+  .donut-row{display:flex; align-items:center; gap:24px;}
+  .donut{width:130px; height:130px; border-radius:50%; flex:0 0 auto; position:relative;
+    background:conic-gradient(var(--green) 0deg 135deg, var(--blue) 135deg 225deg, var(--amber) 225deg 270deg, #D3D9E6 270deg 360deg);}
+  .donut::after{content:''; position:absolute; inset:19px; border-radius:50%; background:var(--paper);}
+  .donut .ctr{position:absolute; inset:0; display:grid; place-content:center; text-align:center; z-index:2;}
+  .donut .ctr b{font-family:'Archivo'; font-size:24px; line-height:1;}
+  .donut .ctr span{font-size:10px; color:var(--ink-faint);}
+  .legend{display:flex; flex-direction:column; gap:9px;}
+  .lg{display:flex; align-items:center; gap:9px; font-size:12.5px;}
+  .lg .sw{width:11px; height:11px; border-radius:3px; flex:0 0 auto;}
+  .lg b{font-weight:600; margin-left:auto;}
+
+  /* écarts bars */
+  .ebar{display:flex; align-items:center; gap:12px; margin-bottom:11px;}
+  .ebar .el{width:52px; font-family:'IBM Plex Mono'; font-size:11px; font-weight:600; color:var(--ink-soft); flex:0 0 auto;}
+  .etrack{flex:1 1 auto; height:16px; background:var(--canvas-2); border-radius:6px; overflow:hidden;}
+  .ebarin{height:100%; display:flex; border-radius:6px; overflow:hidden;}
+  .es-maj{background:var(--red);} .es-min{background:var(--amber);} .es-obs{background:var(--slate);}
+  .ecount{width:26px; text-align:right; font-size:12px; font-weight:600; flex:0 0 auto;}
+  .elegend{display:flex; gap:16px; margin-top:14px; padding-top:13px; border-top:1px solid var(--line-soft); font-size:11.5px; color:var(--ink-soft);}
+  .elegend span{display:flex; align-items:center; gap:6px;}
+  .elegend i{width:10px; height:10px; border-radius:3px;}
+
+  /* vigilance */
+  .vig{display:flex; gap:11px; padding:12px 13px; border-radius:11px; border:1px solid var(--line); margin-bottom:9px;}
+  .vig.urgent{background:var(--red-weak); border-color:var(--red-line);}
+  .vig .ic{width:26px; height:26px; border-radius:8px; display:grid; place-items:center; flex:0 0 auto; font-size:13px; font-weight:700; color:#fff;}
+  .vig.urgent .ic{background:var(--red);} .vig .ic{background:var(--amber);}
+  .vig .vt{font-weight:600; font-size:12.5px; line-height:1.3;}
+  .vig .vm{font-size:11.5px; color:var(--ink-soft); margin-top:3px; line-height:1.4;}
+
+  /* timeline */
+  .tl{position:relative; padding-left:22px;}
+  .tl::before{content:''; position:absolute; left:6px; top:6px; bottom:6px; width:2px; background:var(--line);}
+  .tli{position:relative; padding:0 0 16px;}
+  .tli:last-child{padding-bottom:0;}
+  .tli::before{content:''; position:absolute; left:-19px; top:3px; width:11px; height:11px; border-radius:50%; background:var(--paper); border:2px solid var(--slate);}
+  .tli.done::before{background:var(--green); border-color:var(--green);}
+  .tli.now::before{background:var(--blue); border-color:var(--blue); box-shadow:0 0 0 4px rgba(41,71,232,.15);}
+  .tli .td{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--ink-faint);}
+  .tli .tn{font-weight:500; font-size:12.5px; margin-top:1px;}
+
+  /* team */
+  .team-row{display:flex; align-items:center; gap:11px; padding:9px 0; border-bottom:1px solid var(--line-soft); font-size:12.5px;}
+  .team-row:last-child{border:none;}
+  .team-av{width:30px; height:30px; border-radius:8px; background:var(--canvas-2); color:var(--ink-soft); display:grid; place-items:center; font-weight:600; font-size:11px; flex:0 0 auto;}
+  .team-row .role{color:var(--ink-faint); font-size:11px;} .team-row b{font-weight:600;}
+  .team-row .nm{flex:1 1 auto;}
+
+  /* ia box */
+  .ia-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .ia-cell{background:var(--canvas); border-radius:11px; padding:12px 14px;}
+  .ia-cell b{font-family:'Archivo'; font-size:19px; display:block;}
+  .ia-cell span{font-size:10.5px; color:var(--ink-soft);}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;}}
+  @media (max-width:1080px){.grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo">S<sup>+</sup></div>
+    <nav class="nav"><a>Mes affaires</a><a>Agence</a><a href="supervision.html">Supervision</a></nav>
+    <div class="top-right">
+      <span class="adminpill">Agence principale : ADMIN</span>
+      <div class="ynor"><span class="dot"></span>Ynor</div>
+      <div class="avatar">HC</div>
+    </div>
+  </div>
+
+  <div class="affbar">
+    <div class="crumb"><a href="supervision.html">← Supervision</a> <span>/</span> École maternelle Estelle</div>
+    <div class="affhead">
+      <div class="tt">
+        <h1>École maternelle Estelle <span class="agence">BTP Consultants</span></h1>
+        <div class="affref">C-YIELD-STUDIO-ESTELLE</div>
+        <div class="missions">
+          <span class="mm">ENV</span><span class="mm">HAND</span><span class="mm">L</span><span class="mm">P1</span>
+          <span class="mm">SEI</span><span class="mm">SH</span><span class="mm">HYS</span><span class="mm">VIEL</span>
+        </div>
+      </div>
+      <div class="head-actions">
+        <span class="status-glob"><span class="pulse"></span>En cours · 4 agents mobilisés</span>
+        <a class="btn-atelier" href="atelier-affaire.html">Ouvrir l'atelier →</a>
+      </div>
+    </div>
+    <div class="tabs">
+      <a class="active">Vue d'ensemble</a>
+      <a href="atelier-affaire.html">Atelier <span class="spark">✦</span></a>
+      <a>Livrables</a><a>Contacts</a><a>Documents</a><a>Avis</a>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <div class="metrics">
+      <div class="metric"><span class="num">62<small style="font-size:14px">%</small></span><span class="lbl">Avancement global</span></div>
+      <div class="metric"><span class="num g">3<small style="font-size:14px">/8</small></span><span class="lbl">Volets favorables</span></div>
+      <div class="metric"><span class="num a">13</span><span class="lbl">Écarts ouverts</span></div>
+      <div class="metric"><span class="num r">1</span><span class="lbl">Point suspendu (AT)</span></div>
+      <div class="metric"><span class="num">16</span><span class="lbl">Documents indexés</span></div>
+    </div>
+
+    <div class="grid">
+      <!-- LEFT -->
+      <div class="left">
+
+        <div class="panel">
+          <div class="panel-h"><h2>Fiche d'identité de l'ouvrage</h2></div>
+          <div class="panel-b">
+            <div class="desc">Création d'une école maternelle dans les anciens locaux de la CPAM, avec réalisation d'une extension en rez-de-chaussée sur l'emprise du garage et du parking de la DDE.</div>
+            <div class="facts">
+              <div class="fact"><div class="k">Nature de l'opération</div><div class="v">Réhabilitation + extension RDC</div></div>
+              <div class="fact"><div class="k">Type d'établissement</div><div class="v">ERP type R · 4ᵉ catégorie</div></div>
+              <div class="fact"><div class="k">Hauteur plancher bas dern. niveau</div><div class="v">8 m &lt; H ≤ 28 m</div></div>
+              <div class="fact"><div class="k">Surface de plancher</div><div class="v">≈ 1 240 m²</div></div>
+              <div class="fact"><div class="k">Zones climatiques</div><div class="v">Neige A1 · Vent 3 · Sismique 1</div></div>
+              <div class="fact"><div class="k">Dépôt autorisation admin.</div><div class="v mono">24/01/2021</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><h2>Synthèse par volet</h2><span class="h-sub">Verdicts doctrinaux — F / S / D</span></div>
+          <div class="panel-b" style="padding-top:6px">
+            <div class="volet"><span class="vcode">L</span><div class="vname">Solidité — structure & extension<small>Agent Solidité</small></div><div class="vprog"><i style="width:100%"></i></div><span class="verdict vd-F">Favorable</span></div>
+            <div class="volet"><span class="vcode">HAND</span><div class="vname">Accessibilité PMR<small>Agent Accessibilité</small></div><div class="vprog"><i style="width:100%"></i></div><span class="verdict vd-F">Favorable</span></div>
+            <div class="volet"><span class="vcode">ENV</span><div class="vname">Performance thermique<small>Agent Analyse thermique</small></div><div class="vprog"><i style="width:100%"></i></div><span class="verdict vd-F">Favorable</span></div>
+            <div class="volet"><span class="vcode">SEI</span><div class="vname">Sécurité incendie<small>Agent Sécurité incendie</small></div><div class="vprog"><i style="width:64%"></i></div><span class="verdict vd-C">En cours</span></div>
+            <div class="volet"><span class="vcode">SH</span><div class="vname">Sûreté / hygiène<small>Agent Profil</small></div><div class="vprog"><i style="width:40%"></i></div><span class="verdict vd-C">En cours</span></div>
+            <div class="volet"><span class="vcode">HYS</span><div class="vname">Ventilation / qualité d'air<small>Donnée absente → suspendu</small></div><div class="vprog"><i style="width:55%"></i></div><span class="verdict vd-S">Suspendu</span></div>
+            <div class="volet"><span class="vcode">P1</span><div class="vname">Équipements dissociables<small>Non démarré</small></div><div class="vprog"><i style="width:0"></i></div><span class="verdict vd-N">Non démarré</span></div>
+            <div class="volet"><span class="vcode">VIEL</span><div class="vname">Vérification électrique<small>Non démarré</small></div><div class="vprog"><i style="width:0"></i></div><span class="verdict vd-N">Non démarré</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><h2>Écarts relevés par volet</h2><span class="h-sub">13 écarts ouverts</span></div>
+          <div class="panel-b">
+            <div class="ebar"><span class="el">SEI</span><div class="etrack"><div class="ebarin" style="width:100%"><div class="es-maj" style="flex:2"></div><div class="es-min" style="flex:3"></div><div class="es-obs" style="flex:1"></div></div></div><span class="ecount">6</span></div>
+            <div class="ebar"><span class="el">HAND</span><div class="etrack"><div class="ebarin" style="width:50%"><div class="es-min" style="flex:2"></div><div class="es-obs" style="flex:1"></div></div></div><span class="ecount">3</span></div>
+            <div class="ebar"><span class="el">HYS</span><div class="etrack"><div class="ebarin" style="width:33%"><div class="es-maj" style="flex:1"></div><div class="es-min" style="flex:1"></div></div></div><span class="ecount">2</span></div>
+            <div class="ebar"><span class="el">L</span><div class="etrack"><div class="ebarin" style="width:17%"><div class="es-min" style="flex:1"></div></div></div><span class="ecount">1</span></div>
+            <div class="ebar"><span class="el">ENV</span><div class="etrack"><div class="ebarin" style="width:17%"><div class="es-obs" style="flex:1"></div></div></div><span class="ecount">1</span></div>
+            <div class="elegend">
+              <span><i class="es-maj" style="background:var(--red)"></i>Majeur · 3</span>
+              <span><i class="es-min" style="background:var(--amber)"></i>Mineur · 7</span>
+              <span><i class="es-obs" style="background:var(--slate)"></i>Observation · 3</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT -->
+      <div class="right">
+
+        <div class="panel">
+          <div class="panel-h"><h2>Répartition des volets</h2></div>
+          <div class="panel-b">
+            <div class="donut-row">
+              <div class="donut"><div class="ctr"><b>62%</b><span>couverts</span></div></div>
+              <div class="legend">
+                <div class="lg"><span class="sw" style="background:var(--green)"></span>Favorable <b>3</b></div>
+                <div class="lg"><span class="sw" style="background:var(--blue)"></span>En cours <b>2</b></div>
+                <div class="lg"><span class="sw" style="background:var(--amber)"></span>Suspendu <b>1</b></div>
+                <div class="lg"><span class="sw" style="background:#D3D9E6"></span>Non démarré <b>2</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><h2>Points de vigilance</h2></div>
+          <div class="panel-b">
+            <div class="vig urgent"><div class="ic">!</div><div><div class="vt">Agrément technique à vérifier (CSTB)</div><div class="vm">Procédé de désenfumage — volet HYS bloqué en <b>Suspendu</b> tant que l'AT n'est pas confirmé.</div></div></div>
+            <div class="vig"><div class="ic">2</div><div><div class="vt">2 documents attendus manquants</div><div class="vm">CCTP lot CVC · PV essais acoustiques — nécessaires pour lever les suspensions.</div></div></div>
+            <div class="vig"><div class="ic">✓</div><div><div class="vt">Avis solidité prêt à valider</div><div class="vm">L'agent a rédigé l'avis favorable du volet L — en attente de relecture.</div></div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><h2>Jalons</h2></div>
+          <div class="panel-b">
+            <div class="tl">
+              <div class="tli done"><div class="td">24/01/2021</div><div class="tn">Dépôt autorisation administrative</div></div>
+              <div class="tli done"><div class="td">Sem. 1</div><div class="tn">Réception DCE — 16 documents indexés</div></div>
+              <div class="tli done"><div class="td">Sem. 2</div><div class="tn">Volets L, HAND, ENV — Favorables</div></div>
+              <div class="tli now"><div class="td">En cours</div><div class="tn">Instruction SEI / SH · levée du suspendu HYS</div></div>
+              <div class="tli"><div class="td">J+6</div><div class="tn">RICT initial prévu</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><h2>Intervenants</h2></div>
+          <div class="panel-b" style="padding-top:6px">
+            <div class="team-row"><span class="team-av">VX</span><div class="nm"><b>Ville de XXXXX</b><div class="role">Maître d'ouvrage</div></div></div>
+            <div class="team-row"><span class="team-av">AM</span><div class="nm"><b>Atelier M. Architecture</b><div class="role">Maîtrise d'œuvre</div></div></div>
+            <div class="team-row"><span class="team-av">BS</span><div class="nm"><b>BET Structure & Fluides</b><div class="role">Bureau d'études</div></div></div>
+            <div class="team-row"><span class="team-av">EC</span><div class="nm"><b>E. Chaaya</b><div class="role">Contrôleur technique référent</div></div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><h2>Activité IA · 7 j</h2></div>
+          <div class="panel-b">
+            <div class="ia-grid">
+              <div class="ia-cell"><b>340 k</b><span>jetons consommés</span></div>
+              <div class="ia-cell"><b>4</b><span>agents mobilisés</span></div>
+              <div class="ia-cell"><b>5</b><span>livrables produits</span></div>
+              <div class="ia-cell"><b>≈ 18 h</b><span>temps analyste estimé</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
