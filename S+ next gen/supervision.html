@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supervision — S+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16203A; --ink-soft:#5A6784; --ink-faint:#8A96AE;
+    --blue:#2947E8; --blue-weak:#EAEEFF; --blue-line:#C9D3FB;
+    --violet:#6C4BF0; --violet-weak:#F0EBFF; --violet-line:#DCD2FB;
+    --amber:#C77414; --amber-weak:#FDF1E2; --amber-line:#F4DBB4;
+    --green:#0F8A63; --green-weak:#E5F5EE; --green-line:#BCE6D3;
+    --teal:#0E8794; --teal-weak:#E2F4F5; --teal-line:#B6E2E6;
+    --slate:#455270; --slate-weak:#EDEFF5; --slate-line:#D3D9E6;
+    --red:#C0392B; --red-weak:#FBEBE9; --red-line:#F0C7C2;
+    --paper:#FFFFFF; --canvas:#F3F5FA; --canvas-2:#EEF1F8;
+    --line:#E4E9F2; --line-soft:#EDF0F6;
+    --shadow:0 1px 2px rgba(22,32,58,.06), 0 6px 20px rgba(22,32,58,.05);
+    --shadow-lift:0 2px 6px rgba(22,32,58,.08), 0 14px 40px rgba(22,32,58,.10);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{font-family:'Inter',system-ui,sans-serif; background:var(--canvas); color:var(--ink);
+    -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; height:100vh; overflow:hidden; font-size:14px;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* TOPBAR */
+  .topbar{flex:0 0 auto; display:flex; align-items:center; gap:20px; padding:11px 22px;
+    background:var(--paper); border-bottom:1px solid var(--line); z-index:20;}
+  .logo{width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,#F5A623,#E8890B);
+    color:#fff; font-family:'Archivo'; font-weight:800; font-size:17px; display:grid; place-items:center;
+    box-shadow:0 2px 8px rgba(232,137,11,.35); position:relative;}
+  .logo sup{position:absolute; top:3px; right:5px; font-size:8px;}
+  .nav{display:flex; gap:4px;}
+  .nav a{font-weight:600; font-size:13px; color:var(--ink-soft); padding:7px 13px; border-radius:9px; text-decoration:none; cursor:pointer;}
+  .nav a.active{color:var(--blue); background:var(--blue-weak);}
+  .top-right{margin-left:auto; display:flex; align-items:center; gap:12px;}
+  .adminpill{font-size:11.5px; font-weight:600; color:var(--blue); background:var(--blue-weak);
+    padding:6px 12px; border-radius:20px;}
+  .ynor{display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px;
+    background:var(--violet-weak); color:var(--violet); font-weight:600; font-size:12.5px; border:1px solid var(--violet-line); cursor:pointer;}
+  .ynor .dot{width:7px; height:7px; border-radius:50%; background:var(--violet); box-shadow:0 0 0 3px rgba(108,75,240,.18);}
+  .avatar{width:31px; height:31px; border-radius:50%; background:var(--ink); color:#fff; display:grid; place-items:center; font-weight:600; font-size:12px;}
+
+  /* PAGE HEAD + METRICS */
+  .pagehead{flex:0 0 auto; padding:18px 26px 0; background:var(--canvas);}
+  .h1{font-family:'Archivo'; font-weight:800; font-size:22px; letter-spacing:-.02em;}
+  .h1 span{color:var(--ink-faint); font-weight:600; font-size:14px; margin-left:10px;}
+  .metrics{display:flex; align-items:stretch; gap:0; margin-top:16px; background:var(--paper);
+    border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden;}
+  .metric{flex:1 1 0; padding:14px 20px; display:flex; flex-direction:column; gap:3px; position:relative;}
+  .metric + .metric{border-left:1px solid var(--line);}
+  .metric .num{font-family:'Archivo'; font-weight:700; font-size:26px; letter-spacing:-.02em; line-height:1;}
+  .metric .lbl{font-size:11.5px; color:var(--ink-soft); font-weight:500; display:flex; align-items:center; gap:6px;}
+  .metric.live .num{color:var(--amber);}
+  .metric.attn .num{color:var(--blue);}
+  .livedot{width:7px; height:7px; border-radius:50%; background:var(--amber); animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+
+  /* CONTROLS */
+  .controls{flex:0 0 auto; padding:16px 26px 12px; display:flex; align-items:center; gap:14px; background:var(--canvas);}
+  .toggle{display:flex; background:var(--canvas-2); border-radius:10px; padding:3px;}
+  .toggle button{border:none; background:transparent; font-family:'Inter'; font-weight:600; font-size:12.5px;
+    color:var(--ink-soft); padding:7px 16px; border-radius:8px; cursor:pointer;}
+  .toggle button.on{background:var(--paper); color:var(--ink); box-shadow:var(--shadow);}
+  .filters{display:flex; gap:7px; align-items:center; margin-left:6px;}
+  .fgroup{display:flex; gap:4px; background:var(--paper); border:1px solid var(--line); border-radius:9px; padding:3px;}
+  .fgroup button{border:none; background:transparent; font-size:11.5px; font-weight:500; color:var(--ink-soft);
+    padding:5px 10px; border-radius:6px; cursor:pointer;}
+  .fgroup button.on{background:var(--ink); color:#fff;}
+  .flabel{font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin-right:2px;}
+
+  /* MAIN LAYOUT */
+  .body{flex:1 1 auto; display:grid; grid-template-columns:1fr 348px; min-height:0; gap:0;}
+  .main{overflow-y:auto; padding:4px 20px 24px 26px;}
+  .rail{border-left:1px solid var(--line); background:var(--paper); overflow-y:auto; padding:20px 20px 24px;}
+  .main::-webkit-scrollbar,.rail::-webkit-scrollbar{width:8px;}
+  .main::-webkit-scrollbar-thumb,.rail::-webkit-scrollbar-thumb{background:#D7DEEA; border-radius:8px; border:2px solid var(--canvas);}
+
+  /* AFFAIRE ROW */
+  .aff{background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px 18px;
+    margin-bottom:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:1fr auto; gap:14px 22px;
+    align-items:center; transition:transform .15s, box-shadow .15s; cursor:pointer;}
+  .aff:hover{transform:translateY(-2px); box-shadow:var(--shadow-lift); border-color:var(--blue-line);}
+  .aff-l{min-width:0;}
+  .aff-name{font-family:'Archivo'; font-weight:700; font-size:15px; letter-spacing:-.01em; display:flex; align-items:center; gap:9px;}
+  .agence{font-family:'IBM Plex Mono'; font-size:9.5px; font-weight:600; padding:2px 7px; border-radius:5px; letter-spacing:.02em;}
+  .ag-BTPC{background:var(--blue-weak); color:var(--blue);}
+  .ag-CITAE{background:var(--teal-weak); color:var(--teal);}
+  .ag-BTPD{background:var(--slate-weak); color:var(--slate);}
+  .aff-ref{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--ink-faint); margin-top:3px;}
+  .aff-missions{display:flex; gap:4px; flex-wrap:wrap; margin-top:9px;}
+  .mm{font-family:'IBM Plex Mono'; font-size:9.5px; font-weight:600; padding:2px 6px; border-radius:5px; background:var(--canvas-2); color:var(--ink-soft);}
+  .aff-r{display:flex; align-items:center; gap:26px;}
+  .block{display:flex; flex-direction:column; gap:6px; align-items:flex-start;}
+  .block .cap{font-size:9.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint);}
+
+  /* agent cluster */
+  .cluster{display:flex; align-items:center;}
+  .amono{width:28px; height:28px; border-radius:8px; display:grid; place-items:center; font-family:'IBM Plex Mono';
+    font-size:10px; font-weight:600; margin-left:-6px; position:relative; border:2px solid var(--paper);}
+  .amono:first-child{margin-left:0;}
+  .t-blue{background:var(--blue-weak); color:var(--blue);} .t-amber{background:var(--amber-weak); color:var(--amber);}
+  .t-violet{background:var(--violet-weak); color:var(--violet);} .t-green{background:var(--green-weak); color:var(--green);}
+  .t-teal{background:var(--teal-weak); color:var(--teal);} .t-slate{background:var(--slate-weak); color:var(--slate);}
+  .amono.working::after{content:''; position:absolute; top:-3px; right:-3px; width:8px; height:8px; border-radius:50%;
+    background:var(--amber); border:2px solid var(--paper); animation:pulse 1s infinite;}
+  .amono.more{background:var(--canvas-2); color:var(--ink-soft);}
+  .agent-note{font-size:11px; color:var(--ink-soft);}
+  .agent-note b{color:var(--amber);}
+
+  /* livrables count / progress */
+  .cov{display:flex; gap:3px; align-items:center;}
+  .seg{width:11px; height:6px; border-radius:2px; background:var(--canvas-2);}
+  .seg.on{background:var(--green);}
+  .cov-txt{font-size:12px; font-weight:600; margin-top:2px;}
+  .cov-txt small{color:var(--ink-faint); font-weight:500;}
+
+  .pill{font-size:11px; font-weight:600; padding:5px 11px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+  .p-encours{background:var(--amber-weak); color:var(--amber);}
+  .p-avalider{background:var(--blue-weak); color:var(--blue);}
+  .p-suspendu{background:var(--red-weak); color:var(--red);}
+  .p-livre{background:var(--green-weak); color:var(--green);}
+  .p-planifier{background:var(--canvas-2); color:var(--ink-soft);}
+  .when{font-size:10.5px; color:var(--ink-faint); margin-top:6px; text-align:right;}
+
+  /* AGENTS VIEW */
+  #view-agents{display:none;}
+  .agrid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .acard{background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px 17px; box-shadow:var(--shadow);}
+  .acard-top{display:flex; align-items:center; gap:11px; margin-bottom:13px;}
+  .acard-top .amono{width:34px; height:34px; border-radius:9px; margin:0; border:1px solid rgba(0,0,0,.05); font-size:11px;}
+  .acard-name{font-family:'Archivo'; font-weight:700; font-size:14px;}
+  .acard-name small{display:block; font-weight:450; font-family:'Inter'; color:var(--ink-soft); font-size:11px; margin-top:2px;}
+  .acard-stat{margin-left:auto; text-align:right;}
+  .acard-stat b{font-family:'Archivo'; font-size:18px;} .acard-stat span{font-size:10px; color:var(--ink-faint); display:block;}
+  .loadbar{height:6px; background:var(--canvas-2); border-radius:6px; overflow:hidden; margin:4px 0 5px;}
+  .loadbar i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--blue),var(--violet));}
+  .load-lbl{display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-soft);}
+  .on-affs{display:flex; gap:5px; flex-wrap:wrap; margin-top:11px; padding-top:11px; border-top:1px solid var(--line-soft);}
+  .on-affs .chip{font-family:'IBM Plex Mono'; font-size:9.5px; background:var(--canvas-2); color:var(--ink-soft); padding:3px 7px; border-radius:5px;}
+
+  /* RAIL */
+  .rail-h{font-family:'Archivo'; font-weight:700; font-size:12.5px; letter-spacing:.08em; text-transform:uppercase;
+    display:flex; align-items:center; gap:8px; margin:0 0 12px;}
+  .rail-h .n{font-size:10px; background:var(--blue); color:#fff; padding:1px 7px; border-radius:20px; font-family:'IBM Plex Mono';}
+  .rail-h.live .n{background:var(--amber);}
+  .rail-sec + .rail-sec{margin-top:26px;}
+  .valcard{border:1px solid var(--line); border-radius:11px; padding:12px 13px; margin-bottom:9px; background:var(--paper); box-shadow:var(--shadow);}
+  .valcard.urgent{border-color:var(--red-line); background:var(--red-weak);}
+  .valcard .vt{font-weight:600; font-size:12.5px; line-height:1.3;}
+  .valcard .vm{font-size:11px; color:var(--ink-soft); margin-top:3px;}
+  .valcard .vfoot{display:flex; align-items:center; gap:8px; margin-top:10px;}
+  .valcard .vfoot .amono{width:20px; height:20px; margin:0; border:none; font-size:9px; border-radius:6px;}
+  .valbtn{margin-left:auto; font-size:11px; font-weight:600; color:#fff; background:var(--blue); border:none;
+    padding:5px 11px; border-radius:7px; cursor:pointer;}
+  .valcard.urgent .valbtn{background:var(--red);}
+
+  .feed{list-style:none;}
+  .feed li{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line-soft); font-size:12px;}
+  .feed li.fresh{animation:slidein .4s ease;}
+  @keyframes slidein{from{opacity:0; transform:translateX(-6px);}to{opacity:1; transform:none;}}
+  .fdot{width:8px; height:8px; border-radius:50%; margin-top:5px; flex:0 0 auto;}
+  .feed .ft{line-height:1.35;} .feed .ft b{font-weight:600;}
+  .feed .fm{color:var(--ink-soft);}
+  .feed .fw{font-size:10px; color:var(--ink-faint); margin-top:2px;}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none !important; transition:none !important;}}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo">S<sup>+</sup></div>
+    <nav class="nav">
+      <a>Mes affaires</a><a>Agence</a><a class="active">Supervision</a>
+    </nav>
+    <div class="top-right">
+      <span class="adminpill">Agence principale : ADMIN</span>
+      <div class="ynor"><span class="dot"></span>Ynor</div>
+      <div class="avatar">HC</div>
+    </div>
+  </div>
+
+  <div class="pagehead">
+    <div class="h1">Supervision <span>Portefeuille &amp; flotte d'agents</span></div>
+    <div class="metrics">
+      <div class="metric"><span class="num">8</span><span class="lbl">Affaires suivies</span></div>
+      <div class="metric live"><span class="num" id="m-live">6</span><span class="lbl"><span class="livedot"></span>Agents en activité</span></div>
+      <div class="metric"><span class="num" id="m-liv">23</span><span class="lbl">Livrables produits · 7 j</span></div>
+      <div class="metric attn"><span class="num" id="m-val">3</span><span class="lbl">En attente de validation</span></div>
+      <div class="metric"><span class="num">1,9<small style="font-size:13px"> M</small></span><span class="lbl">Jetons consommés · 7 j</span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="toggle">
+      <button class="on" id="tab-aff" onclick="setView('aff')">Affaires</button>
+      <button id="tab-agt" onclick="setView('agt')">Agents</button>
+    </div>
+    <div class="filters">
+      <span class="flabel">Agence</span>
+      <div class="fgroup" id="f-agence">
+        <button class="on" data-v="all" onclick="filterAgence(this)">Toutes</button>
+        <button data-v="BTPC" onclick="filterAgence(this)">BTP Consultants</button>
+        <button data-v="CITAE" onclick="filterAgence(this)">CITAE</button>
+        <button data-v="BTPD" onclick="filterAgence(this)">BTP Diagnostics</button>
+      </div>
+      <span class="flabel" style="margin-left:8px">État</span>
+      <div class="fgroup" id="f-etat">
+        <button class="on" data-v="all" onclick="filterEtat(this)">Tous</button>
+        <button data-v="encours" onclick="filterEtat(this)">En cours</button>
+        <button data-v="avalider" onclick="filterEtat(this)">À valider</button>
+        <button data-v="livre" onclick="filterEtat(this)">Livré</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="main">
+      <div id="view-aff"></div>
+      <div id="view-agents"><div class="agrid" id="agrid"></div></div>
+    </div>
+
+    <div class="rail">
+      <div class="rail-sec">
+        <div class="rail-h">À valider <span class="n" id="val-n">3</span></div>
+        <div id="val-list"></div>
+      </div>
+      <div class="rail-sec">
+        <div class="rail-h live">Activité en direct <span class="n">live</span></div>
+        <ul class="feed" id="feed"></ul>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ---------- DATA ---------- */
+const AFFAIRES = [
+  {nom:"École maternelle Estelle", ref:"C-YIELD-STUDIO-ESTELLE", agence:"BTPC", missions:["ENV","HAND","L","P1","SEI","SH","HYS","VIEL"],
+    agents:[{m:"RI",t:"t-blue",w:1},{m:"TH",t:"t-amber",w:1},{m:"AC",t:"t-violet",w:0},{m:"FD",t:"t-teal",w:0}], done:5, total:9, etat:"encours", when:"il y a 12 min"},
+  {nom:"Groupe scolaire Val d'Argent Sud", ref:"C-VAS-2024-011", agence:"BTPC", missions:["L","SEI","HAND"],
+    agents:[{m:"SO",t:"t-green",w:1},{m:"SE",t:"t-amber",w:0},{m:"AV",t:"t-slate",w:0}], done:7, total:7, etat:"avalider", when:"il y a 3 min"},
+  {nom:"Collège Montigny", ref:"C-MTG-2024-088", agence:"BTPC", missions:["L","SEI","SH"],
+    agents:[{m:"CF",t:"t-violet",w:0}], done:4, total:6, etat:"suspendu", when:"il y a 1 h"},
+  {nom:"Résidence Les Tilleuls", ref:"C-TIL-2025-142", agence:"CITAE", missions:["ENV","THERM","ACOU"],
+    agents:[{m:"TH",t:"t-amber",w:1},{m:"AC",t:"t-violet",w:1}], done:3, total:5, etat:"encours", when:"il y a 5 min"},
+  {nom:"Réhabilitation Halle Marché", ref:"C-HAL-2025-020", agence:"BTPC", missions:["L","HAND","SEI"],
+    agents:[{m:"GÉ",t:"t-green",w:0},{m:"RI",t:"t-blue",w:0}], done:6, total:8, etat:"avalider", when:"il y a 22 min"},
+  {nom:"Diagnostic amiante Tour B", ref:"C-AMI-2025-201", agence:"BTPD", missions:["Amiante","Plomb"],
+    agents:[{m:"DG",t:"t-slate",w:0}], done:9, total:9, etat:"livre", when:"hier"},
+  {nom:"Extension EHPAD Bellevue", ref:"C-EHP-2025-077", agence:"CITAE", missions:["HAND","SEI","HYS"],
+    agents:[{m:"AV",t:"t-slate",w:1},{m:"FD",t:"t-teal",w:0}], done:2, total:7, etat:"encours", when:"il y a 30 min"},
+  {nom:"Réfection gymnase Aragon", ref:"C-GYM-2025-115", agence:"BTPC", missions:["L","SEI","ACOU"],
+    agents:[], done:0, total:6, etat:"planifier", when:"—"},
+];
+
+const PILL = {encours:["p-encours","En cours"], avalider:["p-avalider","À valider"], suspendu:["p-suspendu","Suspendu — AT à vérifier"], livre:["p-livre","Livré"], planifier:["p-planifier","À planifier"]};
+
+const AGENTS = [
+  {m:"RI",t:"t-blue",nom:"Rédaction RICT",dom:"Compilation du rapport initial",load:70,liv:8,affs:["ESTELLE","HAL-020","VAS-011"]},
+  {m:"FD",t:"t-teal",nom:"Agent FDV",dom:"Fiche de vérification",load:82,liv:6,affs:["ESTELLE","EHP-077","TIL-142","HAL-020","MTG-088"]},
+  {m:"TH",t:"t-amber",nom:"Analyse thermique",dom:"Cohérence RE2020 / enveloppe",load:58,liv:4,affs:["ESTELLE","TIL-142","GYM-115","EHP-077"]},
+  {m:"AV",t:"t-slate",nom:"Rédaction d'avis",dom:"Avis sur conception",load:65,liv:5,affs:["VAS-011","EHP-077","HAL-020","MTG-088"]},
+  {m:"SE",t:"t-amber",nom:"Sécurité incendie",dom:"ERP — désenfumage, issues",load:60,liv:3,affs:["VAS-011","MTG-088","GYM-115"]},
+  {m:"AC",t:"t-violet",nom:"Analyse acoustique",dom:"Isolements & équipements",load:32,liv:2,affs:["TIL-142","GYM-115"]},
+  {m:"SO",t:"t-green",nom:"Analyse solidité",dom:"Structure & fondations",load:45,liv:3,affs:["VAS-011","MTG-088","HAL-020"]},
+  {m:"GÉ",t:"t-green",nom:"Analyse géotechnique",dom:"Aléas sol — mission G2",load:26,liv:2,affs:["HAL-020","MTG-088"]},
+];
+
+const VALID = [
+  {t:"Projet d'avis SEI — favorable", m:"L'agent a rédigé l'avis, prêt à signer.", aff:"Val d'Argent Sud", mono:"AV", tint:"t-slate", urgent:false},
+  {t:"Vérification AT bloquante", m:"Verdict Suspendu : agrément technique non vérifié auprès du CSTB.", aff:"Collège Montigny", mono:"CF", tint:"t-violet", urgent:true},
+  {t:"RICT volet Accessibilité", m:"Rapport complet, en attente de relecture contrôleur.", aff:"Halle Marché", mono:"RI", tint:"t-blue", urgent:false},
+];
+
+let FEED = [
+  {c:"var(--amber)", t:"<b>Analyse thermique</b> a terminé « FDV thermique »", aff:"Les Tilleuls", w:"il y a 2 min"},
+  {c:"var(--green)", t:"<b>Analyse solidité</b> a démarré son analyse", aff:"Val d'Argent Sud", w:"il y a 6 min"},
+  {c:"var(--teal)", t:"<b>Agent FDV</b> a déposé une fiche de vérification", aff:"École Estelle", w:"il y a 12 min"},
+  {c:"var(--slate)", t:"<b>Rédaction d'avis</b> a produit un projet d'avis", aff:"EHPAD Bellevue", w:"il y a 18 min"},
+  {c:"var(--blue)", t:"16 documents indexés dans les sources", aff:"École Estelle", w:"il y a 25 min"},
+];
+const FEED_POOL = [
+  {c:"var(--violet)", t:"<b>Analyse acoustique</b> a terminé son calcul d'isolement", aff:"Les Tilleuls", w:"à l'instant"},
+  {c:"var(--amber)", t:"<b>Sécurité incendie</b> a relevé 2 écarts", aff:"Gymnase Aragon", w:"à l'instant"},
+  {c:"var(--blue)", t:"<b>Rédaction RICT</b> a compilé le rapport initial", aff:"Halle Marché", w:"à l'instant"},
+  {c:"var(--green)", t:"<b>Analyse géotechnique</b> a intégré le rapport G2", aff:"Collège Montigny", w:"à l'instant"},
+];
+
+let fAgence="all", fEtat="all", view="aff";
+
+/* ---------- RENDER AFFAIRES ---------- */
+function agentCluster(agents){
+  if(!agents.length) return `<span class="agent-note" style="color:var(--ink-faint)">Aucun agent affecté</span>`;
+  const shown = agents.slice(0,4);
+  let html = `<div class="cluster">` + shown.map(a=>`<span class="amono ${a.t} ${a.w?'working':''}">${a.m}</span>`).join('');
+  if(agents.length>4) html += `<span class="amono more">+${agents.length-4}</span>`;
+  html += `</div>`;
+  const working = agents.filter(a=>a.w).length;
+  const note = working ? `${agents.length} agents · <b>${working} en cours</b>` : `${agents.length} agent${agents.length>1?'s':''}`;
+  return html + `<span class="agent-note">${note}</span>`;
+}
+function coverage(done,total){
+  let segs=''; for(let i=0;i<total;i++) segs+=`<span class="seg ${i<done?'on':''}"></span>`;
+  return `<div class="cov">${segs}</div><div class="cov-txt">${done}<small> / ${total} volets</small></div>`;
+}
+function renderAff(){
+  const rows = AFFAIRES.filter(a=>(fAgence==="all"||a.agence===fAgence)&&(fEtat==="all"||a.etat===fEtat));
+  document.getElementById('view-aff').innerHTML = rows.map(a=>{
+    const [pc,pt]=PILL[a.etat];
+    return `<div class="aff">
+      <div class="aff-l">
+        <div class="aff-name">${a.nom}<span class="agence ag-${a.agence}">${a.agence}</span></div>
+        <div class="aff-ref">${a.ref}</div>
+        <div class="aff-missions">${a.missions.map(m=>`<span class="mm">${m}</span>`).join('')}</div>
+      </div>
+      <div class="aff-r">
+        <div class="block"><span class="cap">Agents au travail</span>${agentCluster(a.agents)}</div>
+        <div class="block"><span class="cap">Réalisé</span>${coverage(a.done,a.total)}</div>
+        <div class="block" style="align-items:flex-end"><span class="pill ${pc}">${pt}</span><div class="when">${a.when}</div></div>
+      </div>
+    </div>`;
+  }).join('') || `<div style="padding:40px;text-align:center;color:var(--ink-faint)">Aucune affaire pour ce filtre.</div>`;
+}
+
+/* ---------- RENDER AGENTS ---------- */
+function renderAgents(){
+  document.getElementById('agrid').innerHTML = AGENTS.map(a=>`
+    <div class="acard">
+      <div class="acard-top">
+        <span class="amono ${a.t}">${a.m}</span>
+        <div class="acard-name">${a.nom}<small>${a.dom}</small></div>
+        <div class="acard-stat"><b>${a.affs.length}</b><span>affaires</span></div>
+      </div>
+      <div class="load-lbl"><span>Plan de charge</span><span>${a.load}%</span></div>
+      <div class="loadbar"><i style="width:${a.load}%"></i></div>
+      <div class="load-lbl"><span>${a.liv} livrables · 7 j</span></div>
+      <div class="on-affs">${a.affs.map(x=>`<span class="chip">${x}</span>`).join('')}</div>
+    </div>`).join('');
+}
+
+/* ---------- RAIL ---------- */
+function renderValid(){
+  document.getElementById('val-list').innerHTML = VALID.map(v=>`
+    <div class="valcard ${v.urgent?'urgent':''}">
+      <div class="vt">${v.t}</div>
+      <div class="vm">${v.m}</div>
+      <div class="vfoot">
+        <span class="amono ${v.tint}">${v.mono}</span>
+        <span style="font-size:11px;color:var(--ink-soft)">${v.aff}</span>
+        <button class="valbtn">${v.urgent?'Traiter':'Valider'}</button>
+      </div>
+    </div>`).join('');
+  document.getElementById('val-n').textContent = VALID.length;
+}
+function renderFeed(){
+  document.getElementById('feed').innerHTML = FEED.map(f=>`
+    <li class="${f.fresh?'fresh':''}"><span class="fdot" style="background:${f.c}"></span>
+      <div><div class="ft">${f.t}</div><div class="fm" style="font-size:11px">${f.aff}</div><div class="fw">${f.w}</div></div></li>`).join('');
+}
+
+/* ---------- CONTROLS ---------- */
+function setView(v){
+  view=v;
+  document.getElementById('tab-aff').classList.toggle('on', v==='aff');
+  document.getElementById('tab-agt').classList.toggle('on', v==='agt');
+  document.getElementById('view-aff').style.display = v==='aff'?'block':'none';
+  document.getElementById('view-agents').style.display = v==='agt'?'block':'none';
+  document.querySelector('.filters').style.visibility = v==='aff'?'visible':'hidden';
+}
+function filterAgence(btn){ document.querySelectorAll('#f-agence button').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); fAgence=btn.dataset.v; renderAff(); }
+function filterEtat(btn){ document.querySelectorAll('#f-etat button').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); fEtat=btn.dataset.v; renderAff(); }
+
+/* ---------- LIVE FEED ---------- */
+let added=0;
+function tickFeed(){
+  if(added>=FEED_POOL.length) return;
+  FEED.forEach(f=>f.fresh=false);
+  const ev = {...FEED_POOL[added], fresh:true}; added++;
+  FEED.unshift(ev); if(FEED.length>8) FEED.pop();
+  renderFeed();
+  const live=document.getElementById('m-live'); live.textContent=parseInt(live.textContent)+1;
+  const liv=document.getElementById('m-liv'); liv.textContent=parseInt(liv.textContent)+1;
+}
+setInterval(tickFeed, 6000);
+
+/* ---------- INIT ---------- */
+renderAff(); renderAgents(); renderValid(); renderFeed();
+</script>
+</body>
+</html>

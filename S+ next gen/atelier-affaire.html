@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atelier — Affaire Test Estelle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16203A; --ink-soft:#5A6784; --ink-faint:#8A96AE;
+    --blue:#2947E8; --blue-weak:#EAEEFF; --blue-line:#C9D3FB;
+    --violet:#6C4BF0; --violet-weak:#F0EBFF; --violet-line:#DCD2FB;
+    --amber:#C77414; --amber-weak:#FDF1E2; --amber-line:#F4DBB4;
+    --green:#0F8A63; --green-weak:#E5F5EE; --green-line:#BCE6D3;
+    --teal:#0E8794; --teal-weak:#E2F4F5; --teal-line:#B6E2E6;
+    --slate:#455270; --slate-weak:#EDEFF5; --slate-line:#D3D9E6;
+    --paper:#FFFFFF; --canvas:#F3F5FA; --canvas-2:#EEF1F8;
+    --line:#E4E9F2; --line-soft:#EDF0F6;
+    --shadow:0 1px 2px rgba(22,32,58,.06), 0 6px 20px rgba(22,32,58,.05);
+    --shadow-lift:0 2px 6px rgba(22,32,58,.08), 0 14px 40px rgba(22,32,58,.10);
+    --r:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{font-family:'Inter',system-ui,sans-serif; background:var(--canvas); color:var(--ink);
+    -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; height:100vh;
+    overflow:hidden; font-size:14px; line-height:1.45;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* TOPBAR */
+  .topbar{flex:0 0 auto; display:flex; align-items:center; gap:16px; padding:12px 22px;
+    background:var(--paper); border-bottom:1px solid var(--line); z-index:20;}
+  .logo{width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#F5A623,#E8890B);
+    color:#fff; font-family:'Archivo'; font-weight:800; font-size:18px; display:grid; place-items:center;
+    box-shadow:0 2px 8px rgba(232,137,11,.35); position:relative;}
+  .logo sup{position:absolute; top:3px; right:5px; font-size:9px;}
+  .aff-head{display:flex; flex-direction:column; gap:2px; margin-right:6px;}
+  .aff-title{font-family:'Archivo'; font-weight:700; font-size:16px; letter-spacing:-.01em;}
+  .aff-ref{font-size:11px; color:var(--ink-faint); letter-spacing:.03em;}
+  .missions{display:flex; gap:5px; flex-wrap:wrap; align-items:center;}
+  .m-tag{font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:600; padding:3px 7px;
+    border-radius:6px; background:var(--canvas-2); color:var(--ink-soft); letter-spacing:.02em;}
+  .m-tag.wide{font-family:'Inter'; letter-spacing:0;}
+  .top-right{margin-left:auto; display:flex; align-items:center; gap:12px;}
+  .ynor{display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px;
+    background:var(--violet-weak); color:var(--violet); font-weight:600; font-size:12.5px;
+    border:1px solid var(--violet-line); cursor:pointer;}
+  .ynor .dot{width:7px; height:7px; border-radius:50%; background:var(--violet); box-shadow:0 0 0 3px rgba(108,75,240,.18);}
+  .avatar{width:32px; height:32px; border-radius:50%; background:var(--ink); color:#fff;
+    display:grid; place-items:center; font-weight:600; font-size:12px;}
+
+  /* WORKSPACE */
+  .work{flex:1 1 auto; display:grid; grid-template-columns:300px 1fr 380px; min-height:0; background:var(--canvas);}
+  .col{display:flex; flex-direction:column; min-height:0; position:relative;}
+  .col + .col{border-left:1px solid var(--line);}
+  .col-head{flex:0 0 auto; padding:16px 20px 12px; display:flex; align-items:center; gap:10px;}
+  .col-idx{font-family:'IBM Plex Mono'; font-size:11px; font-weight:600; color:var(--ink-faint);}
+  .col-name{font-family:'Archivo'; font-weight:700; font-size:12.5px; letter-spacing:.09em; text-transform:uppercase;}
+  .col-count{margin-left:auto; font-size:11px; color:var(--ink-faint); font-family:'IBM Plex Mono';}
+  .col-body{flex:1 1 auto; overflow-y:auto; padding:4px 16px 20px;}
+  .col-body::-webkit-scrollbar{width:8px;}
+  .col-body::-webkit-scrollbar-thumb{background:#D7DEEA; border-radius:8px; border:2px solid var(--canvas);}
+  .col.sources, .col.sources .col-body{background:linear-gradient(180deg,#F6F8FC,#F3F5FA);}
+  .col.livrables, .col.livrables .col-body{background:linear-gradient(180deg,#FAFAF7,#F3F5FA);}
+  .flow{position:absolute; top:50%; z-index:5; width:22px; height:22px; transform:translateY(-50%);
+    display:grid; place-items:center; color:var(--blue-line); pointer-events:none; left:-11px; font-size:15px;}
+
+  /* SOURCES */
+  .drop{border:1.5px dashed var(--blue-line); border-radius:12px; background:var(--blue-weak);
+    padding:16px 14px; text-align:center; cursor:pointer; margin:2px 2px 14px; transition:.15s;}
+  .drop:hover{border-color:var(--blue); background:#E1E8FF;}
+  .drop b{color:var(--blue); font-weight:600; display:block; font-size:13px;}
+  .drop span{font-size:11px; color:var(--ink-soft);}
+  .src-group{font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-faint); margin:12px 4px 7px;}
+  .doc{display:flex; align-items:center; gap:11px; padding:10px 12px; margin:0 2px 7px;
+    background:var(--paper); border:1px solid var(--line); border-radius:11px; box-shadow:var(--shadow);}
+  .doc-ic{width:32px; height:32px; border-radius:8px; display:grid; place-items:center; flex:0 0 auto;
+    font-family:'IBM Plex Mono'; font-size:9.5px; font-weight:600; color:#fff;}
+  .doc-ic.pdf{background:#D64545;} .doc-ic.dwg{background:#3B7D5A;} .doc-ic.xls{background:#1F8A54;}
+  .doc-ic.doc{background:#2B6CD4;} .doc-ic.zip{background:#8156C9;} .doc-ic.img{background:#148F9B;}
+  .doc-meta{flex:1 1 auto; min-width:0;}
+  .doc-name{font-weight:500; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .doc-sub{font-size:10.5px; color:var(--ink-faint); display:flex; align-items:center; gap:5px;}
+  .doc-state{font-size:9.5px; font-weight:600; padding:2px 7px; border-radius:20px;}
+  .doc-state.ok{background:var(--green-weak); color:var(--green);}
+  .doc-state.load{background:var(--amber-weak); color:var(--amber);}
+  .miniprog{height:3px; background:var(--canvas-2); border-radius:3px; margin-top:5px; overflow:hidden;}
+  .miniprog i{display:block; height:100%; background:var(--amber); width:0; transition:width .4s;}
+
+  /* AGENTS (center) */
+  .enjeux-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:2px;}
+  .enjeu{background:var(--paper); border:1px solid var(--line); border-radius:var(--r);
+    padding:14px 15px 13px; box-shadow:var(--shadow); position:relative; overflow:hidden;
+    transition:transform .15s, box-shadow .15s;}
+  .enjeu:hover{transform:translateY(-2px); box-shadow:var(--shadow-lift);}
+  .enjeu.flash{animation:flash 1.1s ease;}
+  @keyframes flash{0%{box-shadow:0 0 0 0 rgba(41,71,232,.35);}100%{box-shadow:var(--shadow);}}
+  .enjeu-top{display:flex; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .ag-mono{width:30px; height:30px; border-radius:9px; flex:0 0 auto; display:grid; place-items:center;
+    font-family:'IBM Plex Mono'; font-size:11px; font-weight:600;}
+  .t-blue{background:var(--blue-weak); color:var(--blue); border:1px solid var(--blue-line);}
+  .t-amber{background:var(--amber-weak); color:var(--amber); border:1px solid var(--amber-line);}
+  .t-violet{background:var(--violet-weak); color:var(--violet); border:1px solid var(--violet-line);}
+  .t-green{background:var(--green-weak); color:var(--green); border:1px solid var(--green-line);}
+  .t-teal{background:var(--teal-weak); color:var(--teal); border:1px solid var(--teal-line);}
+  .t-slate{background:var(--slate-weak); color:var(--slate); border:1px solid var(--slate-line);}
+  .enjeu-title{font-weight:600; font-size:13px; line-height:1.25; letter-spacing:-.01em; flex:1 1 auto; padding-top:1px;}
+  .enjeu-title small{display:block; font-weight:450; color:var(--ink-soft); font-size:11px; margin-top:3px; line-height:1.3;}
+  .agent-word{font-family:'IBM Plex Mono'; font-size:9px; font-weight:600; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-faint); margin-bottom:2px;}
+  .reads{font-size:10.5px; color:var(--ink-soft); margin:0 0 11px; display:flex; flex-wrap:wrap; gap:4px; align-items:center;}
+  .reads b{font-weight:600; color:var(--ink-faint); font-size:10px;}
+  .dchip{background:var(--canvas-2); border-radius:5px; padding:2px 6px; font-size:10px; color:var(--ink-soft);}
+  .statut{font-size:10px; font-weight:600; padding:3px 8px; border-radius:20px; display:inline-flex;
+    align-items:center; gap:5px; flex:0 0 auto; white-space:nowrap;}
+  .statut.attente{background:var(--blue-weak); color:var(--blue);}
+  .statut.cours{background:var(--amber-weak); color:var(--amber);}
+  .statut.termine{background:var(--green-weak); color:var(--green);}
+  .statut .pulse{width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+  .prog{height:5px; background:var(--canvas-2); border-radius:5px; overflow:hidden; margin-bottom:11px;}
+  .prog i{display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--violet)); width:0; transition:width .5s;}
+  .enjeu-act{display:flex; gap:8px;}
+  .btn{font-family:'Inter'; font-weight:600; font-size:12px; padding:7px 13px; border-radius:9px;
+    border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer; transition:.12s;}
+  .btn:hover{background:var(--canvas-2);}
+  .btn.primary{background:var(--blue); color:#fff; border-color:var(--blue);}
+  .btn.primary:hover{background:#1E3AD0;}
+  .btn.ghost{border:none; background:transparent; color:var(--blue); padding:7px 6px;}
+  .btn:disabled{opacity:.5; cursor:default;}
+  .add-enjeu{grid-column:1 / -1; border:1.5px dashed var(--line); border-radius:var(--r); padding:13px;
+    text-align:center; color:var(--ink-soft); cursor:pointer; font-weight:500; font-size:12.5px;
+    background:transparent; transition:.15s;}
+  .add-enjeu:hover{border-color:var(--blue); color:var(--blue); background:var(--blue-weak);}
+
+  /* catalog */
+  .catalog{position:absolute; inset:0; background:rgba(22,32,58,.28); z-index:40; display:none;
+    align-items:center; justify-content:center; padding:24px;}
+  .catalog.open{display:flex;}
+  .cat-card{background:var(--paper); border-radius:16px; width:100%; max-width:460px; box-shadow:var(--shadow-lift); overflow:hidden;}
+  .cat-head{padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center;}
+  .cat-head b{font-family:'Archivo'; font-size:14px;}
+  .cat-head .x{margin-left:auto; cursor:pointer; color:var(--ink-faint); font-size:18px; line-height:1;}
+  .cat-list{max-height:360px; overflow-y:auto; padding:8px;}
+  .cat-item{display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:10px; cursor:pointer;}
+  .cat-item:hover{background:var(--canvas-2);}
+  .cat-item b{font-weight:600; font-size:13px;}
+  .cat-item span{font-size:11.5px; color:var(--ink-faint); display:block;}
+
+  /* LIVRABLES */
+  .livrable{background:var(--paper); border:1px solid var(--line); border-radius:var(--r); padding:14px 15px;
+    margin:0 2px 11px; box-shadow:var(--shadow); position:relative;}
+  .livrable.new{animation:drop-in .5s ease;}
+  @keyframes drop-in{from{opacity:0; transform:translateY(-10px) scale(.98);}to{opacity:1; transform:none;}}
+  .liv-top{display:flex; align-items:flex-start; gap:11px;}
+  .liv-ic{width:40px; height:48px; border-radius:7px; flex:0 0 auto; position:relative;
+    background:var(--canvas-2); border:1px solid var(--line); display:grid; place-items:center;}
+  .liv-ic b{font-family:'IBM Plex Mono'; font-size:9.5px; font-weight:600; color:var(--ink-soft);}
+  .liv-ic::before{content:''; position:absolute; top:0; right:0; width:11px; height:11px;
+    background:linear-gradient(225deg,var(--canvas) 50%,transparent 50%); border-left:1px solid var(--line); border-bottom:1px solid var(--line);}
+  .liv-meta{flex:1 1 auto; min-width:0;}
+  .liv-title{font-weight:600; font-size:12.5px; letter-spacing:-.01em; line-height:1.3;}
+  .liv-ref{font-family:'IBM Plex Mono'; font-size:10px; color:var(--ink-faint); margin-top:2px;}
+  .liv-foot{display:flex; align-items:center; gap:8px; margin-top:11px; padding-top:11px; border-top:1px solid var(--line-soft);}
+  .liv-agent{font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:7px;}
+  .liv-agent .ag-mono{width:20px; height:20px; border-radius:6px; font-size:9px;}
+  .badge-new{position:absolute; top:-7px; right:12px; background:var(--green); color:#fff; font-size:9.5px;
+    font-weight:700; padding:2px 8px; border-radius:20px; letter-spacing:.04em;}
+  .empty-liv{color:var(--ink-faint); font-size:12.5px; text-align:center; padding:30px 16px; line-height:1.6;}
+
+  /* COMMAND BAR */
+  .cmdbar{flex:0 0 auto; background:var(--paper); border-top:1px solid var(--line); padding:12px 22px;
+    display:flex; align-items:center; gap:12px; z-index:20;}
+  .cmd-wrap{flex:1 1 auto; display:flex; align-items:center; gap:10px; background:var(--canvas);
+    border:1px solid var(--line); border-radius:13px; padding:4px 4px 4px 14px;}
+  .cmd-wrap:focus-within{border-color:var(--blue); box-shadow:0 0 0 3px rgba(41,71,232,.10); background:var(--paper);}
+  .cmd-wrap input{flex:1 1 auto; border:none; background:transparent; outline:none; font-family:'Inter';
+    font-size:14px; color:var(--ink); padding:9px 0;}
+  .cmd-wrap input::placeholder{color:var(--ink-faint);}
+  .toggle-libre{display:flex; align-items:center; gap:7px; font-size:12px; font-weight:500; color:var(--ink-soft);
+    padding:7px 11px; border-radius:9px; cursor:pointer; border:1px solid transparent; white-space:nowrap;}
+  .toggle-libre.on{background:var(--violet-weak); color:var(--violet); border-color:var(--violet-line);}
+  .toggle-libre .sw{width:26px; height:15px; border-radius:20px; background:#CBD3E1; position:relative; transition:.15s;}
+  .toggle-libre .sw i{position:absolute; top:2px; left:2px; width:11px; height:11px; border-radius:50%; background:#fff; transition:.15s;}
+  .toggle-libre.on .sw{background:var(--violet);} .toggle-libre.on .sw i{left:13px;}
+  .send{width:40px; height:40px; border-radius:10px; background:var(--blue); border:none; color:#fff;
+    cursor:pointer; display:grid; place-items:center; transition:.12s; font-size:15px;}
+  .send:hover{background:#1E3AD0;}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none !important; transition:none !important;}}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo">S<sup>+</sup></div>
+    <div class="aff-head">
+      <div class="aff-title">Affaire Test Estelle</div>
+      <div class="aff-ref mono">C-YIELD-STUDIO-ESTELLE</div>
+    </div>
+    <div class="missions">
+      <span class="m-tag">ENV</span><span class="m-tag">HAND</span><span class="m-tag">L</span>
+      <span class="m-tag">P1</span><span class="m-tag">SEI</span><span class="m-tag">SH</span>
+      <span class="m-tag">HYS</span><span class="m-tag wide">Attestation HAND</span><span class="m-tag">VIEL</span>
+    </div>
+    <div class="top-right">
+      <div class="ynor"><span class="dot"></span>Ynor</div>
+      <div class="avatar">HC</div>
+    </div>
+  </div>
+
+  <div class="work">
+
+    <!-- SOURCES -->
+    <div class="col sources">
+      <div class="col-head">
+        <span class="col-idx">01</span><span class="col-name">Sources</span>
+        <span class="col-count" id="src-count">16 docs</span>
+      </div>
+      <div class="col-body">
+        <div class="drop" onclick="importDoc()">
+          <b>+ Importer les documents</b>
+          <span>PDF · DWG · XLSX · DOCX · photos — glisser ou cliquer</span>
+        </div>
+        <div id="doc-list"></div>
+      </div>
+    </div>
+
+    <!-- AGENTS -->
+    <div class="col enjeux">
+      <span class="flow">→</span>
+      <div class="col-head">
+        <span class="col-idx">02</span><span class="col-name">Agents</span>
+        <span class="col-count" id="enj-count">7 mobilisés</span>
+      </div>
+      <div class="col-body"><div class="enjeux-grid" id="enjeux-grid"></div></div>
+      <div class="catalog" id="catalog">
+        <div class="cat-card">
+          <div class="cat-head"><b>Mobiliser un agent</b><span class="x" onclick="closeCatalog()">×</span></div>
+          <div class="cat-list" id="cat-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVRABLES -->
+    <div class="col livrables">
+      <span class="flow">→</span>
+      <div class="col-head">
+        <span class="col-idx">03</span><span class="col-name">Livrables</span>
+        <span class="col-count" id="liv-count">2 produits</span>
+      </div>
+      <div class="col-body" id="liv-list"></div>
+    </div>
+
+  </div>
+
+  <div class="cmdbar">
+    <div class="cmd-wrap">
+      <input id="cmd" placeholder="Demandez à vos agents — ex. « lance l'analyse thermique et acoustique puis rédige le RICT »"
+             onkeydown="if(event.key==='Enter')runCommand()">
+      <div class="toggle-libre" id="libre" onclick="toggleLibre()"><span class="sw"><i></i></span> Agent libre</div>
+    </div>
+    <button class="send" onclick="runCommand()" title="Envoyer">➤</button>
+  </div>
+
+<script>
+/* ---------- SOURCES ---------- */
+const SOURCES = [
+  {g:'Pièces marché', items:[
+    {n:'CCTP_ecole_maternelle.pdf', t:'pdf', s:'1,4 Mo'},
+    {n:'RC_reglement_consultation.pdf', t:'pdf', s:'612 Ko'},
+    {n:'CCAP_marche_travaux.pdf', t:'pdf', s:'740 Ko'},
+    {n:'DPGF_quantitatif.xlsx', t:'xls', s:'88 Ko'},
+    {n:'Memoire_technique_entreprise.docx', t:'doc', s:'1,1 Mo'},
+  ]},
+  {g:'Plans & graphiques', items:[
+    {n:'Plans_ARCHI_RDC.dwg', t:'dwg', s:'3,1 Mo'},
+    {n:'Plan_masse_VRD.dwg', t:'dwg', s:'2,2 Mo'},
+    {n:'Coupes_facades.pdf', t:'pdf', s:'1,9 Mo'},
+    {n:'Photos_site_existant.zip', t:'img', s:'14 Mo'},
+  ]},
+  {g:'Études & rapports', items:[
+    {n:'Etude_thermique_RE2020.pdf', t:'pdf', s:'2,0 Mo'},
+    {n:'Etude_acoustique_isolement.pdf', t:'pdf', s:'1,3 Mo'},
+    {n:'Rapport_geotechnique_G2.pdf', t:'pdf', s:'4,4 Mo'},
+    {n:'Descriptif_materiaux_FDES.xlsx', t:'xls', s:'96 Ko'},
+  ]},
+  {g:'Réglementaire', items:[
+    {n:'Notice_securite_incendie.pdf', t:'pdf', s:'820 Ko'},
+    {n:'Notice_accessibilite_PMR.pdf', t:'pdf', s:'560 Ko'},
+    {n:'Arrete_permis_construire.pdf', t:'pdf', s:'410 Ko'},
+    {n:'Diagnostic_amiante_avant_travaux.pdf', t:'pdf', s:'1,0 Mo'},
+  ]},
+];
+
+/* ---------- AGENTS ---------- */
+let enjeux = [
+  {id:'a_rict', mono:'RI', tint:'t-blue', nom:'Rédaction RICT', dom:'Compilation du rapport initial', reads:['CCTP','Notices'], statut:'cours', pct:55, liv:{type:'RICT', label:'RICT — Rapport initial de contrôle'}},
+  {id:'a_descr', mono:'DT', tint:'t-blue', nom:'Synthèse & descriptif des travaux', dom:'Descriptif sommaire de l’ouvrage', reads:['CCTP','Plans ARCHI'], statut:'termine', pct:100, liv:{type:'DOC', label:'Descriptif sommaire des travaux'}},
+  {id:'a_ther', mono:'TH', tint:'t-amber', nom:'Analyse thermique', dom:'Cohérence RE2020 / enveloppe', reads:['Étude thermique'], statut:'attente', pct:0, liv:{type:'FDV', label:'FDV — Analyse thermique'}},
+  {id:'a_acou', mono:'AC', tint:'t-violet', nom:'Analyse acoustique', dom:'Isolements & bruits d’équipement', reads:['Étude acoustique'], statut:'attente', pct:0, liv:{type:'NOTE', label:'Note d’analyse acoustique'}},
+  {id:'a_geo', mono:'GÉ', tint:'t-green', nom:'Analyse géotechnique', dom:'Aléas sol — mission G2', reads:['Rapport G2'], statut:'attente', pct:0, liv:{type:'NOTE', label:'Note d’analyse géotechnique'}},
+  {id:'a_avis', mono:'AV', tint:'t-slate', nom:'Rédaction d’avis', dom:'Avis sur documents de conception', reads:['CCTP','Notices'], statut:'attente', pct:0, liv:{type:'AVIS', label:'Avis sur documents de conception'}},
+  {id:'a_fdv', mono:'FD', tint:'t-teal', nom:'Agent FDV', dom:'Fiche de vérification', reads:['Plans','DPGF'], statut:'termine', pct:100, liv:{type:'FDV', label:'FDV — Vérification de conception'}},
+];
+
+const CATALOG = [
+  {mono:'HA', tint:'t-blue',   nom:'Analyse accessibilité', dom:'HAND — cheminements, sanitaires', reads:['Notice PMR','Plans'], liv:{type:'RICT', label:'RICT — volet Accessibilité'}},
+  {mono:'SE', tint:'t-amber',  nom:'Vérification sécurité incendie', dom:'SEI — ERP type R, désenfumage', reads:['Notice sécurité'], liv:{type:'RICT', label:'RICT — volet Sécurité incendie'}},
+  {mono:'SO', tint:'t-green',  nom:'Analyse solidité / structure', dom:'L — extension RDC sur emprise garage', reads:['Plans','Rapport G2'], liv:{type:'FED', label:'FED — Solidité & structure'}},
+  {mono:'VE', tint:'t-slate',  nom:'Vérification électrique', dom:'VIEL — NF C 15-100', reads:['CCTP lot élec'], liv:{type:'RICT', label:'RICT — Vérification électrique'}},
+  {mono:'ZC', tint:'t-teal',   nom:'Contrôle zones climatiques', dom:'Neige A1 · Vent 3 — cohérence', reads:['CCTP','Étude thermique'], liv:{type:'FDV', label:'FDV — Zones neige & vent'}},
+  {mono:'CO', tint:'t-violet', nom:'Cotation des écarts', dom:'Confrontation référentiel / DCE', reads:['Tous les docs'], liv:{type:'TAB', label:'Tableau des non-conformités'}},
+];
+
+let livrables = [
+  {id:'l1', type:'DOC', titre:'Descriptif sommaire des travaux', ref:'DST-25-0142-ENV', mono:'DT', tint:'t-blue', new:false},
+  {id:'l2', type:'FDV', titre:'FDV — Vérification de conception', ref:'FDV-25-0138-GEN', mono:'FD', tint:'t-teal', new:false},
+];
+
+const STAT = {attente:{c:'attente', t:'En attente'}, cours:{c:'cours', t:'En cours', pulse:true}, termine:{c:'termine', t:'Terminé'}};
+let libreOn = false;
+
+/* ---------- RENDER ---------- */
+function renderSources(){
+  document.getElementById('doc-list').innerHTML = SOURCES.map(grp=>`
+    <div class="src-group">${grp.g}</div>` + grp.items.map(d=>`
+      <div class="doc">
+        <div class="doc-ic ${d.t}">${d.t.toUpperCase()}</div>
+        <div class="doc-meta">
+          <div class="doc-name">${d.n}</div>
+          <div class="doc-sub">${d.s} · <span class="doc-state ok">indexé</span></div>
+        </div>
+      </div>`).join('')).join('');
+}
+
+function renderEnjeux(){
+  const g = document.getElementById('enjeux-grid');
+  g.innerHTML = enjeux.map(e=>{
+    const s = STAT[e.statut];
+    const pulse = s.pulse ? '<span class="pulse"></span>' : '';
+    let action;
+    if(e.statut==='attente') action = `<button class="btn primary" onclick="launch('${e.id}')">Lancer l'agent</button>`;
+    else if(e.statut==='cours') action = `<button class="btn" disabled>Traitement en cours…</button>`;
+    else action = `<button class="btn ghost" onclick="scrollLiv()">Voir le livrable →</button>`;
+    const prog = (e.statut==='cours'||e.statut==='termine') ? `<div class="prog"><i style="width:${e.pct}%"></i></div>` : '';
+    const chips = e.reads.map(r=>`<span class="dchip">${r}</span>`).join('');
+    return `<div class="enjeu" id="${e.id}">
+      <div class="enjeu-top">
+        <span class="ag-mono ${e.tint}">${e.mono}</span>
+        <div class="enjeu-title"><span class="agent-word">Agent</span>${e.nom}<small>${e.dom}</small></div>
+        <span class="statut ${s.c}">${pulse}${s.t}</span>
+      </div>
+      <div class="reads"><b>Lit :</b> ${chips}</div>
+      ${prog}
+      <div class="enjeu-act">${action}</div>
+    </div>`;
+  }).join('') + `<button class="add-enjeu" onclick="openCatalog()">+ Mobiliser un agent</button>`;
+  document.getElementById('enj-count').textContent = enjeux.length + ' mobilisés';
+}
+
+function renderLivrables(){
+  const l = document.getElementById('liv-list');
+  if(!livrables.length){
+    l.innerHTML = `<div class="empty-liv">Aucun livrable pour l'instant.<br>Lancez un agent — chaque agent dépose ici sa production.</div>`;
+  } else {
+    l.innerHTML = livrables.map(v=>`
+      <div class="livrable ${v.new?'new':''}">
+        ${v.new?'<span class="badge-new">Nouveau</span>':''}
+        <div class="liv-top">
+          <div class="liv-ic"><b>${v.type}</b></div>
+          <div class="liv-meta"><div class="liv-title">${v.titre}</div><div class="liv-ref">${v.ref}</div></div>
+        </div>
+        <div class="liv-foot">
+          <span class="liv-agent"><span class="ag-mono ${v.tint}">${v.mono}</span>Produit par l'agent</span>
+          <button class="btn ghost" style="margin-left:auto">Ouvrir</button>
+        </div>
+      </div>`).join('');
+  }
+  const n = livrables.length;
+  document.getElementById('liv-count').textContent = n + (n>1?' produits':' produit');
+}
+
+function renderCatalog(){
+  document.getElementById('cat-list').innerHTML = CATALOG.map((c,i)=>`
+    <div class="cat-item" onclick="mobilise(${i})">
+      <span class="ag-mono ${c.tint}">${c.mono}</span>
+      <div><b>${c.nom}</b><span>${c.dom}</span></div>
+    </div>`).join('') || '<div class="empty-liv">Tous les agents disponibles sont mobilisés.</div>';
+}
+
+/* ---------- ACTIONS ---------- */
+function launch(id){
+  const e = enjeux.find(x=>x.id===id);
+  if(!e || e.statut!=='attente') return;
+  e.statut='cours'; e.pct=8; renderEnjeux();
+  const iv = setInterval(()=>{
+    e.pct = Math.min(100, e.pct + Math.random()*22+10); renderEnjeux();
+    if(e.pct>=100){ clearInterval(iv); finish(e); }
+  }, 480);
+}
+function finish(e){
+  e.statut='termine'; e.pct=100;
+  const ref = e.liv.type+'-25-'+String(140+Math.floor(Math.random()*90)).padStart(4,'0');
+  livrables.forEach(v=>v.new=false);
+  livrables.unshift({id:'l'+Date.now(), type:e.liv.type, titre:e.liv.label, ref, mono:e.mono, tint:e.tint, new:true});
+  renderEnjeux(); renderLivrables();
+  const el = document.getElementById(e.id);
+  if(el){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),1100); }
+}
+function openCatalog(){ renderCatalog(); document.getElementById('catalog').classList.add('open'); }
+function closeCatalog(){ document.getElementById('catalog').classList.remove('open'); }
+function mobilise(i){
+  const c = CATALOG.splice(i,1)[0];
+  enjeux.push({id:'a'+Date.now(), mono:c.mono, tint:c.tint, nom:c.nom, dom:c.dom, reads:c.reads, statut:'attente', pct:0, liv:c.liv});
+  renderEnjeux(); renderCatalog();
+  if(!CATALOG.length) closeCatalog();
+}
+function importDoc(){
+  const pool = [{n:'CCTP_lot_CVC.pdf',t:'pdf'},{n:'Plan_reperage_amiante.dwg',t:'dwg'},{n:'Etude_structure_BA.pdf',t:'pdf'},{n:'Bordereau_prix_BPU.xlsx',t:'xls'},{n:'PV_essais_acoustiques.pdf',t:'pdf'}];
+  const d = pool[Math.floor(Math.random()*pool.length)];
+  const list = document.getElementById('doc-list');
+  const div = document.createElement('div'); div.className='doc';
+  div.innerHTML = `<div class="doc-ic ${d.t}">${d.t.toUpperCase()}</div>
+    <div class="doc-meta"><div class="doc-name">${d.n}</div>
+    <div class="doc-sub"><span class="doc-state load">indexation…</span></div>
+    <div class="miniprog"><i></i></div></div>`;
+  list.prepend(div);
+  const bar = div.querySelector('.miniprog i');
+  setTimeout(()=>bar.style.width='100%',60);
+  setTimeout(()=>{ div.querySelector('.doc-sub').innerHTML='0,9 Mo · <span class="doc-state ok">indexé</span>'; bumpSrc(); },1400);
+  bumpSrc();
+}
+let srcExtra=0;
+function bumpSrc(){ document.getElementById('src-count').textContent=(16+(++srcExtra>0?srcExtra:0))+' docs'; srcExtra--; document.getElementById('src-count').textContent=document.querySelectorAll('#doc-list .doc').length+' docs'; }
+function scrollLiv(){ document.getElementById('liv-list').scrollTo({top:0, behavior:'smooth'}); }
+function toggleLibre(){ libreOn=!libreOn; document.getElementById('libre').classList.toggle('on', libreOn); }
+function runCommand(){
+  const inp = document.getElementById('cmd'); const txt = inp.value.trim().toLowerCase();
+  if(!txt) return; inp.value='';
+  if(libreOn){
+    livrables.forEach(v=>v.new=false);
+    livrables.unshift({id:'l'+Date.now(), type:'NOTE', titre:'Note de synthèse — agent libre', ref:'NOTE-25-'+String(200+Math.floor(Math.random()*90)).padStart(4,'0'), mono:'AL', tint:'t-violet', new:true});
+    renderLivrables(); return;
+  }
+  const map = {'thermiq':'a_ther','acousti':'a_acou','geotech':'a_geo','géotech':'a_geo','sol':'a_geo','rict':'a_rict','avis':'a_avis','fdv':'a_fdv','descriptif':'a_descr','travaux':'a_descr'};
+  let ids = new Set();
+  for(const k in map){ if(txt.includes(k)) ids.add(map[k]); }
+  let targets = enjeux.filter(e=> (ids.size? ids.has(e.id): true) && e.statut==='attente');
+  targets.forEach((e,i)=>{
+    const el=document.getElementById(e.id);
+    if(el){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),1100); }
+    setTimeout(()=>launch(e.id), i*400);
+  });
+}
+
+/* ---------- INIT ---------- */
+renderSources(); renderEnjeux(); renderLivrables();
+</script>
+</body>
+</html>
