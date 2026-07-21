@@ -407,27 +407,23 @@ function parseNFHabitatData(raw) {
 // ==================== AUTHENTICATION ====================
 async function authenticateWithPassword(password) {
     try {
+        // Le webhook passwordROI attend le mot de passe en TEXTE BRUT
+        // (nœud rawBody côté n8n) — pas en JSON, sinon la comparaison échoue
+        // et aucune URL n'est renvoyée.
         const response = await fetch(WEBHOOK_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password })
+            headers: { 'Content-Type': 'text/plain' },
+            body: password
         });
         if (!response.ok) return false;
         const result = await response.text();
 
-        // Extract NF Habitat URL — accepts both single and double quotes
-        const urlRegex = (name) => result.match(new RegExp(name + `\\s*=\\s*['"]([^'"]+)['"]`));
-        const nfMatch = urlRegex('NF_HABITAT_URL') || urlRegex('NFHABITAT_URL');
-        if (nfMatch) DATA_URL = nfMatch[1];
+        // Parsing centralisé (cf. shared/utils.js)
+        const urls = KPI.parseUrlsResponse(result);
+        DATA_URL = urls.NF_HABITAT_URL || urls.NFHABITAT_URL || '';
 
-        // Auth is successful if the webhook returned ANY known URL pattern
-        const isAuthenticated = !!(
-            urlRegex('DESCRIPTIF_URL') ||
-            urlRegex('AUTOCONTACT_URL') ||
-            urlRegex('COMPARATEUR_URL') ||
-            DATA_URL
-        );
-        return isAuthenticated;
+        // Auth réussie si le webhook a renvoyé au moins une URL connue
+        return !!(urls.DESCRIPTIF_URL || urls.AUTOCONTACT_URL || urls.COMPARATEUR_URL || DATA_URL);
     } catch (e) {
         console.error('Auth error:', e);
         return false;
