@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pilotage économique IA - AnalyzTech</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+            <!-- Header -->
+            <div class="mb-8">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <a href="index.html" class="text-indigo-600 hover:text-indigo-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Pilotage économique de la démarche IA</h1>
+                        <p class="text-gray-500 text-sm">Dépense engagée, budget et retour — au niveau groupe</p>
+                    </div>
+                    <span class="px-3 py-1 text-sm font-semibold rounded-full bg-indigo-100 text-indigo-800">Groupe</span>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="error" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
+                <div class="text-center">
+                    <p class="text-red-600 text-lg">Erreur lors du chargement des données</p>
+                    <p id="error-detail" class="text-gray-500 text-sm mt-2"></p>
+                </div>
+            </div>
+
+            <div id="main-content" class="hidden">
+
+                <!-- Bandeau de complétude : sans ça, une dépense partielle se lit
+                     spontanément comme une dépense totale. -->
+                <div id="completeness-banner" class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <div class="flex gap-3">
+                        <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div class="text-sm">
+                            <p class="font-semibold text-amber-900">Périmètre de la dépense affichée</p>
+                            <p id="completeness-text" class="text-amber-800 mt-1">—</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtres de période -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-8">
+                    <div class="flex flex-wrap items-end gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1" for="start-month">Mois de début</label>
+                            <input type="month" id="start-month" class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1" for="end-month">Mois de fin</label>
+                            <input type="month" id="end-month" class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <button id="reset-period" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Tout l'historique</button>
+                        <p id="period-label" class="text-sm text-gray-500 ml-auto">—</p>
+                    </div>
+                </div>
+
+                <!-- ============ 1. Les chiffres de direction ============ -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Les chiffres de direction</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Dépense sur la période</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-depense">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-depense-sub">—</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Ratio de levier</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-levier">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-levier-sub">gain valorisé ÷ dépense</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Coût par heure gagnée</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-cout-heure">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-cout-heure-sub">—</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">% de la masse salariale</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-pct-masse">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-pct-masse-sub">—</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ 2. Budget et projection ============ -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Budget et projection</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                        <!-- Jauge de consommation -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 class="text-base font-semibold text-gray-700">Budget annuel consommé</h3>
+                                    <p class="text-xs text-gray-400 mt-0.5">Cible : <strong class="text-gray-600" id="budget-target">—</strong></p>
+                                </div>
+                                <span id="budget-badge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-500">—</span>
+                            </div>
+                            <div class="relative mx-auto" style="width:200px;height:130px;">
+                                <svg width="200" height="105" viewBox="0 0 200 105" style="display:block;">
+                                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round"/>
+                                    <path id="budget-arc" d="M 20 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round" style="transition:stroke 0.3s;"/>
+                                </svg>
+                                <div class="absolute bottom-0 left-0 right-0 text-center">
+                                    <p class="text-2xl font-bold text-gray-900" id="budget-value">—</p>
+                                    <p class="text-xs text-gray-500" id="budget-sub">—</p>
+                                </div>
+                            </div>
+                            <p class="text-center text-xs text-gray-400 mt-1" id="budget-label">—</p>
+                        </div>
+
+                        <!-- Run rate / projection / épuisement -->
+                        <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-5">
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Run rate</p>
+                                <p class="text-2xl font-bold text-gray-900 mt-2" id="runrate-value">—</p>
+                                <p class="text-xs text-gray-400 mt-1" id="runrate-sub">—</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Projection fin d'année</p>
+                                <p class="text-2xl font-bold text-gray-900 mt-2" id="projection-value">—</p>
+                                <p class="text-xs text-gray-400 mt-1" id="projection-sub">—</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Épuisement du budget</p>
+                                <p class="text-2xl font-bold text-gray-900 mt-2" id="epuisement-value">—</p>
+                                <p class="text-xs text-gray-400 mt-1" id="epuisement-sub">—</p>
+                            </div>
+                            <div class="sm:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <h3 class="text-sm font-semibold text-gray-700 mb-3">Consommation cumulée sur l'année</h3>
+                                <div style="height:260px;"><canvas id="budget-chart"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ 3. Par collaborateur ============ -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Par collaborateur</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Coût par collaborateur</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-cout-collab">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-cout-collab-sub">—</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Coût par utilisateur actif</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-cout-actif">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-cout-actif-sub">—</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Coût pour mille du CA</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-pour-mille">—</p>
+                            <p class="text-xs text-gray-400 mt-1" id="kpi-pour-mille-sub">—</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+                        <p class="text-sm text-gray-600" id="collab-comment">—</p>
+                    </div>
+                </div>
+
+                <!-- ============ 4. Structure de dépense ============ -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Structure de dépense</h2>
+
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-5">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-1">Dépense mensuelle par source</h3>
+                        <p class="text-xs text-gray-400 mb-4">Dépense d'inférence OpenRouter, et coûts saisis à la main.</p>
+                        <div style="height:300px;"><canvas id="depense-chart"></canvas></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                        <!-- Fixe vs variable -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-1">Coût fixe et coût variable</h3>
+                            <p class="text-xs text-gray-400 mb-4">Mesure la rigidité de la dépense.</p>
+                            <div class="flex h-3 w-full overflow-hidden rounded-full bg-gray-100 mb-4">
+                                <div id="structure-bar-fixe" class="bg-slate-500" style="width:0%"></div>
+                                <div id="structure-bar-variable" class="bg-indigo-500" style="width:0%"></div>
+                            </div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center gap-2 text-gray-600"><span class="inline-block w-3 h-3 rounded-sm bg-slate-500"></span>Fixe</span>
+                                    <span class="font-semibold text-gray-900" id="structure-fixe">—</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center gap-2 text-gray-600"><span class="inline-block w-3 h-3 rounded-sm bg-indigo-500"></span>Variable</span>
+                                    <span class="font-semibold text-gray-900" id="structure-variable">—</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Par catégorie -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-4">Par catégorie</h3>
+                            <div id="categorie-list" class="space-y-2 text-sm"></div>
+                        </div>
+
+                        <!-- Par fournisseur -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-4">Par fournisseur</h3>
+                            <div id="fournisseur-list" class="space-y-2 text-sm"></div>
+                            <p class="text-xs text-gray-400 mt-4" id="concentration-text">—</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ 5. Registre et réglages ============ -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Registre des coûts et réglages</h2>
+
+                    <!-- Avertissement sur la persistance locale -->
+                    <div class="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                        <p><strong>Saisie locale à ce navigateur.</strong> Le registre et les réglages vivent dans le stockage local : ils ne sont ni partagés avec vos collègues ni sauvegardés sur un serveur, et un vidage de cache les efface. Exportez le JSON après chaque session de saisie.</p>
+                    </div>
+
+                    <!-- Historique OpenRouter importé depuis un export CSV -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-5">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-1">Historique OpenRouter</h3>
+                        <p class="text-xs text-gray-500 mb-4">
+                            L'API OpenRouter ne sert que le cumulé de l'instant : elle ne sait pas rejouer le passé.
+                            L'export CSV <span class="font-mono">total usage</span> du tableau de bord OpenRouter, lui,
+                            donne la dépense jour par jour — c'est le seul moyen de rattraper l'historique
+                            antérieur au relevé quotidien. Colonnes attendues :
+                            <span class="font-mono">date__day, model, total_usage</span>.
+                        </p>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <label class="px-3 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md cursor-pointer">
+                                Importer un export CSV
+                                <input type="file" id="import-csv-input" accept=".csv,text/csv" class="hidden">
+                            </label>
+                            <button id="clear-historique" class="hidden px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Supprimer l'historique</button>
+                            <span id="csv-status" class="text-xs text-gray-500"></span>
+                        </div>
+                        <p id="historique-status" class="mt-3 text-xs text-gray-600"></p>
+                    </div>
+
+                    <!-- Paramètres -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-5">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Paramètres</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="param-masse">Masse salariale annuelle (€)</label>
+                                <input type="number" min="0" step="1000" id="param-masse" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="param-budget">Budget IA annuel (€)</label>
+                                <input type="number" min="0" step="100" id="param-budget" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="param-taux">Taux USD → EUR</label>
+                                <input type="number" min="0" step="0.01" id="param-taux" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="param-effectif">Effectif (vide = population cible)</label>
+                                <input type="number" min="0" step="1" id="param-effectif" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="param-ca">CA groupe (€)</label>
+                                <input type="number" min="0" step="100000" id="param-ca" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="param-heures">Heures annuelles par ETP</label>
+                                <input type="number" min="0" step="1" id="param-heures" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mt-4">
+                            <button id="save-params" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">Enregistrer les paramètres</button>
+                            <span id="params-status" class="text-xs text-gray-500"></span>
+                        </div>
+                    </div>
+
+                    <!-- Lignes écartées par la règle anti-double-comptage -->
+                    <div id="ignorees-notice" class="hidden mb-5 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                        <p class="text-sm font-semibold text-orange-900 mb-2">Lignes exclues du total</p>
+                        <p class="text-xs text-orange-800 mb-3">Sur un mois couvert par l'API OpenRouter, une ligne d'inférence saisie à la main serait comptée deux fois. Elle est donc écartée du total — jamais en silence.</p>
+                        <ul id="ignorees-list" class="text-xs text-orange-900 space-y-1 list-disc list-inside"></ul>
+                    </div>
+
+                    <!-- Ajout d'une ligne -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-5">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ajouter une dépense</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-mois">Mois</label>
+                                <input type="month" id="new-mois" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-categorie">Catégorie</label>
+                                <select id="new-categorie" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="infra">Infrastructure</option>
+                                    <option value="ocr">OCR</option>
+                                    <option value="licence">Licence</option>
+                                    <option value="inference">Inférence</option>
+                                    <option value="autre">Autre</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-fournisseur">Fournisseur</label>
+                                <input type="text" id="new-fournisseur" placeholder="Mistral" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-libelle">Libellé</label>
+                                <input type="text" id="new-libelle" placeholder="Facture août" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-montant">Montant</label>
+                                <input type="number" min="0" step="0.01" id="new-montant" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-devise">Devise</label>
+                                <select id="new-devise" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="EUR">EUR</option>
+                                    <option value="USD">USD</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1" for="new-nature">Nature</label>
+                                <select id="new-nature" class="w-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="variable">Variable</option>
+                                    <option value="fixe">Fixe</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mt-4">
+                            <button id="add-ligne" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">Ajouter</button>
+                            <span id="ligne-error" class="text-xs text-red-600"></span>
+                        </div>
+                    </div>
+
+                    <!-- Tableau du registre -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-gray-200">
+                            <h3 class="text-sm font-semibold text-gray-700">Lignes saisies</h3>
+                            <div class="flex items-center gap-3">
+                                <button id="export-json" class="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Exporter en JSON</button>
+                                <label class="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md cursor-pointer">
+                                    Importer un JSON
+                                    <input type="file" id="import-json-input" accept=".json,application/json" class="hidden">
+                                </label>
+                                <span id="import-status" class="text-xs text-gray-500"></span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mois</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fournisseur</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Libellé</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">En euros</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nature</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="registre-tbody" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                        <p id="registre-empty" class="hidden p-5 text-sm text-gray-500">Aucune ligne saisie. La dépense affichée ne contient donc que l'inférence OpenRouter, à l'exclusion de tout coût d'infrastructure, d'OCR ou de licence.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Ordre de chargement obligatoire : utils, puis costs, puis la page. -->
+    <script src="shared/utils.js"></script>
+    <script src="shared/costs.js"></script>
+    <script src="pilotage-ia.js"></script>
+</body>
+</html>

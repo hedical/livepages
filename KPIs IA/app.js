@@ -2975,6 +2975,9 @@ async function loadData() {
         // Initialize feature cards after data is loaded
         initializeFeatureCards();
 
+        // Instantané des gains pour la page « Pilotage économique »
+        publishGainsSnapshot();
+
         // Show main content
         loadingEl.classList.add('hidden');
         mainContentEl.classList.remove('hidden');
@@ -3994,6 +3997,70 @@ function calculateWindowedGains() {
     });
     acc.percentGain = (acc.timeGainHours / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
     return acc;
+}
+
+/**
+ * Publie un instantané compact des gains, consommé par la page « Pilotage
+ * économique » (pilotage-ia.html). Cette page a besoin des heures gagnées et
+ * des utilisateurs actifs par mois, mais ne recharge pas les 15 sources : elle
+ * relit cet instantané.
+ *
+ * sessionStorage et non localStorage : effacé à la fermeture de l'onglet, donc
+ * aucune donnée d'usage ne persiste sur le disque. Corollaire assumé : le lien
+ * vers la page macro doit naviguer dans le MÊME onglet.
+ *
+ * L'instantané est toujours calculé SANS filtre — date, filiale, direction et
+ * agence sont neutralisés puis restaurés — pour que la page macro reçoive le
+ * périmètre groupe quel que soit l'état du dashboard au moment du
+ * rafraîchissement. Même technique que calculateWindowedGains pour les dates,
+ * étendue aux filtres d'organisation qui sont lus directement dans le DOM.
+ */
+function publishGainsSnapshot() {
+    if (typeof sessionStorage === 'undefined') return;
+
+    const savedDates = { startDate: dateFilter.startDate, endDate: dateFilter.endDate };
+    const savedOrg = {
+        filiale: filialeFilterEl ? filialeFilterEl.value : '',
+        direction: directionFilterEl ? directionFilterEl.value : '',
+        agency: agencyFilterEl ? agencyFilterEl.value : '',
+    };
+
+    try {
+        dateFilter.startDate = null;
+        dateFilter.endDate = null;
+        if (filialeFilterEl) filialeFilterEl.value = '';
+        if (directionFilterEl) directionFilterEl.value = '';
+        if (agencyFilterEl) agencyFilterEl.value = '';
+
+        const byMonth = {};
+        calculateMonthlyGains().forEach(m => {
+            byMonth[m.key] = { hours: m.hours, users: 0 };
+        });
+        const monthlyUsers = calculateMonthlyUsers();
+        monthlyUsers.forEach(m => {
+            if (!byMonth[m.key]) byMonth[m.key] = { hours: 0, users: 0 };
+            byMonth[m.key].users = m.activeUsers;
+        });
+
+        sessionStorage.setItem('kpi_snapshot_gains', JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            effectif: TOTAL_EFFECTIF,
+            byMonth,
+            totalUsersAllTime: monthlyUsers.length
+                ? monthlyUsers[monthlyUsers.length - 1].cumulativeUsers
+                : 0,
+        }));
+    } catch (e) {
+        // Un instantané manquant dégrade proprement la page macro (deux KPIs en
+        // « — ») : jamais de quoi interrompre le chargement du dashboard.
+        console.warn('Instantané des gains non publié.', e);
+    } finally {
+        dateFilter.startDate = savedDates.startDate;
+        dateFilter.endDate = savedDates.endDate;
+        if (filialeFilterEl) filialeFilterEl.value = savedOrg.filiale;
+        if (directionFilterEl) directionFilterEl.value = savedOrg.direction;
+        if (agencyFilterEl) agencyFilterEl.value = savedOrg.agency;
+    }
 }
 
 /**
