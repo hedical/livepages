@@ -598,28 +598,23 @@ async function processFile(file) {
         
         updateProgress(30, `Extraction du texte (${pdfDoc.numPages} pages)...`);
         
-        // Extraction du texte page par page avec identification des codes
-        const pageTexts = [];
-        const codesPerPage = [];
-        
+        // Détection structurelle des exigences : le code est le seul élément
+        // de la première colonne du tableau, on le repère par sa position.
+        const occurrences = [];
+
         for (let i = 1; i <= pdfDoc.numPages; i++) {
             const page = await pdfDoc.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            pageTexts.push(pageText);
-            
-            // Identifier les codes présents sur cette page
-            const codesOnThisPage = findCodesOnPage(pageText, i);
-            codesPerPage.push(codesOnThisPage);
-            
+            const viewport = page.getViewport({ scale: 1 });
+
+            occurrences.push(...detectCodesOnPage(textContent, viewport, i));
+
             updateProgress(30 + (i / pdfDoc.numPages) * 40, `Extraction page ${i}/${pdfDoc.numPages}...`);
         }
-        
-        updateProgress(70, 'Identification des codes d\'exigences...');
-        
-        // Recherche des codes d'exigences dans le texte complet
-        const fullText = pageTexts.join('\n');
-        const detectedCodes = findRequirementCodes(fullText, codesPerPage);
+
+        updateProgress(70, "Identification des codes d'exigences...");
+
+        const detectedCodes = buildCodeRanges(occurrences);
         
         updateProgress(85, 'Organisation par codes...');
         
@@ -644,150 +639,158 @@ async function processFile(file) {
     }
 }
 
-// Recherche des codes sur une page spécifique
-function findCodesOnPage(pageText, pageNumber) {
-    const codesFound = [];
-    
-    csvData.forEach(requirement => {
-        const code = requirement.Code;
-        if (!code || !code.trim()) return;
-        
-        // Échapper les caractères spéciaux
-        const escapedCode = code.replace(/\./g, '\\.');
-        
-        // Créer plusieurs patterns de recherche
-        const patterns = [
-            new RegExp('\\b' + escapedCode + '\\b', 'gi'),
-            new RegExp(escapedCode.replace(/\\\./g, '\\s*\\.\\s*'), 'gi'),
-            new RegExp('^' + escapedCode + '\\b', 'gim'),
-            new RegExp('\\n\\s*' + escapedCode + '\\s*\\n', 'gi')
-        ];
-        
-        // Tester si le code apparaît sur cette page
-        for (const regex of patterns) {
-            regex.lastIndex = 0;
-            if (regex.test(pageText)) {
-                codesFound.push({
-                    code: code,
-                    theme: requirement['Thème'] || 'Non classé',
-                    category: requirement['Catégorie'] || '',
-                    type: requirement['Type'] || '',
-                    page: pageNumber
-                });
-                break; // Un seul match par code suffit
-            }
-        }
+// Un code d'exigence complet, et rien d'autre, dans l'item de texte
+const CODE_PATTERN = /^[A-Z]{2,4}(?:\.\d{1,3}){1,4}$/;
+
+// Thème déduit du préfixe : les rapports contiennent des exigences absentes
+// du référentiel embarqué, on veut quand même les classer.
+const THEMES_PAR_PREFIXE = {
+    BC: 'Bâtiment connecté',
+    BDV: 'Biodiversité',
+    CC: 'Changement Climatique',
+    CDE: "Coût d'entretien et durabilité de l'enveloppe",
+    CG: 'Coût Global',
+    CH: 'Confort hygrothermique',
+    CHANTIER: 'Chantier à faibles nuisances',
+    CV: 'Confort visuel',
+    DCN: 'Déconstruction',
+    DEC: 'Déchets',
+    DG: 'Dispositions générales',
+    FL: 'Fonctionnalités des lieux',
+    MCC: 'Maîtrise des Consommations et des Charges',
+    PE: 'Performance énergétique',
+    QA: 'Qualité Acoustique',
+    QAI: "Qualité de l'air intérieur",
+    QE: "Qualité de l'eau",
+    QSI: "Qualité de services et d'information",
+    RCE: "Réduction des Consommations d'Eau",
+    REM: 'Ressources matières',
+    RES: 'Résilience vis-à-vis des risques',
+    SE: 'Sécurité et sûreté',
+    SMR: 'Système de Management Responsable',
+    SOL: 'Utilisation des sols',
+    ST: 'Services et Transports',
+    VRL: 'Valorisation des ressources locales'
+};
+
+// Détection des codes d'exigences sur une page, par position.
+// Dans un rapport CERQUAL, chaque ligne du tableau commence par le code de
+// l'exigence dans la colonne de gauche. On ne retient donc que les items de
+// texte qui sont exactement un code ET situés dans la première colonne : cela
+// évite d'attraper les références citées dans les descriptions (DTU 68.3,
+// NF EN 12828, BW31...) et surtout ne dépend plus d'une liste blanche.
+function detectCodesOnPage(textContent, viewport, pageNumber) {
+    const colonneMax = viewport.width * 0.15;
+    const found = [];
+
+    textContent.items.forEach(item => {
+        const str = (item.str || '').trim();
+        if (!CODE_PATTERN.test(str)) return;
+
+        const x = item.transform ? item.transform[4] : 0;
+        const y = item.transform ? item.transform[5] : 0;
+        if (x > colonneMax) return;
+
+        found.push({ code: str, page: pageNumber, y: y });
     });
-    
-    return codesFound;
+
+    // Ordre de lecture : du haut vers le bas de la page
+    found.sort((a, b) => b.y - a.y);
+
+    return found;
 }
 
-// Recherche des codes d'exigences dans le texte
-function findRequirementCodes(text, codesPerPage) {
-    const detectedCodes = [];
-    const codePositions = new Map();
-    
-    // Normalisation du texte
-    const normalizedText = text.replace(/\s+/g, ' ');
-    
-    // Pour chaque code dans le CSV, vérifier s'il est présent dans le texte
-    csvData.forEach(requirement => {
-        const code = requirement.Code;
-        if (!code || !code.trim()) return;
-        
-        // Échapper les caractères spéciaux
-        const escapedCode = code.replace(/\./g, '\\.');
-        
-        // Créer plusieurs patterns de recherche
-        const patterns = [
-            new RegExp('\\b' + escapedCode + '\\b', 'gi'),
-            new RegExp(escapedCode.replace(/\\\./g, '\\s*\\.\\s*'), 'gi'),
-            new RegExp('^' + escapedCode + '\\b', 'gim'),
-            new RegExp('\\n\\s*' + escapedCode + '\\s*\\n', 'gi')
-        ];
-        
-        // Tester chaque pattern
-        for (const regex of patterns) {
-            let match;
-            regex.lastIndex = 0;
-            
-            while ((match = regex.exec(normalizedText)) !== null) {
-                const position = match.index;
-                const key = `${code}-${Math.floor(position / 100)}`;
-                
-                if (!codePositions.has(key)) {
-                    // Trouver la première page où ce code apparaît
-                    let firstPage = null;
-                    codesPerPage.forEach((codesOnPage, pageIndex) => {
-                        if (codesOnPage.some(c => c.code === code)) {
-                            if (firstPage === null) {
-                                firstPage = pageIndex + 1;
-                            }
-                        }
-                    });
-                    
-                    codePositions.set(key, {
-                        code: code,
-                        theme: requirement['Thème'] || 'Non classé',
-                        category: requirement['Catégorie'] || '',
-                        type: requirement['Type'] || '',
-                        position: position,
-                        firstPage: firstPage || 1
-                    });
-                }
-            }
+// Nombre de segments communs entre deux codes (QAI.2.4.13 / QAI.2.4.11 -> 3)
+function longueurPrefixeCommun(a, b) {
+    const sa = a.split('.');
+    const sb = b.split('.');
+    let n = 0;
+    while (n < sa.length && n < sb.length && sa[n] === sb[n]) n++;
+    return n;
+}
+
+// Thème / catégorie / type d'une exigence : match exact dans le référentiel
+// embarqué, sinon repli sur l'exigence la plus proche de la même famille.
+function enrichirCode(code) {
+    const exact = csvData.find(row => row.Code && row.Code.trim() === code);
+    if (exact) {
+        return {
+            theme: exact['Thème'] || 'Non classé',
+            category: exact['Catégorie'] || '',
+            type: exact['Type'] || '',
+            connu: true
+        };
+    }
+
+    // On n'emprunte la catégorie qu'à une exigence sœur (même sous-thème,
+    // seul le dernier segment diffère) : au-delà le libellé serait faux.
+    const niveauSoeur = code.split('.').length - 1;
+    let soeur = null;
+    csvData.forEach(row => {
+        if (!row.Code || !row.Code.trim()) return;
+        if (longueurPrefixeCommun(row.Code.trim(), code) === niveauSoeur) {
+            soeur = soeur || row;
         }
     });
-    
-    // Convertir en tableau et trier par position
-    const positions = Array.from(codePositions.values());
-    positions.sort((a, b) => a.position - b.position);
-    
-    // Suppression des doublons strictement consécutifs
+
+    const prefixe = code.split('.')[0];
+
+    return {
+        theme: THEMES_PAR_PREFIXE[prefixe] || 'Non classé',
+        category: soeur ? (soeur['Catégorie'] || '') : '',
+        type: '',
+        connu: false
+    };
+}
+
+// Construction des plages de pages : une exigence s'étend de sa page jusqu'à
+// la page qui précède l'exigence suivante.
+function buildCodeRanges(occurrences) {
+    const vus = new Set();
     const uniqueCodes = [];
-    let lastCode = null;
-    
-    positions.forEach(item => {
-        if (item.code !== lastCode) {
-            uniqueCodes.push(item);
-            lastCode = item.code;
-        }
+
+    occurrences.forEach(occ => {
+        if (vus.has(occ.code)) return;
+        vus.add(occ.code);
+
+        const meta = enrichirCode(occ.code);
+        uniqueCodes.push({
+            code: occ.code,
+            theme: meta.theme,
+            category: meta.category,
+            type: meta.type,
+            connu: meta.connu,
+            firstPage: occ.page
+        });
     });
-    
-    // Calculer les plages de pages pour chaque code
-    // Chaque code s'étend de sa première page jusqu'à la page avant le code suivant
+
     for (let i = 0; i < uniqueCodes.length; i++) {
-        const currentCode = uniqueCodes[i];
+        const startPage = uniqueCodes[i].firstPage;
         const nextCode = uniqueCodes[i + 1];
-        
-        const startPage = currentCode.firstPage;
+
         let endPage;
-        
         if (nextCode) {
-            // Si le prochain code est sur la même page, on ne prend que cette page
-            if (nextCode.firstPage === startPage) {
-                endPage = startPage;
-            } else {
-                // Sinon, on prend toutes les pages jusqu'à la page avant le prochain code
-                endPage = nextCode.firstPage - 1;
-            }
+            endPage = nextCode.firstPage === startPage ? startPage : nextCode.firstPage - 1;
         } else {
-            // Dernier code : jusqu'à la fin du document
             endPage = pdfDoc.numPages;
         }
-        
-        // Générer la liste de toutes les pages pour ce code
-        currentCode.pages = [];
+
+        uniqueCodes[i].pages = [];
         for (let page = startPage; page <= endPage; page++) {
-            currentCode.pages.push(page);
+            uniqueCodes[i].pages.push(page);
         }
     }
-    
+
+    const inconnus = uniqueCodes.filter(c => !c.connu).map(c => c.code);
     console.log(`✅ ${uniqueCodes.length} codes d'exigences détectés`);
-    console.log('Premiers codes avec pages:', uniqueCodes.slice(0, 10).map(c => ({ code: c.code, pages: c.pages })));
-    
+    if (inconnus.length) {
+        console.log(`ℹ️ ${inconnus.length} absents du référentiel embarqué (classés par famille):`, inconnus);
+    }
+    console.log('Codes avec pages:', uniqueCodes.map(c => ({ code: c.code, pages: c.pages })));
+
     return uniqueCodes;
 }
+
 
 // Organisation des codes individuellement
 function organizeByCode(detectedCodes) {
