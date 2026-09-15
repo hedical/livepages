@@ -4,6 +4,10 @@
 const DATA_URLS = {
     'chat-btp': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpconsultants_ct.json',
     'expert-btp': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json',
+    'chat-sps': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btp_sps.json',
+    'expert-sps': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btp_sps.json',
+    'chat-diag': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_btpdiagnostics.json',
+    'expert-diag': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpdiagnostics.json',
     'chat-citae': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/chat_citae.json',
     'expert-citae': 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_citae.json'
 };
@@ -20,6 +24,10 @@ function ensureDataUrls() {
             if (!urls) return null;
             if (urls.CHAT_BTP_URL)         DATA_URLS['chat-btp']    = urls.CHAT_BTP_URL;
             if (urls.EXPERT_BTP_URL)       DATA_URLS['expert-btp']  = urls.EXPERT_BTP_URL;
+            if (urls.CHAT_BTP_SPS_URL)     DATA_URLS['chat-sps']    = urls.CHAT_BTP_SPS_URL;
+            if (urls.EXPERT_BTP_SPS_URL)   DATA_URLS['expert-sps']  = urls.EXPERT_BTP_SPS_URL;
+            if (urls.CHAT_BTPDIAG_URL)     DATA_URLS['chat-diag']   = urls.CHAT_BTPDIAG_URL;
+            if (urls.EXPERT_BTPDIAG_URL)   DATA_URLS['expert-diag'] = urls.EXPERT_BTPDIAG_URL;
             if (urls.CHAT_CITAE_URL)       DATA_URLS['chat-citae']  = urls.CHAT_CITAE_URL;
             if (urls.EXPERT_CITAE_URL)     DATA_URLS['expert-citae']= urls.EXPERT_CITAE_URL;
             if (urls.POPULATION_CIBLE_URL) POPULATION_URL           = urls.POPULATION_CIBLE_URL;
@@ -34,7 +42,12 @@ let allRecords = [];
 let userGroups = []; // Grouped by user: [{email, sessions: [], stats: {}}]
 let filteredUserGroups = [];
 let currentIndex = 0;
-let currentDataSource = 'chat-btp';
+// Source initiale : ?source=<clé> quand on arrive depuis une brique, sinon Chat BTP Consultants.
+function initialDataSource() {
+    const asked = new URLSearchParams(window.location.search).get('source');
+    return (asked && DATA_URLS[asked]) ? asked : 'chat-btp';
+}
+let currentDataSource = initialDataSource();
 let allKnownAgencies = []; // toutes les agences connues (population_cible.csv) — chargée une seule fois
 
 // Filters
@@ -1268,5 +1281,6 @@ if (messagesModal) {
 // ==================== INITIALIZATION ====================
 
 // Initialize
+dataSourceEl.value = currentDataSource;
 loadData();
 
