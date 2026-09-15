@@ -2636,7 +2636,7 @@ async function loadData() {
                     return {
                         id: item.id,
                         title: item.title || '',
-                        email: item.email || '',
+                        email: KPI.chatEmail(item),
                         createdAt: item.createdAt || '',
                         updatedAt: item.updatedAt || '',
                         messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2683,7 +2683,7 @@ async function loadData() {
                     return {
                         id: item.id,
                         title: item.title || '',
-                        email: item.email || '',
+                        email: KPI.chatEmail(item),
                         createdAt: item.createdAt || '',
                         updatedAt: item.updatedAt || '',
                         messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2725,7 +2725,7 @@ async function loadData() {
                     return {
                         id: item.id,
                         title: item.title || '',
-                        email: item.email || '',
+                        email: KPI.chatEmail(item),
                         createdAt: item.createdAt || '',
                         updatedAt: item.updatedAt || '',
                         messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2760,7 +2760,7 @@ async function loadData() {
                     return {
                         id: item.id,
                         title: item.title || '',
-                        email: item.email || '',
+                        email: KPI.chatEmail(item),
                         createdAt: item.createdAt || '',
                         updatedAt: item.updatedAt || '',
                         messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2795,7 +2795,7 @@ async function loadData() {
                         return {
                             id: item.id,
                             title: item.title || '',
-                            email: item.email || '',
+                            email: KPI.chatEmail(item),
                             createdAt: item.createdAt || '',
                             updatedAt: item.updatedAt || '',
                             messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2829,7 +2829,7 @@ async function loadData() {
                         return {
                             id: item.id,
                             title: item.title || '',
-                            email: item.email || '',
+                            email: KPI.chatEmail(item),
                             createdAt: item.createdAt || '',
                             updatedAt: item.updatedAt || '',
                             messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2861,7 +2861,7 @@ async function loadData() {
                     return {
                         id: item.id,
                         title: item.title || '',
-                        email: item.email || '',
+                        email: KPI.chatEmail(item),
                         createdAt: item.createdAt || '',
                         updatedAt: item.updatedAt || '',
                         messagesLength: item.messagesLength || item._count?.messages || 0,
@@ -2894,7 +2894,7 @@ async function loadData() {
                     return {
                         id: item.id,
                         title: item.title || '',
-                        email: item.email || '',
+                        email: KPI.chatEmail(item),
                         createdAt: item.createdAt || '',
                         updatedAt: item.updatedAt || '',
                         messagesLength: item.messagesLength || item._count?.messages || 0,

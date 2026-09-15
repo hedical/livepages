@@ -195,3 +195,34 @@ test('isAfterAOStart — sans date valide → conservé (conservateur)', () => {
     assert.equal(KPI.isAfterAOStart(null), true);
     assert.equal(KPI.isAfterAOStart('n/a'), true);
 });
+
+// ===================== chatEmail =====================
+
+test('chatEmail — email a la racine (ancien format S+)', () => {
+    assert.equal(KPI.chatEmail({ email: 'jean.dupont@btp-consultants.fr' }), 'jean.dupont@btp-consultants.fr');
+});
+
+test('chatEmail — repli sur metadata.email (app SPS « C+ »)', () => {
+    const session = { email: null, metadata: { email: 'a.b@btp-consultants.fr', source_id: 'c+' } };
+    assert.equal(KPI.chatEmail(session), 'a.b@btp-consultants.fr');
+});
+
+test('chatEmail — repli sur metadata.userEmail', () => {
+    assert.equal(KPI.chatEmail({ email: '', metadata: { userEmail: 'c.d@citae.fr' } }), 'c.d@citae.fr');
+});
+
+test('chatEmail — la racine gagne sur metadata', () => {
+    const session = { email: 'racine@x.fr', metadata: { email: 'meta@x.fr' } };
+    assert.equal(KPI.chatEmail(session), 'racine@x.fr');
+});
+
+test('chatEmail — session vraiment anonyme → chaine vide', () => {
+    assert.equal(KPI.chatEmail({ email: null, metadata: {} }), '');
+    assert.equal(KPI.chatEmail({}), '');
+    assert.equal(KPI.chatEmail(null), '');
+});
+
+test('chatEmail — trim et valeur non-chaine', () => {
+    assert.equal(KPI.chatEmail({ metadata: { email: '  e.f@btp-consultants.fr  ' } }), 'e.f@btp-consultants.fr');
+    assert.equal(KPI.chatEmail({ email: 42 }), '');
+});

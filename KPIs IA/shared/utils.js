@@ -246,6 +246,21 @@ const KPI = (function () {
         return !d || d >= AO_MODULE_START_DATE;
     }
 
+    // ===================== CHATS =====================
+
+    // Email du propriétaire d'une session de chat.
+    // Les applications récentes (SPS « C+ », organisation 1edd6b43) ne
+    // remplissent plus `email` à la racine : l'adresse ne vit plus que dans
+    // metadata. Sans ce repli la session est orpheline — elle compte dans les
+    // sessions mais disparaît de tout regroupement par utilisateur, ce qui
+    // affiche « 0 utilisateur » sur une brique pourtant pleine de données.
+    function chatEmail(item) {
+        if (!item) return '';
+        const meta = item.metadata || {};
+        const email = item.email || meta.email || meta.userEmail || '';
+        return typeof email === 'string' ? email.trim() : '';
+    }
+
     // ===================== AUTH + URLS SIGNÉES =====================
 
     const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
@@ -314,6 +329,8 @@ const KPI = (function () {
         isDescriptifItem,
         isTruthyBool,
         isAfterAOStart,
+        // chats
+        chatEmail,
         // auth + urls signées
         WEBHOOK_URL,
         fetchDataUrls,
