@@ -60,6 +60,8 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 - `index.html` : Structure HTML du tableau de bord
 - `app.js` : Logique JavaScript pour le traitement des données et l'affichage
 - `pilotage-ia.html` / `pilotage-ia.js` : Page « Pilotage économique » (coût, budget, retour)
+- `autocontact-sps.html` / `autocontact-sps.js` : Page « Autocontact SPS » (contacts créés dans BTP Force)
+- `tools/csv-to-autocontact-sps.js` : Convertit un export CSV du backoffice BTP Force en `autocontact_sps.json` (fichier Supabase de la brique SPS)
 - `shared/utils.js` : Module partagé (parsing CSV/JSON, dates, prédicats métier, constantes)
 - `shared/costs.js` : Module de calcul économique (registre, relevés OpenRouter, KPIs, projection)
 - `tests/utils.test.js`, `tests/costs.test.js` : Tests des modules partagés
@@ -357,6 +359,67 @@ Quand aucun coût n'est relevé sur la période, tous les ratios dérivés affic
 (l'IA ne coûte rien) alors que l'information réelle est une absence de donnée.
 Même logique pour le bandeau de complétude, qui énonce en permanence ce que la
 période couvre réellement et ce qui manque.
+
+### Autocontact SPS (`autocontact-sps.html`)
+
+Brique SPS alimentée par le backoffice **BTP Force** (`admin.btp-force.cloud/contacts`),
+qui est l'application des SPS : **tout ce qui sort de cette plateforme est SPS**, y
+compris les lignes en `@btp-consultants.fr` dont l'agence ou le service ressemble à du
+CT. Ici la source EST le marqueur de BU — contrairement aux briques chat/expert, aucun
+filtre n'est à appliquer sur les lignes.
+
+**Récupération de la donnée.** Le bouton « Exporter en CSV » du backoffice ne tape aucun
+endpoint CSV : il construit le fichier dans le navigateur à partir de l'API AppSync.
+
+| | |
+|---|---|
+| Endpoint | `https://w6fjlldi3nawlgb4i3al37hrqi.appsync-api.eu-west-1.amazonaws.com/graphql` |
+| Opération | `listContactTrackings(from, to, limit, nextToken)` — pagination **obligatoire** par `nextToken` (partition mensuelle), `limit: 1000` |
+| Auth | header `authorization: <IdToken Cognito>` (pas d'API key) — User Pool `eu-west-1_b0AeJKfau`, app client `1qh8cppe612crcn8p4g8hi9vqe` |
+| Dates | bornes en UTC depuis l'heure de Paris (`du` 00:00 locale → `T22:00:00.000Z` la veille) |
+
+**Alimentation : Supabase, comme les autres briques.** Le fichier `autocontact_sps.json`
+vit dans le bucket `DataFromMetabase`, est signé par le webhook `passwordROI` sous le nom
+`AUTOCONTACT_SPS_URL` (12 h) et lu par la page — aucune URL de bucket en dur. La seule
+différence avec les autres briques : **le fichier est déposé à la main**, parce que
+l'extraction n'est pas automatisable sans compte de service Cognito. Le bouton
+« Rafraîchir les données » du dashboard ne le régénère donc pas.
+
+Cycle de mise à jour, tant que l'API n'est pas ouverte :
+
+1. exporter le CSV depuis `admin.btp-force.cloud/contacts` (choix des dates) ;
+2. `node tools/csv-to-autocontact-sps.js "<export.csv>"` ;
+3. remplacer `autocontact_sps.json` dans le bucket `DataFromMetabase`.
+
+Le script de conversion produit **exactement la forme des items GraphQL** `listContactTrackings` :
+le jour où l'accès API est ouvert, n8n produit le même fichier, et ni la page ni le webhook
+ne bougent. Le parser de la page accepte de toute façon les deux formats (CSV du backoffice
+séparé par `;` et JSON).
+
+> **Le bucket est public.** Le script de conversion ne recopie donc PAS les colonnes
+> nominatives des contacts externes (nom, prénom, email, téléphone, fonction, qualité, id) :
+> la page ne compte que des volumes, elle n'en a pas besoin. Les exports bruts
+> (`btpforce_contacts*.csv`) et le JSON converti restent hors du repo (`.gitignore` +
+> `prepare-upload.ps1`), comme toutes les données du projet.
+
+**Comptage.** `proposedCount` est porté par le **livrable**, pas par la ligne de contact :
+le sommer ligne à ligne le multiplierait par le nombre de contacts créés. Il est donc
+dédoublonné par `deliverableId` (même réflexe que la brique Géotech). Le gain en temps
+reprend l'hypothèse de l'Autocontact CT : 90 s par contact créé via l'IA.
+
+
+**Intégration au dashboard.** La tuile « Autocontact / BTP Consultants SPS » d'`index.html`
+pointe vers la page détail ; `app.js` charge `AUTOCONTACT_SPS_URL` (source optionnelle : son
+absence n'empêche pas le chargement) et marque chaque ligne `bu: 'SPS'`, ce qui suffit à
+`getFilteredData` pour l'exclure de la filiale « BTP Consultants » et la rattacher à
+« BTP Consultants SPS ». La brique alimente : le compteur d'utilisations (une affaire touchée
+par l'IA = une utilisation, comme l'Autocontact CT), les utilisateurs uniques du Groupe
+(seuls ceux qui ont créé un contact **via l'IA**), le gain total (`SECONDS_PER_CONTACT`, même
+hypothèse que l'Autocontact CT), le poste « Auto SPS » du détail de gain et du graphe mensuel
+empilé, les jauges d'objectifs, l'instantané `pilotage-ia` et la modale « Utilisateurs actifs »
+(feature « Auto-contact (SPS) »). Elle n'alimente PAS les filtres direction/agence ni le
+tableau d'adoption par agence : les agences SPS (« Agence Nantes ») ne portent pas le même
+code que les agences CT (`NACT`), comme pour les briques chat/expert SPS.
 
 ### Tests
 

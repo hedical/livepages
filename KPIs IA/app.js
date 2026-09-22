@@ -4,6 +4,9 @@ const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
 // URLs will be fetched from webhook after authentication
 let DESCRIPTIF_URL = '';
 let AUTOCONTACT_URL = '';
+// Autocontact SPS : autocontact_sps.json, deposé à la main dans le bucket tant que
+// l'accès API au backoffice BTP Force n'est pas ouvert (cf. README).
+let AUTOCONTACT_SPS_URL = '';
 let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
@@ -71,6 +74,7 @@ let expertBTPDiagData = [];
 let chatBTPDiagData = [];
 let expertBtpSpsData = []; // BTP Consultants SPS — BU distincte, emails @btp-consultants.fr
 let chatBtpSpsData = [];
+let autocontactSpsData = []; // Autocontact SPS — source = backoffice BTP Force (app des SPS)
 let nfHabitatData = [];
 let geotechData = [];
 let acoustiqueData = [];
@@ -1605,6 +1609,37 @@ function processAutocontactData(data) {
 }
 
 /**
+ * Process Autocontact SPS data.
+ * La source (backoffice BTP Force) EST le marqueur de BU : aucune ligne n'est à
+ * exclure, contrairement à l'Autocontact CT où l'on retire les affaires YIELD.
+ */
+function processAutocontactSpsData(data) {
+    const filtered = getFilteredData(data);
+    const aiFiltered = filtered.filter(item => item.fromAI);
+
+    // Utilisateurs : ceux qui ont créé au moins un contact VIA L'IA.
+    const uniqueUsers = new Set();
+    aiFiltered.forEach(item => {
+        if (item.email && item.email.trim() !== '') uniqueUsers.add(item.email);
+    });
+
+    // "Utilisation" = une affaire touchée par l'IA, comme uniqueOperations côté CT.
+    const uniqueOperations = new Set();
+    aiFiltered.forEach(item => {
+        if (item.contractNumber && item.contractNumber.trim() !== '') {
+            uniqueOperations.add(item.contractNumber);
+        }
+    });
+
+    return {
+        totalContacts: filtered.length,
+        aiContacts: aiFiltered.length,
+        uniqueUsers: uniqueUsers.size,
+        uniqueOperations: uniqueOperations.size
+    };
+}
+
+/**
  * Process comparateur data
  */
 function processComparateurData(data) {
@@ -1690,7 +1725,7 @@ function processAcoustiqueData(data) {
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses, chatBtpSpsMessages, expertBtpSpsMessages) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses, chatBtpSpsMessages, expertBtpSpsMessages, autocontactSpsContacts) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
@@ -1735,6 +1770,11 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainMinutesExpertBtpSps = (expertBtpSpsMessages || 0) * MINUTES_PER_MESSAGE_EXPERT;
     const timeGainHoursExpertBtpSps = timeGainMinutesExpertBtpSps / 60;
 
+    // Gain en temps pour Autocontact SPS (secondes → heures) : même hypothèse que
+    // l'Autocontact CT, c'est le même geste métier dans une autre application.
+    const timeGainSecondsAutocontactSps = (autocontactSpsContacts || 0) * SECONDS_PER_CONTACT;
+    const timeGainHoursAutocontactSps = timeGainSecondsAutocontactSps / 3600;
+
     // Gain en temps pour NF Habitat (heures par point)
     const timeGainHoursNFHabitat = (nfHabitatPoints || 0) * HOURS_PER_POINT_NF;
 
@@ -1746,7 +1786,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur
         + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae
         + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursChatBtpSps + timeGainHoursExpertBtpSps
-        + timeGainHoursNFHabitat + timeGainHoursAO;
+        + timeGainHoursAutocontactSps + timeGainHoursNFHabitat + timeGainHoursAO;
 
     // Gain en % volume d'affaire (BTP Consultants scope: 44M€)
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
@@ -1767,6 +1807,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
         timeGainHoursExpertBTPDiag,
         timeGainHoursChatBtpSps,
         timeGainHoursExpertBtpSps,
+        timeGainHoursAutocontactSps,
         timeGainHoursNFHabitat,
         timeGainHoursAO,
         percentGain,
@@ -1995,12 +2036,13 @@ function updateKPIs() {
     const chatBTPDiagStats = processChatBTPDiagData(chatBTPDiagData);
     const expertBtpSpsStats = processExpertBtpSpsData(expertBtpSpsData);
     const chatBtpSpsStats = processChatBtpSpsData(chatBtpSpsData);
+    const autocontactSpsStats = processAutocontactSpsData(autocontactSpsData);
     const nfHabitatStats = processNFHabitatData(nfHabitatData);
 
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
     // For geotech, use totalOperations (distinct DeliverableId) — one operation = 1 notice + 1 report, so we dedup.
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + nfHabitatStats.totalControls + geotechStats.totalOperations + acoustiqueStats.totalOperations;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + autocontactSpsStats.uniqueOperations + nfHabitatStats.totalControls + geotechStats.totalOperations + acoustiqueStats.totalOperations;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => isDescriptifRow(item)).forEach(item => {
@@ -2073,6 +2115,11 @@ function updateKPIs() {
     getFilteredData(chatBtpSpsData).forEach(item => {
         if (item.email && item.email.trim() !== '') allUsers.add(item.email);
     });
+    // Autocontact SPS : seuls les utilisateurs de l'IA comptent (la saisie manuelle
+    // de contacts n'est pas un usage IA).
+    getFilteredData(autocontactSpsData).forEach(item => {
+        if (item.fromAI && item.email && item.email.trim() !== '') allUsers.add(item.email);
+    });
 
     // NF Habitat users
     getFilteredData(nfHabitatData).filter(isNFHabitatItem).forEach(item => {
@@ -2105,6 +2152,16 @@ function updateKPIs() {
     autocontactTotalContactsEl.textContent = formatNumber(autocontactStats.totalContacts);
     autocontactUsersEl.textContent = autocontactStats.uniqueUsers;
     
+    // Autocontact SPS stats
+    const autocontactSpsCountEl = document.getElementById('autocontact-sps-count');
+    const autocontactSpsTotalEl = document.getElementById('autocontact-sps-total-contacts');
+    const autocontactSpsAffairsEl = document.getElementById('autocontact-sps-affairs');
+    const autocontactSpsUsersEl = document.getElementById('autocontact-sps-users');
+    if (autocontactSpsCountEl) autocontactSpsCountEl.textContent = formatNumber(autocontactSpsStats.aiContacts);
+    if (autocontactSpsTotalEl) autocontactSpsTotalEl.textContent = formatNumber(autocontactSpsStats.totalContacts);
+    if (autocontactSpsAffairsEl) autocontactSpsAffairsEl.textContent = formatNumber(autocontactSpsStats.uniqueOperations);
+    if (autocontactSpsUsersEl) autocontactSpsUsersEl.textContent = formatNumber(autocontactSpsStats.uniqueUsers);
+
     // Comparateur stats
     comparateurCountEl.textContent = formatNumber(comparateurStats.totalComparisons);
     comparateurOpsEl.textContent = formatNumber(comparateurStats.uniqueOperations);
@@ -2243,6 +2300,7 @@ function updateKPIs() {
         ['Expert Diag',  gains.timeGainHoursExpertBTPDiag],
         ['Chat SPS',     gains.timeGainHoursChatBtpSps],
         ['Expert SPS',   gains.timeGainHoursExpertBtpSps],
+        ['Auto SPS',     gains.timeGainHoursAutocontactSps],
         ['NF Habitat',   gains.timeGainHoursNFHabitat],
         ['Analyse AO',   gains.timeGainHoursAO],
     ].map(([label, h]) => `${label}: ${fmt1(h)}h`).join(' + ');
@@ -2325,6 +2383,8 @@ async function authenticateWithPassword(password) {
             if (geotechMatch) GEOTECH_URL = geotechMatch[1];
             if (aoMatch) AO_URL = aoMatch[1];
             if (acoustiqueMatch) ACOUSTIQUE_URL = acoustiqueMatch[1];
+            const autocontactSpsMatch = urlRegex('AUTOCONTACT_SPS_URL');
+            if (autocontactSpsMatch) AUTOCONTACT_SPS_URL = autocontactSpsMatch[1];
 
             // URLs signées chat/expert/population (remplacent les fallbacks publics)
             const expertBtpMatch     = urlRegex('EXPERT_BTP_URL');
@@ -2914,6 +2974,39 @@ async function loadData() {
             console.warn('Error loading Chat BTP Consultants SPS data:', e);
         }
 
+        // Load Autocontact SPS data — backoffice BTP Force, application des SPS :
+        // toutes les lignes sont SPS (bu:'SPS'), aucun filtre d'email à appliquer.
+        if (AUTOCONTACT_SPS_URL) {
+            console.log('Loading Autocontact SPS data...');
+            try {
+                const autocontactSpsResponse = await fetch(AUTOCONTACT_SPS_URL);
+                if (autocontactSpsResponse.ok) {
+                    const json = await autocontactSpsResponse.json();
+                    const items = Array.isArray(json) ? json
+                        : (Array.isArray(json?.items) ? json.items : []);
+                    autocontactSpsData = items.map(item => ({
+                        email: (item.userEmail || '').toLowerCase().trim(),
+                        createdAt: item.createdAt || '',
+                        fromAI: (item.sourceType || '').toUpperCase() === 'IA',
+                        // contractNumber : même nom que côté Autocontact CT, pour que
+                        // "une utilisation" veuille dire la même chose dans les deux briques.
+                        contractNumber: item.affairNumber || '',
+                        agency: item.agencyName || '',
+                        direction: item.direction || '',
+                        deliverableId: item.deliverableId || '',
+                        bu: 'SPS'
+                    }));
+                    console.log('Loaded', autocontactSpsData.length, 'Autocontact SPS records');
+                } else {
+                    console.warn('Failed to load Autocontact SPS data:', autocontactSpsResponse.status);
+                }
+            } catch (e) {
+                console.warn('Error loading Autocontact SPS data:', e);
+            }
+        } else {
+            console.warn('AUTOCONTACT_SPS_URL not set — skipping Autocontact SPS data');
+        }
+
         // Load NF Habitat data
         if (NF_HABITAT_URL) {
             console.log('Loading NF Habitat data...');
@@ -3004,7 +3097,8 @@ const featureCards = [
     { id: 'chat-projet-btpdiag', filiale: 'BTP Diagnostics', element: null },
     { id: 'expert-tech-btpdiag', filiale: 'BTP Diagnostics', element: null },
     { id: 'chat-projet-sps', filiale: 'BTP Consultants SPS', element: null },
-    { id: 'expert-tech-sps', filiale: 'BTP Consultants SPS', element: null }
+    { id: 'expert-tech-sps', filiale: 'BTP Consultants SPS', element: null },
+    { id: 'autocontact-sps', filiale: 'BTP Consultants SPS', element: null }
 ];
 
 /**
@@ -3133,6 +3227,7 @@ function collectActiveUsers() {
         chatDiag:     'Chat (Diag)',
         expertSps:    'Expert (SPS)',
         chatSps:      'Chat (SPS)',
+        autocontactSps: 'Auto-contact (SPS)',
     };
 
     const upsert = (email, filiale, featureKey, dateString) => {
@@ -3210,6 +3305,8 @@ function collectActiveUsers() {
         .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'expertSps', item.createdAt));
     chatBtpSpsData.filter(item => item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
         .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'chatSps', item.createdAt));
+    autocontactSpsData.filter(item => item.fromAI && item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
+        .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'autocontactSps', item.createdAt));
 
     return Array.from(usersMap.values())
         .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
@@ -3400,6 +3497,11 @@ function calculateMonthlyUsers() {
     // Expert / Chat BTP Consultants SPS — données isolées par source, pas de filtre domaine
     getFilteredData(expertBtpSpsData).forEach(item => addUser(item.createdAt, item.email));
     getFilteredData(chatBtpSpsData).forEach(item => addUser(item.createdAt, item.email));
+
+    // Autocontact SPS — idem, et seule la création VIA L'IA compte comme usage
+    getFilteredData(autocontactSpsData)
+        .filter(item => item.fromAI)
+        .forEach(item => addUser(item.createdAt, item.email));
 
     const sortedMonths = Object.keys(monthlyUserSets).sort();
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -3766,6 +3868,7 @@ function calculateMonthlyGains() {
                 expertBTPDiagMessages: 0,
                 chatBtpSpsMessages: 0,
                 expertBtpSpsMessages: 0,
+                autocontactSpsContacts: 0,
                 nfHabitatPoints: 0,
                 aoAnalyses: 0,
             };
@@ -3884,6 +3987,17 @@ function calculateMonthlyGains() {
         monthlyData[key].expertBtpSpsMessages += (item.messagesLength || 0);
     });
 
+    // ── Autocontact SPS ──────────────────────────────────────────────────────
+    // Mirror processAutocontactSpsData : un contact créé via l'IA = une ligne.
+    getFilteredData(autocontactSpsData)
+        .filter(item => item.fromAI)
+        .forEach(item => {
+            const key = getMonthKey(item.createdAt);
+            if (!key) return;
+            ensureMonth(key);
+            monthlyData[key].autocontactSpsContacts += 1;
+        });
+
     // ── NF Habitat ───────────────────────────────────────────────────────────────
     getFilteredData(nfHabitatData).filter(isNFHabitatItem).forEach(item => {
         const key = getMonthKey(item.createdAt);
@@ -3923,7 +4037,8 @@ function calculateMonthlyGains() {
             d.nfHabitatPoints,
             d.aoAnalyses,
             d.chatBtpSpsMessages,
-            d.expertBtpSpsMessages
+            d.expertBtpSpsMessages,
+            d.autocontactSpsContacts
         );
         const [year, month] = key.split('-');
         return {
@@ -3942,6 +4057,7 @@ function calculateMonthlyGains() {
             hoursExpertBTPDiag: gains.timeGainHoursExpertBTPDiag,
             hoursChatBtpSps:    gains.timeGainHoursChatBtpSps,
             hoursExpertBtpSps:  gains.timeGainHoursExpertBtpSps,
+            hoursAutocontactSps: gains.timeGainHoursAutocontactSps,
             hoursNFHabitat:     gains.timeGainHoursNFHabitat,
             hoursAO:            gains.timeGainHoursAO,
         };
@@ -3974,6 +4090,7 @@ function calculateWindowedGains() {
         timeGainHoursChatCitae: 0, timeGainHoursExpertCitae: 0,
         timeGainHoursChatBTPDiag: 0, timeGainHoursExpertBTPDiag: 0,
         timeGainHoursChatBtpSps: 0, timeGainHoursExpertBtpSps: 0,
+        timeGainHoursAutocontactSps: 0,
         timeGainHoursNFHabitat: 0, timeGainHoursAO: 0,
     };
     monthly.forEach(m => {
@@ -3992,6 +4109,7 @@ function calculateWindowedGains() {
         acc.timeGainHoursExpertBTPDiag += m.hoursExpertBTPDiag;
         acc.timeGainHoursChatBtpSps  += m.hoursChatBtpSps;
         acc.timeGainHoursExpertBtpSps += m.hoursExpertBtpSps;
+        acc.timeGainHoursAutocontactSps += m.hoursAutocontactSps;
         acc.timeGainHoursNFHabitat   += m.hoursNFHabitat;
         acc.timeGainHoursAO          += m.hoursAO;
     });
@@ -4231,6 +4349,7 @@ function buildGainChart() {
         { key: 'hoursExpertBTPDiag', label: 'Expert BTP Diag',     color: 'rgba(251, 146, 60, 0.85)'  },
         { key: 'hoursChatBtpSps',    label: 'Chat SPS',            color: 'rgba(14, 165, 233, 0.85)'  },
         { key: 'hoursExpertBtpSps',  label: 'Expert SPS',          color: 'rgba(2, 132, 199, 0.85)'   },
+        { key: 'hoursAutocontactSps', label: 'Autocontact SPS',    color: 'rgba(103, 232, 249, 0.85)' },
         { key: 'hoursNFHabitat',     label: 'NF Habitat',          color: 'rgba(52, 211, 153, 0.85)'  },
         { key: 'hoursAO',            label: 'Analyse AO',          color: 'rgba(217, 70, 239, 0.85)'  },
     ];

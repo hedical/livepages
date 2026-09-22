@@ -56,7 +56,9 @@ const KPI = (function () {
 
     // Parse un CSV complet : gère les retours à la ligne DANS les champs
     // entre guillemets, CRLF/LF/CR, échappement "". Ignore les lignes vides.
-    function parseFullCSV(csvString) {
+    // `delimiter` par défaut ',' — l'export backoffice BTP Force utilise ';'.
+    function parseFullCSV(csvString, delimiter) {
+        const sep = delimiter || ',';
         const rows = [];
         let currentRow = [];
         let currentField = '';
@@ -69,7 +71,7 @@ const KPI = (function () {
             if (char === '"') {
                 if (inQuotes && next === '"') { currentField += '"'; i++; }
                 else { inQuotes = !inQuotes; }
-            } else if (char === ',' && !inQuotes) {
+            } else if (char === sep && !inQuotes) {
                 currentRow.push(currentField.trim());
                 currentField = '';
             } else if (char === '\r' && next === '\n' && !inQuotes) {
@@ -135,6 +137,35 @@ const KPI = (function () {
         }
 
         return isNaN(date.getTime()) ? null : date;
+    }
+
+    // Parse une date "JJ/MM/AAAA" + une heure optionnelle "HH:MM", format de
+    // l'export CSV du backoffice BTP Force (colonnes Date et Heure séparées).
+    // Repli sur parseFrenchDate si le format ne correspond pas. Null si invalide.
+    function parseFrDateTime(dateString, timeString) {
+        if (!dateString || typeof dateString !== 'string') return null;
+        const m = dateString.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (!m) return parseFrenchDate(dateString);
+
+        const day = parseInt(m[1], 10);
+        const month = parseInt(m[2], 10);
+        const year = parseInt(m[3], 10);
+
+        let hours = 0;
+        let minutes = 0;
+        if (typeof timeString === 'string') {
+            const t = timeString.trim().match(/^(\d{1,2}):(\d{2})/);
+            if (t) { hours = parseInt(t[1], 10); minutes = parseInt(t[2], 10); }
+        }
+
+        const d = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        // Rejette les dates qui "débordent" (31/02, 25:00...) : JS les reporte
+        // silencieusement sur le mois suivant.
+        if (isNaN(d.getTime()) || d.getDate() !== day || d.getMonth() !== month - 1
+            || d.getHours() !== hours || d.getMinutes() !== minutes) {
+            return null;
+        }
+        return d;
     }
 
     // ===================== DÉTECTION DE COLONNES =====================
@@ -316,6 +347,7 @@ const KPI = (function () {
         parseFullCSV,
         // dates
         parseFrenchDate,
+        parseFrDateTime,
         // colonnes
         findIdx,
         findKey,

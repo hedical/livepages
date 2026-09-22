@@ -226,3 +226,57 @@ test('chatEmail — trim et valeur non-chaine', () => {
     assert.equal(KPI.chatEmail({ metadata: { email: '  e.f@btp-consultants.fr  ' } }), 'e.f@btp-consultants.fr');
     assert.equal(KPI.chatEmail({ email: 42 }), '');
 });
+
+// ============================================================================
+// Export CSV du backoffice BTP Force (Autocontact SPS) : séparateur ';' et
+// date/heure en colonnes séparées.
+// ============================================================================
+
+test('parseFullCSV — séparateur point-virgule', () => {
+    const csv = 'Date;Origine;Société\n17/09/2026;IA;CLE MILLET\n18/09/2026;Humain;ACME';
+    const rows = KPI.parseFullCSV(csv, ';');
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows[0], ['Date', 'Origine', 'Société']);
+    assert.deepEqual(rows[1], ['17/09/2026', 'IA', 'CLE MILLET']);
+});
+
+test('parseFullCSV — virgule par défaut inchangée, et virgule interne avec sep ;', () => {
+    assert.deepEqual(KPI.parseFullCSV('a,b\n1,2')[1], ['1', '2']);
+    // Une virgule dans un champ ne coupe plus rien quand le séparateur est ';'
+    assert.deepEqual(KPI.parseFullCSV('a;b\nDupont, Jean;PARIS', ';')[1], ['Dupont, Jean', 'PARIS']);
+});
+
+test('parseFullCSV — champ entre guillemets contenant le séparateur', () => {
+    const rows = KPI.parseFullCSV('a;b\n"x;y";z', ';');
+    assert.deepEqual(rows[1], ['x;y', 'z']);
+});
+
+test('parseFrDateTime — date + heure du backoffice', () => {
+    const d = KPI.parseFrDateTime('17/09/2026', '07:49');
+    assert.equal(d.getFullYear(), 2026);
+    assert.equal(d.getMonth(), 8);
+    assert.equal(d.getDate(), 17);
+    assert.equal(d.getHours(), 7);
+    assert.equal(d.getMinutes(), 49);
+});
+
+test('parseFrDateTime — heure absente ou vide → minuit', () => {
+    assert.equal(KPI.parseFrDateTime('01/03/2026').getHours(), 0);
+    assert.equal(KPI.parseFrDateTime('01/03/2026', '').getMinutes(), 0);
+});
+
+test('parseFrDateTime — dates impossibles rejetées (pas de report silencieux)', () => {
+    assert.equal(KPI.parseFrDateTime('31/02/2026', '10:00'), null);
+    assert.equal(KPI.parseFrDateTime('17/13/2026', '10:00'), null);
+});
+
+test('parseFrDateTime — repli sur parseFrenchDate pour un ISO', () => {
+    const d = KPI.parseFrDateTime('2026-09-17T05:49:05.255Z');
+    assert.equal(d instanceof Date, true);
+    assert.equal(d.getUTCDate(), 17);
+});
+
+test('parseFrDateTime — entrée vide', () => {
+    assert.equal(KPI.parseFrDateTime(''), null);
+    assert.equal(KPI.parseFrDateTime(null), null);
+});
