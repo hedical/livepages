@@ -111,37 +111,30 @@
                     <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Contacts créés via l'IA</p>
-                            <p class="text-3xl font-bold text-cyan-600 mb-1" id="ai-contacts">0</p>
-                            <p class="text-xs text-gray-400 mt-1">Origine « IA » dans BTP Force</p>
+                            <p class="text-sm font-medium text-gray-500 mb-2">Nombre d'utilisateurs</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-users" title="Utilisateurs SPS uniques ayant créé au moins un contact proposé par l'IA (Origine = IA)">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="total-users-subtitle">Utilisateurs uniques</p>
                         </div>
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Part de l'IA</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1" id="ai-rate">0%</p>
-                            <p class="text-xs text-gray-400 mt-1" id="ai-rate-detail">-</p>
+                            <p class="text-sm font-medium text-gray-500 mb-2">Contacts générés par IA</p>
+                            <div class="flex items-baseline gap-2">
+                                <p class="text-3xl font-bold text-cyan-600 cursor-help" id="ai-contacts" title="Contacts dont l'Origine est « IA » dans BTP Force">0</p>
+                                <p class="text-sm text-gray-400 cursor-help" id="ai-contacts-percent" title="Part des contacts IA sur l'ensemble des contacts créés">-</p>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-1" id="ai-contacts-subtitle">Parmi 0 contacts générés</p>
                         </div>
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Utilisateurs</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1" id="total-users">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="total-users-detail">Utilisateurs uniques</p>
+                            <p class="text-sm font-medium text-gray-500 mb-2">Nombre d'utilisations</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-usages" title="Livrables Autocontact distincts ayant proposé des contacts">0</p>
+                            <p class="text-xs text-gray-400 mt-1">Livrables Autocontact distincts</p>
                         </div>
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Affaires couvertes</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1" id="total-affairs">0</p>
+                            <p class="text-sm font-medium text-gray-500 mb-2">Nombre d'opérations</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-operations" title="Affaires distinctes ayant utilisé l'IA pour créer des contacts">0</p>
                             <p class="text-xs text-gray-400 mt-1">Affaires distinctes</p>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Contacts au total</p>
-                            <p class="text-2xl font-bold text-gray-900 mb-1" id="total-contacts">0</p>
-                            <p class="text-xs text-gray-400 mt-1">IA + saisie manuelle</p>
-                        </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Livrables Autocontact</p>
-                            <p class="text-2xl font-bold text-gray-900 mb-1" id="total-deliverables">0</p>
-                            <p class="text-xs text-gray-400 mt-1">Livrables IA distincts</p>
-                        </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                             <div class="flex items-center gap-2 mb-2">
                                 <p class="text-sm font-medium text-gray-500">Contacts proposés</p>

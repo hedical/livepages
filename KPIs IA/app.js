@@ -2152,14 +2152,15 @@ function updateKPIs() {
     autocontactTotalContactsEl.textContent = formatNumber(autocontactStats.totalContacts);
     autocontactUsersEl.textContent = autocontactStats.uniqueUsers;
     
-    // Autocontact SPS stats
-    const autocontactSpsCountEl = document.getElementById('autocontact-sps-count');
+    // Autocontact SPS stats — mêmes indicateurs, dans le même ordre, que la tuile
+    // Auto Contacts de BTP Consultants : utilisations / contacts IA / total / users.
+    const autocontactSpsOpsEl = document.getElementById('autocontact-sps-ops');
+    const autocontactSpsAiContactsEl = document.getElementById('autocontact-sps-ai-contacts');
     const autocontactSpsTotalEl = document.getElementById('autocontact-sps-total-contacts');
-    const autocontactSpsAffairsEl = document.getElementById('autocontact-sps-affairs');
     const autocontactSpsUsersEl = document.getElementById('autocontact-sps-users');
-    if (autocontactSpsCountEl) autocontactSpsCountEl.textContent = formatNumber(autocontactSpsStats.aiContacts);
+    if (autocontactSpsOpsEl) autocontactSpsOpsEl.textContent = formatNumber(autocontactSpsStats.uniqueOperations);
+    if (autocontactSpsAiContactsEl) autocontactSpsAiContactsEl.textContent = formatNumber(autocontactSpsStats.aiContacts);
     if (autocontactSpsTotalEl) autocontactSpsTotalEl.textContent = formatNumber(autocontactSpsStats.totalContacts);
-    if (autocontactSpsAffairsEl) autocontactSpsAffairsEl.textContent = formatNumber(autocontactSpsStats.uniqueOperations);
     if (autocontactSpsUsersEl) autocontactSpsUsersEl.textContent = formatNumber(autocontactSpsStats.uniqueUsers);
 
     // Comparateur stats
@@ -3106,8 +3107,12 @@ const featureCards = [
  */
 function initializeFeatureCards() {
     featureCards.forEach(card => {
-        // Find the card element by looking for the count element's parent
-        const countEl = document.getElementById(`${card.id}-count`);
+        // Find the card element by looking for the count element's parent.
+        // Les tuiles Auto Contacts (CT et SPS) affichent des « utilisations » :
+        // leur grand chiffre porte l'id `-ops`, sans quoi la carte n'était
+        // rattachée à rien et échappait au filtre filiale.
+        const countEl = document.getElementById(`${card.id}-count`)
+            || document.getElementById(`${card.id}-ops`);
         if (countEl) {
             // Go up to the card container (2 or 3 levels up depending on structure)
             let parent = countEl;

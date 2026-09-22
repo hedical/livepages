@@ -408,8 +408,11 @@ dédoublonné par `deliverableId` (même réflexe que la brique Géotech). Le ga
 reprend l'hypothèse de l'Autocontact CT : 90 s par contact créé via l'IA.
 
 
-**Intégration au dashboard.** La tuile « Autocontact / BTP Consultants SPS » d'`index.html`
-pointe vers la page détail ; `app.js` charge `AUTOCONTACT_SPS_URL` (source optionnelle : son
+**Intégration au dashboard.** La tuile « Auto Contacts / BTP Consultants SPS » est calquée sur celle de
+BTP Consultants — mêmes indicateurs, dans le même ordre : utilisations, contacts générés par IA,
+total de contacts, utilisateurs uniques. La page détail reprend de même les quatre cartes de
+`autocontact.html`, et y ajoute les deux indicateurs propres à BTP Force (contacts proposés
+dédoublonnés, taux de retenue). Elle pointe vers la page détail ; `app.js` charge `AUTOCONTACT_SPS_URL` (source optionnelle : son
 absence n'empêche pas le chargement) et marque chaque ligne `bu: 'SPS'`, ce qui suffit à
 `getFilteredData` pour l'exclure de la filiale « BTP Consultants » et la rattacher à
 « BTP Consultants SPS ». La brique alimente : le compteur d'utilisations (une affaire touchée
@@ -420,6 +423,10 @@ empilé, les jauges d'objectifs, l'instantané `pilotage-ia` et la modale « Uti
 (feature « Auto-contact (SPS) »). Elle n'alimente PAS les filtres direction/agence ni le
 tableau d'adoption par agence : les agences SPS (« Agence Nantes ») ne portent pas le même
 code que les agences CT (`NACT`), comme pour les briques chat/expert SPS.
+
+Au passage : `initializeFeatureCards` ne cherchait qu’un id `<carte>-count`. Les deux tuiles
+Auto Contacts affichent des « utilisations » (`<carte>-ops`) : elles n’étaient rattachées à aucun
+élément et échappaient donc au filtre filiale. Un repli sur `-ops` les y soumet comme les autres.
 
 ### Tests
 

@@ -52,15 +52,16 @@ const sourceBannerEl = document.getElementById('source-banner');
 const sourceLabelEl = document.getElementById('source-label');
 const sourceHintEl = document.getElementById('source-hint');
 
-// KPI elements
-const aiContactsEl = document.getElementById('ai-contacts');
-const aiRateEl = document.getElementById('ai-rate');
-const aiRateDetailEl = document.getElementById('ai-rate-detail');
+// KPI elements — mêmes indicateurs que la page Auto Contacts de BTP Consultants
+// (utilisateurs / contacts IA / utilisations / opérations), plus les deux
+// indicateurs propres à BTP Force : contacts proposés et taux de retenue.
 const totalUsersEl = document.getElementById('total-users');
-const totalUsersDetailEl = document.getElementById('total-users-detail');
-const totalAffairsEl = document.getElementById('total-affairs');
-const totalContactsEl = document.getElementById('total-contacts');
-const totalDeliverablesEl = document.getElementById('total-deliverables');
+const totalUsersSubtitleEl = document.getElementById('total-users-subtitle');
+const aiContactsEl = document.getElementById('ai-contacts');
+const aiContactsPercentEl = document.getElementById('ai-contacts-percent');
+const aiContactsSubtitleEl = document.getElementById('ai-contacts-subtitle');
+const totalUsagesEl = document.getElementById('total-usages');
+const totalOperationsEl = document.getElementById('total-operations');
 const proposedContactsEl = document.getElementById('proposed-contacts');
 const retentionRateEl = document.getElementById('retention-rate');
 
@@ -542,14 +543,13 @@ function updateDashboard() {
     const affairs = new Set(aiItems.map(i => i.affairNumber).filter(Boolean));
     const proposed = sumProposedContacts(filtered);
 
-    aiContactsEl.textContent = formatNumber(aiItems.length);
-    aiRateEl.textContent = `${percent(aiItems.length, filtered.length, 1)}%`;
-    aiRateDetailEl.textContent = `${formatNumber(aiItems.length)} sur ${formatNumber(filtered.length)} contacts créés`;
     totalUsersEl.textContent = formatNumber(aiUsers.size);
-    totalUsersDetailEl.textContent = `Ont utilisé l'IA — ${formatNumber(users.size)} créateurs de contacts au total`;
-    totalAffairsEl.textContent = formatNumber(affairs.size);
-    totalContactsEl.textContent = formatNumber(filtered.length);
-    totalDeliverablesEl.textContent = formatNumber(proposed.deliverables);
+    totalUsersSubtitleEl.textContent = `Ont utilisé l'IA — ${formatNumber(users.size)} créateurs de contacts au total`;
+    aiContactsEl.textContent = formatNumber(aiItems.length);
+    aiContactsPercentEl.textContent = `${percent(aiItems.length, filtered.length, 1)}%`;
+    aiContactsSubtitleEl.textContent = `Parmi ${formatNumber(filtered.length)} contacts générés`;
+    totalUsagesEl.textContent = formatNumber(proposed.deliverables);
+    totalOperationsEl.textContent = formatNumber(affairs.size);
     proposedContactsEl.textContent = formatNumber(proposed.total);
     retentionRateEl.textContent = proposed.total ? `${percent(aiItems.length, proposed.total, 1)}%` : '-';
 
