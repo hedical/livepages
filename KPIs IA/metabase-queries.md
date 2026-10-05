@@ -32,6 +32,7 @@
 | **138** | KPIs IA - Descriptif Sommaire LEAN (SQL) | ~10 700 lignes, ~5.5 MB | dashboards index + `descriptif.html` (sans le HTML brut, juste les comptes de mots et flag IA) |
 | **139** | KPIs IA - Analyse Géotechnique (SQL) | ~24 lignes, <50 KB | dashboards index + `analyse-geotechnique.html` (brique qualité — pas de gain heures/€) |
 | **158** | KPIs IA - Analyse Acoustique (SQL) | 0 ligne au lancement (module neuf) | dashboards index + `analyse-acoustique.html` (clone card 139, filtre `ILIKE '%acousti%'`) |
+| **160** | KPIs IA - Analyse CCTP vs Référentiel (SQL) | 1 ligne / analyse, ~26 lignes au 02/10/2026, <10 KB | dashboards index + `analyse-cctp.html` (AIDeliverable `CCTP_VS_REFERENTIEL`, avis agrégés en SQL) |
 | **n/a — Salesforce REST** | API XPL Funnel | ~5 000 marchés / ~250 leads, ~800 KB | dashboards index + `analyse-ao.html` (funnel IA AO — n'utilise PAS Metabase, voir section dédiée) |
 
 > ⚠️ **134 vs 138** : 134 garde le HTML brut des descriptions (utile pour comparer texte source vs sortie IA), 138 strip le HTML et précalcule `descriptionWordCount` + `hasAi`. Pour les dashboards qui ne font que compter, prends **138** (20× plus léger).
@@ -92,6 +93,8 @@ AgencyToUser.agencyId → Agency.id
 | `AUTOCONTACT` | 1 253 | 135 |
 | `COMPARATEUR_INDICES` | 238 | 137 |
 | `ETUDE_GEOTECHNIQUE` | 82 | (la brique géotech consomme `AnalyticEvent` cf. card 139, pas `AIDeliverable` directement) |
+| `ETUDE_ACOUSTIQUE` | 42 (oct. 2026) | 158 |
+| `CCTP_VS_REFERENTIEL` | 42 (oct. 2026) | **160** |
 
 ### Types de Report observés (en mai 2026, depuis 2025-01-01)
 
@@ -497,7 +500,7 @@ Le workflow n8n doit fetch `/api/card/139/query/json` (binary streaming), puis u
 contrairement à la géotech, le module acoustique ne journalise aucun event frontend
 (vérifié le 10/07/2026 : `AnalyticEvent` ne contient que `Open Documents Tab` et les 2 events Geotech).
 **Consommé par :** tuile index + `analyse-acoustique.html` (brique qualité — pas de gain heures/€).
-**KPIs :** opérations IA (= générations, dédup `DeliverableId`), affaires uniques (`ContractNumber`), utilisateurs uniques.
+**KPIs :** opérations IA (= générations, dédup `DeliverableId`), affaires uniques (`ContractNumber`), utilisateurs uniques, notices injectées et rapports créés dans S+.
 
 ### SQL
 
@@ -512,15 +515,19 @@ SELECT
     aid."type"::text            AS "EventName",       -- 'ETUDE_ACOUSTIQUE'
     aid."createdAt"             AS "EventDate",
     aid."id"                    AS "DeliverableId",
-    NULL AS "DocumentId", NULL AS "ReportId", NULL AS "ReportName",
-    0 AS "NoticesCount", NULL AS "FirstNoticeId", NULL AS "FirstNoticeNumber",
+    NULL                        AS "DocumentId",
+    rep."reportId"              AS "ReportId",        -- dernier rapport créé depuis le livrable
+    NULL                        AS "ReportName",      -- volontairement NULL : un nom à virgule casserait le split CSV du front
+    COALESCE(nt."notices", 0)   AS "NoticesCount",    -- notices injectées dans S+
+    NULL AS "FirstNoticeId", NULL AS "FirstNoticeNumber",
     sad."contractNumber"        AS "ContractNumber",
     sa."userId"                 AS "SubAffairUserId",
     u."email"                   AS "UserEmail",
     NULL AS "UserFirstname", NULL AS "UserLastname",
     NULL AS "UserPosition", NULL AS "UserRole", NULL AS "UserIsEnabled",
     a."management"              AS "DR",
-    a."productionService"       AS "Agence"
+    a."productionService"       AS "Agence",
+    COALESCE(rep."reports", 0)  AS "ReportsCount"     -- nb de rapports créés
 FROM "AIDeliverable" aid
 LEFT JOIN "AIProject" ap ON ap."id" = aid."aiProjectId"
 LEFT JOIN "SubAffair" sa ON sa."id" = ap."subAffairId"
@@ -528,17 +535,37 @@ LEFT JOIN "SubAffairDetail" sad ON sad."id" = sa."subAffairDetailId"
 LEFT JOIN "User" u ON u."id" = sa."userId"
 LEFT JOIN "AgencyToUser" atu ON atu."userId" = u."id" AND atu."isMain" = true
 LEFT JOIN "Agency" a ON a."id" = atu."agencyId"
+LEFT JOIN LATERAL (
+    SELECT sum(jsonb_array_length(COALESCE(e."properties"->'notices', '[]'::jsonb))) AS "notices"
+    FROM "AnalyticEvent" e
+    WHERE e."name" ILIKE 'Create Notice From AI Acousti%'
+      AND e."properties"->'deliverable'->>'id' = aid."id"
+) nt ON true
+LEFT JOIN LATERAL (
+    SELECT count(*) AS "reports",
+           (array_agg(e."properties"->'report'->>'id' ORDER BY e."date" DESC))[1] AS "reportId"
+    FROM "AnalyticEvent" e
+    WHERE e."name" ILIKE 'Create Report From AI Acousti%'
+      AND e."properties"->'deliverable'->>'id' = aid."id"
+) rep ON true
 WHERE aid."type"::text = 'ETUDE_ACOUSTIQUE'
   AND (sad."contractNumber" IS NULL OR sad."contractNumber" NOT LIKE '%YIELD%')
 ORDER BY aid."createdAt" DESC
 ```
 
+> **02/10/2026** : la card lit désormais l'injection dans S+. Les events
+> `Create Notice From AI Acoustic` / `Create Report From AI Acoustic` existent depuis le
+> 23/07/2026 et sont rattachés au livrable par `properties.deliverable.id` (100 % des events
+> retrouvent leur `AIDeliverable`). Ils sont agrégés **sur la ligne du livrable**, et non
+> ajoutés comme lignes : l'email d'un event est celui de la personne qui injecte, ce qui
+> gonflerait les utilisateurs uniques (comptés sur le chargé d'affaires, comme card 137).
+
 ### Volume (10/07/2026)
 
 - 10 livrables `ETUDE_ACOUSTIQUE` en base, dont **9 tests YIELD-STUDIO** (exclus) →
   **1 ligne** en sortie (première exécution production le 08/06/2026).
-- Le front accepte aussi les futurs events `Create Notice/Report From AI Acousti*`
-  si AnalyzTech instrumente un jour le tracking frontend comme pour la géotech.
+- Au 02/10/2026 : 12 livrables de production, 2 rapports créés et 5 notices injectées dans S+
+  (events hors YIELD ; 4 livrables de test YIELD ont aussi des events, exclus).
 
 ### Câblage n8n / Supabase (workflow « ROI Global ») — ✅ EN PLACE (10/07/2026)
 
@@ -554,6 +581,134 @@ ORDER BY aid."createdAt" DESC
   les refresh suivants le mettront à jour automatiquement.
 
 Le front tolère l'absence de `ANALYSE_ACOUSTIQUE_URL` : tuile à 0 + message clair sur la page détail.
+
+---
+
+## Card 160 — Analyse CCTP vs Référentiel
+
+**URL :** `https://metabase.btp-force.cloud/question/160`
+**Collection :** KPI IA (id 17)
+**Source :** Table `AIDeliverable` filtrée `type = 'CCTP_VS_REFERENTIEL'` (chaîne de jointure de la card 158).
+**Consommé par :** tuile index + `analyse-cctp.html` (brique qualité — pas de gain heures/€).
+**Format :** 1 ligne = 1 livrable (= 1 analyse), ~8 KB pour 26 lignes.
+
+### Structure de la donnée source
+
+`longResult.cctp` (jsonb, **~150 KB par livrable** — jamais exporté tel quel) :
+
+| Clé | Contenu |
+|---|---|
+| `missions` | codes des missions traitées, ex. `["L","P1","F"]` |
+| `missionsStatus[]` | statut par mission (`COMPLETED`, `nonInstruit`, `totalElements`…) |
+| `summary` | `totalMissions`, `completedMissions`, `failedMissions`, `totalElements`, `totalObservations`, `totalNonConformites`, `avis{favorable,suspendu,defavorable,aVerifier,sansObjet,erreur}` |
+| `avis[]` | un avis par élément : `missionCode`, `missionLabel`, `statut` (`favorable` / `suspendu` / `defavorable` / `a_verifier`), `criticite` (`faible` / `modere` / `eleve` / `critique`), `horsMission`, `nc`, `riskAssessment`, `sources[]`, `commentaire` |
+| `extraction`, `warnings` | données intermédiaires |
+
+**Exploitation dans S+** (l'utilisateur coche des remarques et les injecte dans un rapport initial) :
+
+- `AIDeliverable.metadata.reportId` : rapport initial créé depuis l'analyse ;
+- `AIDeliverable.metadata.assignedStatusByCctpAvisId` : `{ avisId: 'Suspended' | 'Unfavorable' | 'Favorable' }` — statut d'avis choisi à l'injection ;
+- `AnalyticEvent` `Create Notice From AI CCTP` (`properties.deliverable.id`, `properties.notices[]`) et `Create Report From AI CCTP` — events frontend, depuis le 25/09/2026.
+
+> `AIDeliverable.status` vaut `COMPLETED` ou `ERROR` (`longResult` NULL). Les erreurs sont comptées à part côté front (« lancements en erreur »), jamais comme analyses.
+
+### SQL
+
+Les avis sont **agrégés en SQL** (LATERAL sur `jsonb_array_elements`) : le front ne reçoit que des compteurs.
+`AvisParMission` est une chaîne `code:n;code:n` (parsée par `KPI.parseMissionCounts`).
+`Missions` contient des virgules : Metabase l'exporte **entre guillemets** — le front parse avec
+`KPI.parseFullCSV`, pas avec le split naïf des briques AnalyticEvent.
+
+```sql
+SELECT
+    aid."id"                                         AS "EventId",
+    aid."type"::text                                 AS "EventName",
+    aid."createdAt"                                  AS "EventDate",
+    aid."id"                                         AS "DeliverableId",
+    aid."status"::text                               AS "Status",
+    sad."contractNumber"                             AS "ContractNumber",
+    sa."userId"                                      AS "SubAffairUserId",
+    u."email"                                        AS "UserEmail",
+    a."management"                                   AS "DR",
+    a."productionService"                            AS "Agence",
+    (SELECT string_agg(m, ',') FROM jsonb_array_elements_text(COALESCE(aid."longResult"->'cctp'->'missions', '[]'::jsonb)) m) AS "Missions",
+    COALESCE((aid."longResult"->'cctp'->'summary'->>'totalMissions')::int, 0)      AS "TotalMissions",
+    COALESCE((aid."longResult"->'cctp'->'summary'->>'failedMissions')::int, 0)     AS "FailedMissions",
+    COALESCE((aid."longResult"->'cctp'->'summary'->>'totalElements')::int, 0)      AS "TotalElements",
+    COALESCE(av."total", 0)                          AS "TotalAvis",
+    COALESCE(av."favorable", 0)                      AS "AvisFavorable",
+    COALESCE(av."suspendu", 0)                       AS "AvisSuspendu",
+    COALESCE(av."defavorable", 0)                    AS "AvisDefavorable",
+    COALESCE(av."autre", 0)                          AS "AvisAutre",
+    COALESCE(av."critique", 0)                       AS "AvisCritique",
+    COALESCE(av."eleve", 0)                          AS "AvisEleve",
+    COALESCE(av."horsMission", 0)                    AS "AvisHorsMission",
+    av."parMission"                                  AS "AvisParMission",
+    aid."metadata"->>'reportId'                      AS "ReportId",
+    (SELECT count(*) FROM jsonb_object_keys(COALESCE(aid."metadata"->'assignedStatusByCctpAvisId', '{}'::jsonb))) AS "AvisInjectes",
+    COALESCE(ev."notices", 0)                        AS "NoticesCreees"
+FROM "AIDeliverable" aid
+LEFT JOIN "AIProject" ap ON ap."id" = aid."aiProjectId"
+LEFT JOIN "SubAffair" sa ON sa."id" = ap."subAffairId"
+LEFT JOIN "SubAffairDetail" sad ON sad."id" = sa."subAffairDetailId"
+LEFT JOIN "User" u ON u."id" = sa."userId"
+LEFT JOIN "AgencyToUser" atu ON atu."userId" = u."id" AND atu."isMain" = true
+LEFT JOIN "Agency" a ON a."id" = atu."agencyId"
+LEFT JOIN LATERAL (
+    SELECT count(*)                                                  AS "total",
+           count(*) FILTER (WHERE x->>'statut' = 'favorable')        AS "favorable",
+           count(*) FILTER (WHERE x->>'statut' = 'suspendu')         AS "suspendu",
+           count(*) FILTER (WHERE x->>'statut' = 'defavorable')      AS "defavorable",
+           count(*) FILTER (WHERE x->>'statut' NOT IN ('favorable','suspendu','defavorable')) AS "autre",
+           count(*) FILTER (WHERE x->>'criticite' = 'critique')      AS "critique",
+           count(*) FILTER (WHERE x->>'criticite' = 'eleve')         AS "eleve",
+           count(*) FILTER (WHERE (x->>'horsMission')::boolean)      AS "horsMission",
+           (SELECT string_agg(mc || ':' || n, ';' ORDER BY mc) FROM (
+                SELECT y->>'missionCode' mc, count(*) n
+                FROM jsonb_array_elements(aid."longResult"->'cctp'->'avis') y GROUP BY 1) pm) AS "parMission"
+    FROM jsonb_array_elements(COALESCE(aid."longResult"->'cctp'->'avis', '[]'::jsonb)) x
+) av ON true
+LEFT JOIN LATERAL (
+    SELECT sum(jsonb_array_length(COALESCE(e."properties"->'notices', '[]'::jsonb))) AS "notices"
+    FROM "AnalyticEvent" e
+    WHERE e."name" = 'Create Notice From AI CCTP'
+      AND e."properties"->'deliverable'->>'id' = aid."id"
+) ev ON true
+WHERE aid."type"::text = 'CCTP_VS_REFERENTIEL'
+  AND (sad."contractNumber" IS NULL OR sad."contractNumber" NOT LIKE '%YIELD%')
+ORDER BY aid."createdAt" DESC
+```
+
+### Description
+
+> Dataset Analyse CCTP vs Référentiel du dashboard KPIs IA. 1 ligne = 1 livrable AIDeliverable type='CCTP_VS_REFERENTIEL'. Chaîne de jointure card 158. Les avis (longResult.cctp.avis[]) sont agrégés en SQL (verdict, criticité, par mission) pour ne pas exporter le longResult (~150 KB/livrable). Injection dans S+ : metadata.assignedStatusByCctpAvisId (AvisInjectes) + events AnalyticEvent 'Create Notice From AI CCTP' (NoticesCreees). Exclut YIELD-STUDIO.
+
+### Volume (02/10/2026)
+
+- 42 livrables en base, dont **16 tests YIELD-STUDIO** (8 en `ERROR`, exclus) → **26 analyses** de production, toutes `COMPLETED`, du 17/09 au 02/10/2026.
+- 22 affaires, 16 utilisateurs (chargé d'affaires de l'affaire), 14 agences.
+- 627 avis : 184 favorables, 375 suspendus, 66 défavorables, 2 à vérifier ; 250 de criticité « critique ».
+- Missions : L (325 avis), P1 (216), F (78), PV (49). La mission S n'est pas encore ouverte dans S+.
+- 7 analyses exploitées dans S+ (rapport créé et/ou remarques injectées), 19 notices injectées.
+- Ouverture de la brique à tous les utilisateurs S+ prévue le **12/10/2026**.
+
+> **Utilisateur compté = `SubAffair.userId`** (chargé d'affaires de l'affaire), comme les cards 137 et 158 :
+> `AIDeliverable` ne porte pas l'auteur du lancement. Si un collègue lance l'analyse sur
+> l'affaire d'un autre, c'est le chargé d'affaires qui est compté.
+
+### Câblage n8n / Supabase (workflow « ROI Global »)
+
+- Chaîne de refresh : `CCTP` (card 160 `/query/csv`) → `Convert to File17` (toJson)
+  → `POST CCTP` (upsert `analyse_cctp.json`), branchée sur le webhook `refresh-kpis` et
+  vers `Respond to Webhook` — miroir de la chaîne acoustique.
+- Les en-têtes des nœuds `CCTP` et `POST CCTP` ne contiennent **aucune clé** : ils lisent
+  par expression ceux des nœuds `Acoustique` (`x-api-key`) et `POST Acoustique`
+  (`Authorization`, `apikey`), ex. `{{ $('Acoustique').params.headerParameters.parameters[0].value }}`.
+  ⚠️ Renommer ou supprimer ces deux nœuds casse la chaîne CCTP.
+- Nœud `Sign URLs` : `analyse_cctp.json` ajouté (19 paths).
+- Nœud `Build signed response` : mapping `ANALYSE_CCTP_URL`.
+
+Le front tolère l'absence de `ANALYSE_CCTP_URL` : tuile à 0 + message clair sur la page détail.
 
 ---
 

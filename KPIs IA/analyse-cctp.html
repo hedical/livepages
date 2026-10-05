@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyse acoustique - AnalyzTech</title>
+    <title>Analyse CCTP vs Référentiel - AnalyzTech</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -25,9 +25,9 @@
                     <div>
                         <a href="index.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
                         <h1 class="text-3xl font-bold text-gray-900 mb-2">
-                            Analyse acoustique - Analyse détaillée
+                            Analyse CCTP vs Référentiel - Analyse détaillée
                         </h1>
-                        <p class="text-gray-500 text-sm">Détails d'utilisation de la fonctionnalité Analyse acoustique (axe qualité)</p>
+                        <p class="text-gray-500 text-sm">Confrontation automatique du CCTP au référentiel réglementaire, par mission de contrôle technique (axe qualité)</p>
                         <p class="text-gray-400 text-xs mt-1" id="first-date-text">-</p>
                     </div>
                     <div class="px-3 py-1.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 self-start">
@@ -66,8 +66,10 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <p class="text-sm text-amber-900">
-                            Cette brique apporte un gain en <strong>qualité</strong> (notices structurées par l'IA), pas en productivité.
-                            Les KPIs heures / euros ne sont donc volontairement pas affichés.
+                            Cette brique apporte un gain en <strong>qualité</strong> (avis motivés par mission, confrontés au référentiel), pas en productivité :
+                            les KPIs heures / euros ne sont volontairement pas affichés.
+                            Une analyse est dite <strong>exploitée</strong> quand ses remarques ont été reprises dans S+ (rapport créé, avis statués ou notices injectées).
+                            L'utilisateur compté est le chargé d'affaires de l'affaire analysée.
                         </p>
                     </div>
                 </div>
@@ -139,75 +141,69 @@
                     </button>
                 </div>
 
-                <!-- KPIs -->
+                <!-- KPIs usage -->
+                <div class="mb-8">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Utilisation</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Analyses réalisées</p>
+                            <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="total-operations" title="Livrables CCTP_VS_REFERENTIEL terminés (dédupliqués par DeliverableId). Les lancements en erreur sont comptés à part.">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="total-errors">0 lancement en erreur</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Affaires uniques</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-contracts" title="Affaires distinctes (ContractNumber) dont le CCTP a été analysé">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="total-contracts-sub">ContractNumber distincts</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Agences actives</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-agencies" title="Agences distinctes (agence principale du chargé d'affaires)">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="total-agencies-sub">Agences distinctes</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Utilisateurs uniques</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-users" title="Chargés d'affaires distincts des affaires analysées">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="total-users-sub">Chargés d'affaires distincts</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPIs qualité -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs qualité</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <!-- Opérations IA -->
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Avis produits par l'IA</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Opérations IA acoustique</p>
-                                    <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="total-operations" title="Nombre de générations IA acoustique distinctes (AIDeliverable de type ETUDE_ACOUSTIQUE, dédupliquées par DeliverableId)">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Générations IA distinctes</p>
-                                </div>
-                            </div>
+                            <p class="text-sm font-medium text-gray-500 mb-2">Avis émis</p>
+                            <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="total-avis" title="Avis motivés produits par l'IA, toutes missions confondues">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="avis-per-analysis">- par analyse</p>
                         </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Avis défavorables ou suspendus</p>
+                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-non-favorable" title="Avis Défavorable + Suspendu : points où le CCTP est jugé non conforme ou incomplet au regard du référentiel">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="non-favorable-rate">-</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Avis repris dans S+</p>
+                            <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="total-avis-repris" title="Avis de l'IA effectivement repris dans un rapport S+ : notices injectées (events Create Notice From AI CCTP) ou avis statués à l'injection (metadata.assignedStatusByCctpAvisId), le plus grand des deux par analyse">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="avis-repris-rate">-</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
+                            <p class="text-sm font-medium text-gray-500 mb-2">Analyses exploitées dans S+</p>
+                            <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="total-exploitees" title="Analyses dont les remarques ont été reprises dans S+ : rapport créé depuis l'analyse, avis statués (metadata.assignedStatusByCctpAvisId) ou notices injectées (events Create Notice From AI CCTP)">0</p>
+                            <p class="text-xs text-gray-400 mt-1" id="exploitees-sub">-</p>
+                        </div>
+                    </div>
+                </div>
 
-                        <!-- Affaires uniques -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Affaires uniques</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-contracts" title="Nombre d'affaires distinctes (ContractNumber) ayant utilisé l'analyse acoustique IA">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">ContractNumber distincts</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Agences actives -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Agences actives</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-agencies" title="Nombre d'agences distinctes ayant utilisé l'analyse acoustique IA">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Agences distinctes</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Utilisateurs -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Utilisateurs uniques</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-users" title="Nombre d'utilisateurs distincts ayant utilisé la fonctionnalité">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Utilisateurs distincts</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Notices injectées -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Notices injectées dans S+</p>
-                                    <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="total-notices" title="Notices créées dans S+ à partir de l'analyse acoustique (events Create Notice From AI Acoustic)">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Observations reprises dans un rapport</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Rapports créés -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Rapports créés</p>
-                                    <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="total-reports" title="Rapports créés dans S+ depuis l'analyse acoustique (events Create Report From AI Acoustic)">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Rapports issus de l'analyse</p>
-                                </div>
-                            </div>
-                        </div>
+                <!-- Répartition -->
+                <div class="mb-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-4">Répartition des avis par verdict</h2>
+                        <div style="height: 300px;"><canvas id="verdictChart"></canvas></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-4">Avis par mission de contrôle</h2>
+                        <div style="height: 300px;"><canvas id="missionChart"></canvas></div>
                     </div>
                 </div>
 
@@ -233,7 +229,7 @@
                                         </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('operations')">
                                             <div class="flex items-center">
-                                                Opérations IA
+                                                Analyses
                                                 <span id="sort-icon-operations" class="ml-1 text-gray-400">↕</span>
                                             </div>
                                         </th>
@@ -247,6 +243,18 @@
                                             <div class="flex items-center">
                                                 Utilisateurs
                                                 <span id="sort-icon-users" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('avis')">
+                                            <div class="flex items-center">
+                                                Avis émis
+                                                <span id="sort-icon-avis" class="ml-1 text-gray-400">↕</span>
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('exploitees')">
+                                            <div class="flex items-center">
+                                                Exploitées S+
+                                                <span id="sort-icon-exploitees" class="ml-1 text-gray-400">↕</span>
                                             </div>
                                         </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('rate')">
@@ -267,10 +275,35 @@
 
                 <!-- Chart -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Évolution mensuelle</h2>
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Évolution hebdomadaire</h2>
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <div style="height: 450px;">
+                        <div style="height: 400px;">
                             <canvas id="dateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dernières analyses -->
+                <div class="mb-10">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Dernières analyses</h2>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agence</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Affaire</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Missions</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avis</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Favorable</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Suspendu</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Défavorable</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exploitée S+</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -278,6 +311,7 @@
         </div>
     </div>
 
-    <script src="analyse-acoustique.js"></script>
+    <script src="shared/utils.js"></script>
+    <script src="analyse-cctp.js"></script>
 </body>
 </html>

@@ -292,6 +292,177 @@ const KPI = (function () {
         return typeof email === 'string' ? email.trim() : '';
     }
 
+    // ===================== ANALYSE CCTP VS RÉFÉRENTIEL =====================
+    //
+    // Card Metabase 160 : 1 ligne = 1 livrable AIDeliverable CCTP_VS_REFERENTIEL.
+    // Les avis (longResult.cctp.avis[], ~150 KB par livrable) sont agrégés en
+    // SQL : le front ne reçoit que des compteurs. Partagé entre index (app.js)
+    // et analyse-cctp.html.
+
+    // "F:11;L:19;P1:14" → { F: 11, L: 19, P1: 14 }
+    function parseMissionCounts(str) {
+        const out = {};
+        if (!str || typeof str !== 'string') return out;
+        str.split(';').forEach(part => {
+            const i = part.lastIndexOf(':');
+            if (i <= 0) return;
+            const code = part.slice(0, i).trim();
+            const n = parseInt(part.slice(i + 1), 10);
+            if (code && !isNaN(n)) out[code] = (out[code] || 0) + n;
+        });
+        return out;
+    }
+
+    function _int(v) {
+        const n = parseInt(v, 10);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function _str(v) {
+        return v === null || v === undefined ? '' : String(v).trim();
+    }
+
+    // Lignes de la card (objets clé = nom de colonne) → items normalisés.
+    // Les tests YIELD sont déjà exclus en SQL ; on les re-filtre par sécurité.
+    function parseCctpRows(rows) {
+        if (!Array.isArray(rows)) return [];
+        const items = [];
+        rows.forEach(r => {
+            if (!r || typeof r !== 'object') return;
+            const deliverableId = _str(r.DeliverableId);
+            if (!deliverableId) return;
+            const contractNumber = _str(r.ContractNumber);
+            if (contractNumber.toUpperCase().includes('YIELD')) return;
+            const m = contractNumber.match(/C-([A-Z0-9]+)-/);
+            const reportId = _str(r.ReportId);
+            const avisInjectes = _int(r.AvisInjectes);
+            const noticesCreees = _int(r.NoticesCreees);
+            items.push({
+                deliverableId,
+                createdAt: _str(r.EventDate),
+                status: _str(r.Status).toUpperCase(),
+                contractNumber,
+                agencyCode: m ? m[1] : null,
+                email: _str(r.UserEmail),
+                agency: _str(r.Agence),
+                direction: _str(r.DR),
+                missions: _str(r.Missions).split(/[,;|/]/).map(s => s.trim()).filter(Boolean),
+                totalMissions: _int(r.TotalMissions),
+                failedMissions: _int(r.FailedMissions),
+                totalElements: _int(r.TotalElements),
+                totalAvis: _int(r.TotalAvis),
+                avisFavorable: _int(r.AvisFavorable),
+                avisSuspendu: _int(r.AvisSuspendu),
+                avisDefavorable: _int(r.AvisDefavorable),
+                avisAutre: _int(r.AvisAutre),
+                avisCritique: _int(r.AvisCritique),
+                avisEleve: _int(r.AvisEleve),
+                avisHorsMission: _int(r.AvisHorsMission),
+                avisParMission: parseMissionCounts(_str(r.AvisParMission)),
+                reportId,
+                avisInjectes,
+                noticesCreees,
+                // Avis repris dans S+ : une notice injectée = un avis repris. Le
+                // statut posé à l'injection (metadata) existe aussi sans event
+                // (events tracés depuis le 25/09/2026) : on retient le plus grand
+                // des deux pour ne compter un avis ni deux fois ni zéro fois.
+                avisRepris: Math.max(avisInjectes, noticesCreees),
+                // L'analyse a servi dans S+ : un rapport a été créé depuis
+                // l'analyse, des avis ont reçu un statut, ou des notices ont
+                // été injectées (events "Create Notice From AI CCTP").
+                exploitee: !!reportId || avisInjectes > 0 || noticesCreees > 0,
+            });
+        });
+        return items;
+    }
+
+    // CSV de la card (export Metabase : champs à virgules entre guillemets,
+    // ex. Missions = "L,P1") → lignes objets.
+    function _csvToObjects(csv) {
+        const rows = parseFullCSV(csv, ',');
+        if (rows.length < 2) return [];
+        const header = rows[0];
+        return rows.slice(1).map(cols => {
+            const o = {};
+            header.forEach((h, i) => { o[h] = cols[i] !== undefined ? cols[i] : ''; });
+            return o;
+        });
+    }
+
+    // Accepte les 4 enveloppes du projet : CSV brut, [{data: csv|json}],
+    // {data: csv|json}, tableau JSON direct.
+    function parseCctpPayload(text) {
+        if (!text || typeof text !== 'string') return [];
+        let payload = null;
+        try { payload = JSON.parse(text); } catch (_) { /* CSV brut */ }
+        const fromInner = inner => {
+            let j = null;
+            try { j = JSON.parse(inner); } catch (_) { /* CSV */ }
+            return Array.isArray(j) ? parseCctpRows(j) : parseCctpRows(_csvToObjects(inner));
+        };
+        if (payload === null) return parseCctpRows(_csvToObjects(text));
+        if (Array.isArray(payload) && payload.length && payload[0] && typeof payload[0].data === 'string') {
+            return fromInner(payload[0].data);
+        }
+        if (payload && !Array.isArray(payload) && typeof payload.data === 'string') {
+            return fromInner(payload.data);
+        }
+        if (Array.isArray(payload)) return parseCctpRows(payload);
+        return [];
+    }
+
+    // Agrégats d'un lot d'items (déjà filtrés par période / DR / agence).
+    // Les livrables en ERROR comptent comme lancements mais pas comme analyses.
+    function aggregateCctp(items) {
+        const seen = new Set();
+        const contracts = new Set();
+        const users = new Set();
+        const agencies = new Set();
+        const byMission = {};
+        const s = {
+            totalLaunches: 0, totalOperations: 0, totalErrors: 0,
+            uniqueContracts: 0, uniqueUsers: 0, uniqueAgencies: 0,
+            totalAvis: 0, favorable: 0, suspendu: 0, defavorable: 0, autre: 0,
+            critique: 0, eleve: 0, horsMission: 0,
+            analysesExploitees: 0, avisInjectes: 0, noticesCreees: 0, avisRepris: 0,
+            byMission,
+        };
+        (items || []).forEach(it => {
+            if (!it || !it.deliverableId || seen.has(it.deliverableId)) return;
+            seen.add(it.deliverableId);
+            s.totalLaunches++;
+            if (it.status === 'ERROR') { s.totalErrors++; return; }
+            s.totalOperations++;
+            if (it.contractNumber) contracts.add(it.contractNumber);
+            if (it.email) users.add(it.email);
+            if (it.agency) agencies.add(it.agency);
+            s.totalAvis += it.totalAvis;
+            s.favorable += it.avisFavorable;
+            s.suspendu += it.avisSuspendu;
+            s.defavorable += it.avisDefavorable;
+            s.autre += it.avisAutre;
+            s.critique += it.avisCritique;
+            s.eleve += it.avisEleve;
+            s.horsMission += it.avisHorsMission;
+            if (it.exploitee) s.analysesExploitees++;
+            s.avisInjectes += it.avisInjectes;
+            s.noticesCreees += it.noticesCreees;
+            s.avisRepris += it.avisRepris || 0;
+            Object.keys(it.avisParMission || {}).forEach(code => {
+                if (!byMission[code]) byMission[code] = { analyses: 0, avis: 0 };
+                byMission[code].avis += it.avisParMission[code];
+            });
+            (it.missions || []).forEach(code => {
+                if (!byMission[code]) byMission[code] = { analyses: 0, avis: 0 };
+                byMission[code].analyses++;
+            });
+        });
+        s.uniqueContracts = contracts.size;
+        s.uniqueUsers = users.size;
+        s.uniqueAgencies = agencies.size;
+        return s;
+    }
+
     // ===================== AUTH + URLS SIGNÉES =====================
 
     const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
@@ -363,6 +534,11 @@ const KPI = (function () {
         isAfterAOStart,
         // chats
         chatEmail,
+        // analyse cctp vs référentiel
+        parseMissionCounts,
+        parseCctpRows,
+        parseCctpPayload,
+        aggregateCctp,
         // auth + urls signées
         WEBHOOK_URL,
         fetchDataUrls,

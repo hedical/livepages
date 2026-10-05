@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COPIL IA - AnalyzTech</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f8fafc;
+        }
+        .num { font-variant-numeric: tabular-nums; }
+        .seg-active { background: #fff; color: #111827; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+        .heat td.cell { min-width: 92px; }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+            <!-- Header -->
+            <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <a href="index.html" class="text-indigo-600 hover:text-indigo-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">COPIL IA — Indicateurs IA</h1>
+                    <p class="text-gray-500 text-sm">Adoption, systématisation et variations, par grand métier · <span id="generated-at">—</span></p>
+                </div>
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1" for="month-select">Mois présenté</label>
+                        <select id="month-select" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                    </div>
+                    <a href="index.html" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-md shadow-sm">Plateforme KPIs</a>
+                    <button id="copy-link" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm">Copier le lien plateforme</button>
+                </div>
+            </div>
+
+            <div id="loading" class="py-24 text-center text-gray-600">Chargement…</div>
+
+            <!-- Instantané absent : la page relit ce que le dashboard a calculé
+                 dans ce même onglet, elle ne recharge aucune source. -->
+            <div id="no-snapshot" class="hidden py-16">
+                <div class="max-w-xl mx-auto bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                    <p class="text-lg font-semibold text-gray-900">Données non disponibles dans cet onglet</p>
+                    <p class="text-sm text-gray-500 mt-2">Ouvrez d'abord la plateforme KPIs, attendez la fin du chargement, puis revenez ici par le bouton « COPIL IA » de l'en-tête, dans le même onglet.</p>
+                    <a href="index.html" class="inline-block mt-6 px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">Ouvrir la plateforme KPIs</a>
+                </div>
+            </div>
+
+            <main id="main-content" class="hidden">
+
+                <div id="partial-banner" class="hidden mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <strong>Mois en cours :</strong> les chiffres ne couvrent que les jours écoulés. Présentez le dernier mois complet.
+                </div>
+
+                <!-- 1. Synthèse -->
+                <section class="mb-10" aria-labelledby="h-synthese">
+                    <h2 id="h-synthese" class="text-xl font-semibold text-gray-700 mb-5">Synthèse — <span id="synthese-month">—</span></h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" id="synthese"></div>
+                </section>
+
+                <!-- 2. Adoption mensuelle -->
+                <section class="mb-10" aria-labelledby="h-adoption">
+                    <h2 id="h-adoption" class="text-xl font-semibold text-gray-700 mb-1">Adoption mensuelle</h2>
+                    <p class="text-sm text-gray-500 mb-5">Utilisateurs actifs du mois ÷ population concernée. Mensuelle, pas cumulée : un mois qui décroche se voit.</p>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-baseline justify-between mb-3 gap-3">
+                                <h3 class="text-base font-semibold text-gray-700">Contrôle technique : global et par module</h3>
+                                <span class="text-xs text-gray-400" id="adoption-ct-unit">—</span>
+                            </div>
+                            <div class="relative h-80"><canvas id="adoption-ct-chart" role="img" aria-label="Adoption mensuelle CT, tous modules et par module, avec la cible d'adoption de 50 %"></canvas></div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="flex items-baseline justify-between mb-3 gap-3">
+                                <h3 class="text-base font-semibold text-gray-700">Utilisateurs actifs par grand métier</h3>
+                                <span class="text-xs text-gray-400">tous modules · échelle propre à chaque métier</span>
+                            </div>
+                            <!-- Petits multiples : sur une échelle commune, le volume CT
+                                 écraserait les variations SPS, Diag et PPI. -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="metiers-grid"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. Carte des hausses et baisses -->
+                <section class="mb-10" aria-labelledby="h-heat">
+                    <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+                        <div>
+                            <h2 id="h-heat" class="text-xl font-semibold text-gray-700 mb-1">Hausses et baisses, mois par mois</h2>
+                            <p class="text-sm text-gray-500">Couleur = variation par rapport au mois précédent (bleu : hausse, rouge : baisse, gris : stable).</p>
+                        </div>
+                        <div class="inline-flex flex-wrap rounded-lg bg-gray-100 p-1" role="group" aria-label="Indicateur affiché" id="heat-metric"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="heat min-w-full text-sm" id="heat-table"></table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. Variations à expliquer -->
+                <section class="mb-10" aria-labelledby="h-fluct">
+                    <h2 id="h-fluct" class="text-xl font-semibold text-gray-700 mb-1">Variations à expliquer en séance</h2>
+                    <p class="text-sm text-gray-500 mb-5" id="fluct-intro">—</p>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-medium">Métier</th>
+                                        <th class="px-4 py-3 text-left font-medium">Série</th>
+                                        <th class="px-4 py-3 text-left font-medium">Indicateur</th>
+                                        <th class="px-4 py-3 text-right font-medium" id="fluct-prev-h">M-1</th>
+                                        <th class="px-4 py-3 text-right font-medium" id="fluct-curr-h">M</th>
+                                        <th class="px-4 py-3 text-right font-medium">Variation</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fluct-body" class="divide-y divide-gray-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. Systématisation -->
+                <section class="mb-10" aria-labelledby="h-sys">
+                    <h2 id="h-sys" class="text-xl font-semibold text-gray-700 mb-1">Systématisation</h2>
+                    <p class="text-sm text-gray-500 mb-5">Parmi les utilisateurs actifs du mois, part de <em>leurs</em> dossiers traités avec le module. L'adoption dit combien de personnes s'en servent ; la systématisation dit si elles s'en servent à chaque fois ou de temps en temps.</p>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-base font-semibold text-gray-700 mb-3">Exemple du mois</h3>
+                            <p class="text-sm text-gray-700 leading-relaxed" id="sys-example">—</p>
+                            <p class="text-xs text-gray-400 mt-4">Mesurable seulement quand la source contient aussi les dossiers traités sans IA : Descriptif RICT, Autocontact CT, Autocontact SPS. Pas encore pour l'analyse CCTP (nombre de CCTP par affaire non disponible).</p>
+                        </div>
+                        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <div class="relative h-72"><canvas id="sys-chart" role="img" aria-label="Systématisation mensuelle des modules mesurables"></canvas></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. Usage libre -->
+                <section class="mb-10" aria-labelledby="h-libre">
+                    <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+                        <div>
+                            <h2 id="h-libre" class="text-xl font-semibold text-gray-700 mb-1">Usage libre : messages par utilisateur</h2>
+                            <p class="text-sm text-gray-500">Intensité d'usage des utilisateurs actifs, par grand métier. Le nombre d'utilisateurs, chat et expert séparés, est dans la carte ci-dessus.</p>
+                        </div>
+                        <div class="inline-flex flex-wrap rounded-lg bg-gray-100 p-1" role="group" aria-label="Outil affiché" id="libre-view"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div class="relative h-72"><canvas id="libre-chart" role="img" aria-label="Messages par utilisateur actif de l'usage libre, par mois et par métier"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- 7. Heures -->
+                <section class="mb-10" aria-labelledby="h-hours">
+                    <h2 id="h-hours" class="text-xl font-semibold text-gray-700 mb-1">Heures gagnées par grand métier, pour mémoire</h2>
+                    <p class="text-sm text-gray-500 mb-5">Conversion dépendante d'hypothèses par module : à lire comme une tendance.</p>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div class="relative h-72"><canvas id="hours-chart" role="img" aria-label="Heures gagnées par mois et par grand métier, avec la cible mensuelle"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- 8. Définitions + données -->
+                <section class="mb-10 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-base font-semibold text-gray-700 mb-3">Définitions</h3>
+                        <dl class="space-y-3 text-sm text-gray-600">
+                            <div><dt class="font-medium text-gray-800">Grands métiers</dt><dd>Pôle Conformité : CT (BTP Consultants), SPS (BTP Consultants SPS), Diag (BTP Diagnostics). PPI : Citae — Nextiim et MBAcity ne sont pas encore tracés.</dd></div>
+                            <div><dt class="font-medium text-gray-800">Adoption</dt><dd>Utilisateurs actifs du mois ÷ population concernée. CT : effectif de <code>population_cible.csv</code>. Sans population de référence, l'adoption est donnée en nombre d'utilisateurs.</dd></div>
+                            <div><dt class="font-medium text-gray-800">Systématisation</dt><dd>Dossiers du mois traités avec le module ÷ dossiers du mois des utilisateurs actifs de ce module.</dd></div>
+                            <div><dt class="font-medium text-gray-800">Requêtes par utilisateur</dt><dd>Usages du mois ÷ utilisateurs actifs. Usage libre : messages échangés.</dd></div>
+                            <div><dt class="font-medium text-gray-800">Descriptif RICT</dt><dd>Compté au-delà de 100 mots, seuil retenu en COPIL, pour les dossiers comme pour les utilisateurs.</dd></div>
+                            <div><dt class="font-medium text-gray-800">Variations</dt><dd>Détectées par seuils fixes, sans IA : ±20 % sur un volume, ±10 points sur un taux, volumes inférieurs à 5 ignorés.</dd></div>
+                        </dl>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-base font-semibold text-gray-700 mb-1">Données du mois (JSON)</h3>
+                        <p class="text-xs text-gray-400 mb-3">Les chiffres affichés sur cette page, sous forme structurée, pour reprise par un agent.</p>
+                        <pre id="copil-json" class="text-xs bg-gray-50 border border-gray-200 rounded-md p-3 max-h-96 overflow-auto whitespace-pre"></pre>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="shared/utils.js"></script>
+    <script src="shared/copil.js"></script>
+    <script src="copil-ia.js"></script>
+</body>
+</html>

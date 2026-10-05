@@ -45,6 +45,8 @@ const totalOperationsEl = document.getElementById('total-operations');
 const totalContractsEl = document.getElementById('total-contracts');
 const totalAgenciesEl = document.getElementById('total-agencies');
 const totalUsersEl = document.getElementById('total-users');
+const totalNoticesEl = document.getElementById('total-notices');
+const totalReportsEl = document.getElementById('total-reports');
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -124,6 +126,7 @@ function parseAcoustiqueJSON(jsonArray) {
             reportId: (item['ReportId'] || '').trim(),
             reportName: (item['ReportName'] || '').trim(),
             noticesCount: parseInt(item['NoticesCount']) || 0,
+            reportsCount: parseInt(item['ReportsCount']) || 0,
             contractNumber,
             agencyCode,
             email: (item['UserEmail'] || '').trim(),
@@ -227,12 +230,18 @@ function processData(data, currentFilters, skipDateFilter = false) {
     const uniqueDeliverables = new Set();
     const uniqueContracts = new Set();
     const uniqueAgencies = new Set();
+    let totalNotices = 0;
+    let totalReports = 0;
 
     filtered.forEach(item => {
         if (item.email) uniqueUsers.add(item.email);
-        if (item.deliverableId) uniqueDeliverables.add(item.deliverableId);
         if (item.contractNumber) uniqueContracts.add(item.contractNumber);
         if (item.agency) uniqueAgencies.add(item.agency);
+        if (!item.deliverableId || uniqueDeliverables.has(item.deliverableId)) return;
+        uniqueDeliverables.add(item.deliverableId);
+        // Injection dans S+ (card 158 : events Create Notice/Report From AI Acoustic)
+        totalNotices += item.noticesCount || 0;
+        totalReports += item.reportsCount || 0;
     });
 
     return {
@@ -240,6 +249,8 @@ function processData(data, currentFilters, skipDateFilter = false) {
         totalContracts: uniqueContracts.size,
         totalAgencies: uniqueAgencies.size,
         totalUsers: uniqueUsers.size,
+        totalNotices,
+        totalReports,
         filteredData: filtered,
     };
 }
@@ -478,6 +489,8 @@ function updateKPIs() {
     totalContractsEl.textContent = formatNumber(kpis.totalContracts);
     totalAgenciesEl.textContent = formatNumber(kpis.totalAgencies);
     totalUsersEl.textContent = formatNumber(kpis.totalUsers);
+    totalNoticesEl.textContent = formatNumber(kpis.totalNotices);
+    totalReportsEl.textContent = formatNumber(kpis.totalReports);
 
     const firstDate = getFirstDate(allData);
     if (firstDate) firstDateTextEl.textContent = formatFirstDate(firstDate);

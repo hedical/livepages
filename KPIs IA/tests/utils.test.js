@@ -280,3 +280,108 @@ test('parseFrDateTime — entrée vide', () => {
     assert.equal(KPI.parseFrDateTime(''), null);
     assert.equal(KPI.parseFrDateTime(null), null);
 });
+
+// ===================== Analyse CCTP vs Référentiel (card 160) =====================
+
+const CCTP_HEADER = 'EventId,EventName,EventDate,DeliverableId,Status,ContractNumber,SubAffairUserId,UserEmail,DR,Agence,Missions,TotalMissions,FailedMissions,TotalElements,TotalAvis,AvisFavorable,AvisSuspendu,AvisDefavorable,AvisAutre,AvisCritique,AvisEleve,AvisHorsMission,AvisParMission,ReportId,AvisInjectes,NoticesCreees';
+const CCTP_CSV = [
+    CCTP_HEADER,
+    // Missions entre guillemets : c'est ainsi que Metabase exporte "L,P1"
+    'd1,CCTP_VS_REFERENTIEL,2026-10-02T12:43:51.791,d1,COMPLETED,C-CT75-2024-20-216852,u1,a@btp-consultants.fr,DR IDF Nord,CT75,"L,P1",2,0,44,28,13,12,3,0,13,15,0,L:20;P1:8,,0,0',
+    'd2,CCTP_VS_REFERENTIEL,2026-09-28T09:00:00.000,d2,COMPLETED,C-CT92S-2025-20-2639,u2,b@btp-consultants.fr,DR IDF Sud,CT92S,"L,P1,PV,F",4,0,89,48,16,23,7,2,17,29,6,F:16;L:15;P1:11;PV:6,r1,5,3',
+    'd3,CCTP_VS_REFERENTIEL,2026-09-27T09:00:00.000,d3,ERROR,C-CT92S-2025-20-9999,u2,b@btp-consultants.fr,DR IDF Sud,CT92S,,0,0,0,0,0,0,0,0,0,0,0,,,0,0',
+].join('\n');
+
+test('parseMissionCounts — chaîne SQL "code:n;code:n"', () => {
+    assert.deepEqual(KPI.parseMissionCounts('F:11;L:19;P1:14'), { F: 11, L: 19, P1: 14 });
+    assert.deepEqual(KPI.parseMissionCounts(''), {});
+    assert.deepEqual(KPI.parseMissionCounts(null), {});
+    assert.deepEqual(KPI.parseMissionCounts('L:2;bad;:3;P1:x'), { L: 2 });
+});
+
+test('parseCctpPayload — CSV brut : virgules des missions entre guillemets', () => {
+    const items = KPI.parseCctpPayload(CCTP_CSV);
+    assert.equal(items.length, 3);
+    assert.deepEqual(items[0].missions, ['L', 'P1']);
+    assert.deepEqual(items[1].missions, ['L', 'P1', 'PV', 'F']);
+    // pas de décalage de colonnes après le champ entre guillemets
+    assert.equal(items[1].totalAvis, 48);
+    assert.equal(items[1].avisDefavorable, 7);
+    assert.equal(items[1].agencyCode, 'CT92S');
+    assert.deepEqual(items[1].avisParMission, { F: 16, L: 15, P1: 11, PV: 6 });
+});
+
+test('parseCctpPayload — enveloppes n8n [{data}], {data} et JSON direct', () => {
+    const viaArray = KPI.parseCctpPayload(JSON.stringify([{ data: CCTP_CSV }]));
+    const viaObj = KPI.parseCctpPayload(JSON.stringify({ data: CCTP_CSV }));
+    assert.equal(viaArray.length, 3);
+    assert.equal(viaObj.length, 3);
+    const json = KPI.parseCctpPayload(JSON.stringify([
+        { DeliverableId: 'x', EventDate: '2026-10-01', Status: 'COMPLETED', TotalAvis: 10, Missions: 'L,F', AvisParMission: 'F:4;L:6' },
+    ]));
+    assert.equal(json.length, 1);
+    assert.equal(json[0].totalAvis, 10);
+    assert.deepEqual(json[0].missions, ['L', 'F']);
+});
+
+test('parseCctpPayload — entrée vide ou invalide', () => {
+    assert.deepEqual(KPI.parseCctpPayload(''), []);
+    assert.deepEqual(KPI.parseCctpPayload(null), []);
+    assert.deepEqual(KPI.parseCctpPayload(CCTP_HEADER), []);
+});
+
+test('parseCctpRows — exploitée = rapport, avis statués ou notices injectées', () => {
+    const [a, b] = KPI.parseCctpPayload(CCTP_CSV);
+    assert.equal(a.exploitee, false);
+    assert.equal(b.exploitee, true);
+    assert.equal(KPI.parseCctpRows([{ DeliverableId: 'z', ReportId: 'r9' }])[0].exploitee, true);
+});
+
+test('parseCctpRows — avis repris = max(avis statués, notices injectées)', () => {
+    const [a, b, c] = KPI.parseCctpRows([
+        { DeliverableId: 'a', AvisInjectes: 0, NoticesCreees: 4 },
+        { DeliverableId: 'b', AvisInjectes: 6, NoticesCreees: 2 },
+        { DeliverableId: 'c' },
+    ]);
+    assert.equal(a.avisRepris, 4);
+    assert.equal(b.avisRepris, 6);
+    assert.equal(c.avisRepris, 0);
+});
+
+test('parseCctpRows — exclut YIELD et lignes sans livrable', () => {
+    const items = KPI.parseCctpRows([
+        { DeliverableId: 'a', ContractNumber: 'C-YIELD-STUDIO-1' },
+        { DeliverableId: '', ContractNumber: 'C-CT75-1' },
+        { DeliverableId: 'b', ContractNumber: 'C-CT75-1' },
+    ]);
+    assert.deepEqual(items.map(i => i.deliverableId), ['b']);
+});
+
+test('aggregateCctp — totaux, échecs à part, dédup DeliverableId', () => {
+    const items = KPI.parseCctpPayload(CCTP_CSV);
+    const s = KPI.aggregateCctp(items.concat([items[0]])); // doublon volontaire
+    assert.equal(s.totalLaunches, 3);
+    assert.equal(s.totalOperations, 2);
+    assert.equal(s.totalErrors, 1);
+    assert.equal(s.uniqueContracts, 2);
+    assert.equal(s.uniqueUsers, 2);
+    assert.equal(s.uniqueAgencies, 2);
+    assert.equal(s.totalAvis, 76);
+    assert.equal(s.favorable, 29);
+    assert.equal(s.suspendu, 35);
+    assert.equal(s.defavorable, 10);
+    assert.equal(s.critique, 30);
+    assert.equal(s.analysesExploitees, 1);
+    assert.equal(s.avisInjectes, 5);
+    assert.equal(s.noticesCreees, 3);
+    assert.equal(s.avisRepris, 5); // max(5 statués, 3 notices)
+    assert.deepEqual(s.byMission.L, { analyses: 2, avis: 35 });
+    assert.deepEqual(s.byMission.PV, { analyses: 1, avis: 6 });
+});
+
+test('aggregateCctp — lot vide', () => {
+    const s = KPI.aggregateCctp([]);
+    assert.equal(s.totalOperations, 0);
+    assert.equal(s.totalAvis, 0);
+    assert.deepEqual(s.byMission, {});
+});

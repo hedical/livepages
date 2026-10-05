@@ -60,7 +60,10 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 - `index.html` : Structure HTML du tableau de bord
 - `app.js` : Logique JavaScript pour le traitement des données et l'affichage
 - `pilotage-ia.html` / `pilotage-ia.js` : Page « Pilotage économique » (coût, budget, retour)
+- `copil-ia.html` / `copil-ia.js` : Page « COPIL IA » (adoption mensuelle, hausses et baisses, par grand métier)
+- `shared/copil.js` : Calcul des indicateurs COPIL et cibles (namespace `KPICopil`)
 - `autocontact-sps.html` / `autocontact-sps.js` : Page « Autocontact SPS » (contacts créés dans BTP Force)
+- `analyse-cctp.html` / `analyse-cctp.js` : Page « Analyse CCTP vs Référentiel » (card Metabase 160)
 - `tools/csv-to-autocontact-sps.js` : Convertit un export CSV du backoffice BTP Force en `autocontact_sps.json` (fichier Supabase de la brique SPS)
 - `shared/utils.js` : Module partagé (parsing CSV/JSON, dates, prédicats métier, constantes)
 - `shared/costs.js` : Module de calcul économique (registre, relevés OpenRouter, KPIs, projection)
@@ -428,10 +431,93 @@ Au passage : `initializeFeatureCards` ne cherchait qu’un id `<carte>-count`. L
 Auto Contacts affichent des « utilisations » (`<carte>-ops`) : elles n’étaient rattachées à aucun
 élément et échappaient donc au filtre filiale. Un repli sur `-ops` les y soumet comme les autres.
 
+### Analyse CCTP vs Référentiel (`analyse-cctp.html`)
+
+Brique **qualité** (pas de gain h/€, comme géotech et acoustique) : l'IA confronte le CCTP
+au référentiel réglementaire, mission par mission (L, P1, F, PV…), et produit des avis
+Favorable / Suspendu / Défavorable. Ouverture à tous les utilisateurs S+ le 12/10/2026.
+
+**Source** : card Metabase **160** (`AIDeliverable` type `CCTP_VS_REFERENTIEL`) → n8n
+→ `analyse_cctp.json` → URL signée `ANALYSE_CCTP_URL`. Détail du schéma et du SQL dans
+`metabase-queries.md`. Une ligne = une analyse. Les avis (~150 KB de `longResult` par
+livrable) sont **agrégés en SQL** : le front ne reçoit que des compteurs.
+
+**Parsing et agrégats partagés** dans `shared/utils.js` (`KPI.parseCctpPayload`,
+`KPI.aggregateCctp`) et utilisés à la fois par la tuile du dashboard et par la page détail.
+La colonne `Missions` contient des virgules et Metabase l'exporte entre guillemets : le
+parseur passe par `KPI.parseFullCSV`, pas par le split naïf des briques AnalyticEvent.
+
+KPIs affichés :
+
+- **Analyses** : livrables `COMPLETED`. Les `ERROR` sont affichés à part (« lancements en erreur ») ;
+- **Affaires, agences, utilisateurs** : l'utilisateur est le chargé d'affaires de l'affaire
+  (`SubAffair.userId`), comme pour les cards 137 et 158, car `AIDeliverable` ne porte pas l'auteur ;
+- **Avis** : total (avec le nombre de « critiques » en sous-titre), part défavorable + suspendu, répartition par mission ;
+- **Avis repris dans S+** (unité = l'avis) : par analyse, le plus grand entre les notices injectées
+  (events `Create Notice From AI CCTP`, tracés depuis le 25/09/2026) et les avis statués à
+  l'injection (`metadata.assignedStatusByCctpAvisId`) — une notice = un avis repris ;
+- **Analyses exploitées dans S+** (unité = l'analyse) : au moins un avis repris, ou un rapport
+  créé depuis l'analyse (`metadata.reportId`).
+
+L'analyse compte dans le total « utilisations » du dashboard (1 analyse = 1 utilisation) et dans
+les utilisateurs uniques. La page détail s'ouvre en mode « Depuis le début » : la brique a démarré
+le 17/09/2026, et le mois en cours n'en montrerait qu'une fraction.
+
+### COPIL IA (`copil-ia.html`)
+
+Page de décision du COPIL IA, accessible par le bouton « COPIL IA » de l'en-tête (même
+onglet, comme la page Pilotage). Elle est lue par un agent qui fait la mise en forme du
+deck : ce n'est pas une page par fonctionnalité (les pages dédiées existent pour ça),
+mais une vue des hausses et des baisses pour décider. Tous les chiffres affichés sont
+aussi publiés en JSON (bloc « Données du mois » et `window.COPIL_DATA`).
+
+Décision du COPIL de septembre 2026 : les modules ne sont plus pilotés en heures gagnées.
+Grands métiers : **pôle Conformité** = CT, SPS, Diag ; **PPI** = Citae (Nextiim et MBAcity
+ne sont pas encore tracés).
+
+- **Adoption mensuelle** : utilisateurs actifs du mois ÷ population du métier — mensuelle
+  et non cumulée, pour voir un mois qui décroche. CT = effectif de `population_cible.csv` ;
+  les autres populations sont dans `KPICopil.POPULATIONS` (`null` tant que non renseignées :
+  l'adoption s'affiche alors en nombre d'utilisateurs, jamais en % d'un dénominateur inventé) ;
+- **Systématisation** : parmi les utilisateurs actifs du mois, part de *leurs* dossiers du
+  mois traités avec le module (ex. : 80 CT ont fait un descriptif IA ; ils ont émis 281 RICT,
+  dont 169 avec l'IA → 60 %). Mesurable seulement quand la source porte aussi les dossiers
+  traités **sans** IA : Descriptif RICT, Autocontact CT, Autocontact SPS. Pas l'analyse CCTP ;
+- **Requêtes par utilisateur** : usages du mois ÷ utilisateurs actifs (usage libre = messages).
+
+Usage libre : une série « chat + expert » par métier, plus son détail **Chat projet** et
+**Expert technique** (`kind: 'libre-detail'`, `parent` = la série d'ensemble), pour voir
+lequel des deux tire une variation. Le détail n'entre pas dans le total du métier.
+
+Descriptif RICT : le seuil de 100 mots retenu en COPIL s'applique aux dossiers **et** aux
+utilisateurs — d'où un nombre d'utilisateurs qui peut différer de la tuile du dashboard.
+
+Contenu : synthèse du mois · adoption CT, tous modules et par module, avec la **cible
+d'adoption globale** (> 50 % fin 2026 ; décidée pour l'analyse CCTP, retenue pour l'ensemble) ·
+utilisateurs actifs par métier en petits multiples (échelle propre, sinon le volume CT
+écrase les autres) · carte des hausses et baisses sur 6 mois (5 indicateurs) · variations à
+expliquer · systématisation · messages par utilisateur de l'usage libre · heures pour mémoire.
+
+**Variations** : détectées par seuils fixes (`KPICopil.FLUCTUATION` : ±20 % sur un volume,
+±10 points sur un taux, base ≥ 5), **sans LLM**. La page ne stocke aucun commentaire :
+l'explication est rédigée par l'agent ou en séance.
+
+**Données** : `app.js` publie en fin de `loadData()` l'instantané
+`sessionStorage['kpi_snapshot_copil']` (`publishCopilSnapshot`, filtres neutralisés par
+`withFiltersCleared`, agrégats seulement, aucun email), avec une série par module et une
+par métier (tous modules, un utilisateur compté une fois par mois). Le calcul est dans
+`shared/copil.js` (namespace `KPICopil`, testé par `tests/copil.test.js`), qui porte aussi
+les **cibles** : 772 h / mois et 9 256 h / an (source unique, reprise par les jauges du
+dashboard) et la cible d'adoption (cible intermédiaire fin mars à fixer, affichée comme telle).
+
 ### Tests
 
 ```bash
 node --test tests/utils.test.js
+```
+
+```bash
+node --test tests/copil.test.js
 ```
 
 ```bash

@@ -12,6 +12,7 @@ let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
 let AO_URL = ''; // exposée par le webhook passwordROI sous le nom ANALYSE_AO_URL ; pas de fallback hardcodé
 let ACOUSTIQUE_URL = ''; // exposée par le webhook sous le nom ANALYSE_ACOUSTIQUE_URL ; pas de fallback hardcodé
+let CCTP_URL = ''; // exposée par le webhook sous le nom ANALYSE_CCTP_URL (card 160) ; pas de fallback hardcodé
 // URLs chat/expert/population : remplacées par les URLs SIGNÉES du webhook
 // après auth (fallback public conservé le temps de la transition bucket privé).
 let EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
@@ -78,6 +79,7 @@ let autocontactSpsData = []; // Autocontact SPS — source = backoffice BTP Forc
 let nfHabitatData = [];
 let geotechData = [];
 let acoustiqueData = [];
+let cctpData = []; // Analyse CCTP vs Référentiel — 1 item = 1 livrable (cf. KPI.parseCctpRows)
 let aoMarches = []; // [{marcheId, refMarche, typeAvis, dateDetection, leads:[...]}]
 let agencyPopulation = {}; // {agencyCode: effectif}
 let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
@@ -189,6 +191,14 @@ const analyseGeoUsersEl = document.getElementById('analyse-geo-users');
 const analyseAcouCountEl = document.getElementById('analyse-acou-count');
 const analyseAcouContractsEl = document.getElementById('analyse-acou-contracts');
 const analyseAcouUsersEl = document.getElementById('analyse-acou-users');
+const analyseAcouNoticesEl = document.getElementById('analyse-acou-notices');
+const analyseAcouReportsEl = document.getElementById('analyse-acou-reports');
+
+// Analyse CCTP vs Référentiel (BTP Consultants) elements
+const analyseCctpCountEl = document.getElementById('analyse-cctp-count');
+const analyseCctpContractsEl = document.getElementById('analyse-cctp-contracts');
+const analyseCctpAvisEl = document.getElementById('analyse-cctp-avis');
+const analyseCctpUsersEl = document.getElementById('analyse-cctp-users');
 
 // Analyse AO (BTP Consultants) elements
 const analyseAoCaptesEl   = document.getElementById('analyse-ao-captes');
@@ -663,6 +673,8 @@ function parseAnalyticEventsJSON(jsonArray, noticeRe, reportRe, label, keepRe) {
             deliverableId: (item['DeliverableId'] || '').trim(),
             reportId: (item['ReportId'] || '').trim(),
             noticesCount: parseInt(item['NoticesCount']) || 0,
+            // Card 158 : nb de rapports créés depuis le livrable (events Create Report).
+            reportsCount: parseInt(item['ReportsCount']) || 0,
             contractNumber,
             agencyCode,
             email: (item['UserEmail'] || '').trim(),
@@ -1084,6 +1096,7 @@ function extractDirectionsAndAgencies() {
     processItems(chatBTPDiagData);
     processItems(geotechData);
     processItems(acoustiqueData);
+    processItems(cctpData);
 
     availableDirections = Array.from(directions).sort();
     availableAgencies = Array.from(agencies).sort();
@@ -1704,22 +1717,38 @@ function processGeotechData(data) {
 }
 
 // Brique qualité (pas de gain h/€), source AIDeliverable : opérations
-// (dédup DeliverableId), affaires uniques, utilisateurs uniques.
+// (dédup DeliverableId), affaires uniques, utilisateurs uniques. L'injection
+// dans S+ (notices, rapports) est portée par chaque ligne livrable (card 158,
+// lue dans les events Create Notice/Report From AI Acoustic).
 function processAcoustiqueData(data) {
     const filtered = getFilteredData(data);
     const uniqueUsers = new Set();
     const uniqueDeliverables = new Set();
     const uniqueContracts = new Set();
+    let totalNotices = 0;
+    let totalReports = 0;
     filtered.forEach(item => {
         if (item.email) uniqueUsers.add(item.email);
-        if (item.deliverableId) uniqueDeliverables.add(item.deliverableId);
         if (item.contractNumber) uniqueContracts.add(item.contractNumber);
+        if (!item.deliverableId || uniqueDeliverables.has(item.deliverableId)) return;
+        uniqueDeliverables.add(item.deliverableId);
+        totalNotices += item.noticesCount || 0;
+        totalReports += item.reportsCount || 0;
     });
     return {
         totalOperations: uniqueDeliverables.size,
         uniqueContracts: uniqueContracts.size,
         uniqueUsers: uniqueUsers.size,
+        totalNotices,
+        totalReports,
     };
+}
+
+// Analyse CCTP vs Référentiel : brique qualité (pas de gain h/€). Agrégats
+// partagés avec analyse-cctp.html (KPI.aggregateCctp) ; les lancements en
+// erreur ne comptent pas comme analyses.
+function processCctpData(data) {
+    return KPI.aggregateCctp(getFilteredData(data));
 }
 
 /**
@@ -2028,6 +2057,7 @@ function updateKPIs() {
     const comparateurStats = processComparateurData(comparateurData);
     const geotechStats = processGeotechData(geotechData);
     const acoustiqueStats = processAcoustiqueData(acoustiqueData);
+    const cctpStats = processCctpData(cctpData);
     const expertBTPStats = processExpertBTPData(expertBTPData);
     const chatBTPStats = processChatBTPData(chatBTPData);
     const expertCitaeStats = processExpertCitaeData(expertCitaeData);
@@ -2042,7 +2072,7 @@ function updateKPIs() {
     // Global stats
     // For autocontact, use uniqueOperations (number of usages) instead of aiContacts (total contacts generated)
     // For geotech, use totalOperations (distinct DeliverableId) — one operation = 1 notice + 1 report, so we dedup.
-    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + autocontactSpsStats.uniqueOperations + nfHabitatStats.totalControls + geotechStats.totalOperations + acoustiqueStats.totalOperations;
+    const totalUtilisations = descriptifStats.totalUtilisations + autocontactStats.uniqueOperations + comparateurStats.totalComparisons + expertBTPStats.totalSessions + chatBTPStats.totalSessions + expertCitaeStats.totalSessions + chatCitaeStats.totalSessions + expertBTPDiagStats.totalSessions + chatBTPDiagStats.totalSessions + expertBtpSpsStats.totalSessions + chatBtpSpsStats.totalSessions + autocontactSpsStats.uniqueOperations + nfHabitatStats.totalControls + geotechStats.totalOperations + acoustiqueStats.totalOperations + cctpStats.totalOperations;
     const allUsers = new Set();
     
     getFilteredData(descriptifData).filter(item => isDescriptifRow(item)).forEach(item => {
@@ -2068,6 +2098,10 @@ function updateKPIs() {
     });
 
     getFilteredData(acoustiqueData).forEach(item => {
+        if (item.email) allUsers.add(item.email);
+    });
+
+    getFilteredData(cctpData).filter(item => item.status !== 'ERROR').forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
 
@@ -2180,6 +2214,14 @@ function updateKPIs() {
     if (analyseAcouCountEl) analyseAcouCountEl.textContent = formatNumber(acoustiqueStats.totalOperations);
     if (analyseAcouContractsEl) analyseAcouContractsEl.textContent = formatNumber(acoustiqueStats.uniqueContracts);
     if (analyseAcouUsersEl) analyseAcouUsersEl.textContent = formatNumber(acoustiqueStats.uniqueUsers);
+    if (analyseAcouNoticesEl) analyseAcouNoticesEl.textContent = formatNumber(acoustiqueStats.totalNotices);
+    if (analyseAcouReportsEl) analyseAcouReportsEl.textContent = formatNumber(acoustiqueStats.totalReports);
+
+    // Analyse CCTP vs Référentiel tile
+    if (analyseCctpCountEl) analyseCctpCountEl.textContent = formatNumber(cctpStats.totalOperations);
+    if (analyseCctpContractsEl) analyseCctpContractsEl.textContent = formatNumber(cctpStats.uniqueContracts);
+    if (analyseCctpAvisEl) analyseCctpAvisEl.textContent = formatNumber(cctpStats.totalAvis);
+    if (analyseCctpUsersEl) analyseCctpUsersEl.textContent = formatNumber(cctpStats.uniqueUsers);
 
     // Analyse AO stats (funnel : captés → filtrés → analysés → opportunité)
     const aoStats = processAOData(aoMarches);
@@ -2375,6 +2417,7 @@ async function authenticateWithPassword(password) {
         const geotechMatch     = urlRegex('GEOTECH_URL');
         const aoMatch          = urlRegex('ANALYSE_AO_URL');
         const acoustiqueMatch  = urlRegex('ANALYSE_ACOUSTIQUE_URL');
+        const cctpMatch        = urlRegex('ANALYSE_CCTP_URL');
 
         if (descriptifMatch && autocontactMatch && comparateurMatch) {
             DESCRIPTIF_URL = descriptifMatch[1];
@@ -2384,6 +2427,7 @@ async function authenticateWithPassword(password) {
             if (geotechMatch) GEOTECH_URL = geotechMatch[1];
             if (aoMatch) AO_URL = aoMatch[1];
             if (acoustiqueMatch) ACOUSTIQUE_URL = acoustiqueMatch[1];
+            if (cctpMatch) CCTP_URL = cctpMatch[1];
             const autocontactSpsMatch = urlRegex('AUTOCONTACT_SPS_URL');
             if (autocontactSpsMatch) AUTOCONTACT_SPS_URL = autocontactSpsMatch[1];
 
@@ -2642,6 +2686,23 @@ async function loadData() {
             }
         } else {
             console.log('No ANALYSE_ACOUSTIQUE_URL configured — analyse acoustique tile will show 0.');
+        }
+
+        // Load Analyse CCTP vs Référentiel data (optional — depends on n8n exposing ANALYSE_CCTP_URL)
+        if (CCTP_URL) {
+            try {
+                const cctpResponse = await fetch(CCTP_URL);
+                if (cctpResponse.ok) {
+                    cctpData = KPI.parseCctpPayload(await cctpResponse.text());
+                    console.log('Loaded', cctpData.length, 'CCTP deliverables');
+                } else {
+                    console.warn('CCTP URL responded with status', cctpResponse.status);
+                }
+            } catch (e) {
+                console.warn('Failed to load CCTP data:', e);
+            }
+        } else {
+            console.log('No ANALYSE_CCTP_URL configured — analyse CCTP tile will show 0.');
         }
 
         // Load Analyse AO data (optional — depends on n8n exposing ANALYSE_AO_URL)
@@ -3071,6 +3132,8 @@ async function loadData() {
 
         // Instantané des gains pour la page « Pilotage économique »
         publishGainsSnapshot();
+        // Instantané adoption / systématisation pour la page « COPIL IA »
+        publishCopilSnapshot();
 
         // Show main content
         loadingEl.classList.add('hidden');
@@ -3092,6 +3155,8 @@ const featureCards = [
     { id: 'chat-projet-btp', filiale: 'BTP Consultants', element: null },
     { id: 'expert-tech-btp', filiale: 'BTP Consultants', element: null },
     { id: 'analyse-geo', filiale: 'BTP Consultants', element: null },
+    { id: 'analyse-acou', filiale: 'BTP Consultants', element: null },
+    { id: 'analyse-cctp', filiale: 'BTP Consultants', element: null },
     { id: 'chat-projet-citae', filiale: 'Citae', element: null },
     { id: 'expert-tech-citae', filiale: 'Citae', element: null },
     { id: 'nf-habitat', filiale: 'Citae', element: null },
@@ -4138,51 +4203,233 @@ function calculateWindowedGains() {
  * rafraîchissement. Même technique que calculateWindowedGains pour les dates,
  * étendue aux filtres d'organisation qui sont lus directement dans le DOM.
  */
-function publishGainsSnapshot() {
-    if (typeof sessionStorage === 'undefined') return;
-
+// Exécute fn avec TOUS les filtres neutralisés (date, filiale, direction,
+// agence), puis les restaure — même en cas d'exception. Utilisé par les
+// instantanés publiés pour les pages macro, qui veulent le périmètre groupe
+// quel que soit l'état du dashboard.
+function withFiltersCleared(fn) {
     const savedDates = { startDate: dateFilter.startDate, endDate: dateFilter.endDate };
     const savedOrg = {
         filiale: filialeFilterEl ? filialeFilterEl.value : '',
         direction: directionFilterEl ? directionFilterEl.value : '',
         agency: agencyFilterEl ? agencyFilterEl.value : '',
     };
-
     try {
         dateFilter.startDate = null;
         dateFilter.endDate = null;
         if (filialeFilterEl) filialeFilterEl.value = '';
         if (directionFilterEl) directionFilterEl.value = '';
         if (agencyFilterEl) agencyFilterEl.value = '';
-
-        const byMonth = {};
-        calculateMonthlyGains().forEach(m => {
-            byMonth[m.key] = { hours: m.hours, users: 0 };
-        });
-        const monthlyUsers = calculateMonthlyUsers();
-        monthlyUsers.forEach(m => {
-            if (!byMonth[m.key]) byMonth[m.key] = { hours: 0, users: 0 };
-            byMonth[m.key].users = m.activeUsers;
-        });
-
-        sessionStorage.setItem('kpi_snapshot_gains', JSON.stringify({
-            generatedAt: new Date().toISOString(),
-            effectif: TOTAL_EFFECTIF,
-            byMonth,
-            totalUsersAllTime: monthlyUsers.length
-                ? monthlyUsers[monthlyUsers.length - 1].cumulativeUsers
-                : 0,
-        }));
-    } catch (e) {
-        // Un instantané manquant dégrade proprement la page macro (deux KPIs en
-        // « — ») : jamais de quoi interrompre le chargement du dashboard.
-        console.warn('Instantané des gains non publié.', e);
+        return fn();
     } finally {
         dateFilter.startDate = savedDates.startDate;
         dateFilter.endDate = savedDates.endDate;
         if (filialeFilterEl) filialeFilterEl.value = savedOrg.filiale;
         if (directionFilterEl) directionFilterEl.value = savedOrg.direction;
         if (agencyFilterEl) agencyFilterEl.value = savedOrg.agency;
+    }
+}
+
+function publishGainsSnapshot() {
+    if (typeof sessionStorage === 'undefined') return;
+
+    try {
+        withFiltersCleared(() => {
+            const byMonth = {};
+            calculateMonthlyGains().forEach(m => {
+                byMonth[m.key] = { hours: m.hours, users: 0 };
+            });
+            const monthlyUsers = calculateMonthlyUsers();
+            monthlyUsers.forEach(m => {
+                if (!byMonth[m.key]) byMonth[m.key] = { hours: 0, users: 0 };
+                byMonth[m.key].users = m.activeUsers;
+            });
+
+            sessionStorage.setItem('kpi_snapshot_gains', JSON.stringify({
+                generatedAt: new Date().toISOString(),
+                effectif: TOTAL_EFFECTIF,
+                byMonth,
+                totalUsersAllTime: monthlyUsers.length
+                    ? monthlyUsers[monthlyUsers.length - 1].cumulativeUsers
+                    : 0,
+            }));
+        });
+    } catch (e) {
+        // Un instantané manquant dégrade proprement la page macro (deux KPIs en
+        // « — ») : jamais de quoi interrompre le chargement du dashboard.
+        console.warn('Instantané des gains non publié.', e);
+    }
+}
+
+/**
+ * Publie l'instantané consommé par la page « COPIL IA » (copil-ia.html).
+ *
+ * Le COPIL de septembre 2026 a décidé de piloter les modules sur l'ADOPTION
+ * MENSUELLE (actifs du mois ÷ population concernée) et la SYSTÉMATISATION
+ * (part des dossiers des actifs du mois traités avec le module), ventilées
+ * par grand métier : pôle Conformité (CT, SPS, Diag) et PPI (Citae). Ce n'est
+ * PAS le même calcul que les tuiles du dashboard : ici on suit des
+ * utilisateurs et des dossiers mois par mois.
+ *
+ * app.js ne fait que normaliser chaque source en événements
+ * { email, month, dossier, requests } (et, quand la source porte aussi les
+ * dossiers SANS IA, en parc { email, month, dossier }). Le calcul des séries
+ * est dans shared/copil.js, testé en Node.
+ *
+ * Seuls des agrégats sont stockés (aucun email) : sessionStorage, même
+ * onglet — mêmes règles que kpi_snapshot_gains.
+ */
+function publishCopilSnapshot() {
+    if (typeof sessionStorage === 'undefined' || typeof KPICopil === 'undefined') return;
+
+    try {
+        withFiltersCleared(() => {
+            const notYield = item => !(item.contractNumber || '').toUpperCase().includes('YIELD');
+            const ev = (item, dossier, requests) => ({
+                email: item.email,
+                month: getMonthKey(item.createdAt),
+                dossier: dossier || '',
+                requests,
+            });
+            const parcOf = items => items
+                .filter(item => item.contractNumber)
+                .map(item => ({ email: item.email, month: getMonthKey(item.createdAt), dossier: item.contractNumber }));
+            // Les sources AIDeliverable / AnalyticEvent portent plusieurs lignes
+            // par livrable (Notice + Report) : un livrable = une utilisation.
+            const uniqueDeliverables = items => {
+                const seen = new Set();
+                return items.filter(item => {
+                    if (!item.deliverableId) return true;
+                    if (seen.has(item.deliverableId)) return false;
+                    seen.add(item.deliverableId);
+                    return true;
+                });
+            };
+            const wordCount = item => (typeof item.descriptionWordCount === 'number')
+                ? item.descriptionWordCount
+                : countWords(extractText(item.description || ''));
+            const fromDomain = d => item => (item.email || '').includes(d);
+            const any = () => true;
+
+            // Descriptif — seuil retenu en COPIL : au-delà de 100 mots l'IA
+            // apporte une valeur réelle. Il s'applique aux dossiers ET aux
+            // utilisateurs (un descriptif plus court ne fait pas un adoptant).
+            const rict = descriptifData.filter(item => notYield(item) && item.contractNumber);
+            const descriptifIA = rict.filter(item => isDescriptifRow(item) && wordCount(item) >= 100);
+
+            const autocontactCT = autocontactData.filter(notYield);
+            const autocontactCTIA = autocontactCT.filter(item => item.fromAI && fromDomain('@btp-consultants.fr')(item));
+
+            const cctpOk = uniqueDeliverables(cctpData).filter(item => item.status !== 'ERROR');
+
+            // Usage libre : une requête = un message. Trois séries par métier :
+            // l'ensemble (kind 'libre') et son détail chat / expert (kind
+            // 'libre-detail', parent = l'ensemble), pour voir lequel tire une
+            // hausse ou une baisse.
+            const messages = (data, keep) => data.filter(keep).map(item => ev(item, '', item.messagesLength || 0));
+            const usageLibre = (metier, suffix, chat, expert, keep) => {
+                const parent = `libre-${suffix}`;
+                const c = messages(chat, keep), e = messages(expert, keep);
+                return [
+                    { id: parent, label: 'Usage libre (chat + expert)', metier, kind: 'libre', unite: 'message',
+                      events: c.concat(e), parc: null },
+                    { id: `chat-${suffix}`, label: 'Chat projet', metier, kind: 'libre-detail', parent, unite: 'message',
+                      events: c, parc: null },
+                    { id: `expert-${suffix}`, label: 'Expert technique', metier, kind: 'libre-detail', parent, unite: 'message',
+                      events: e, parc: null },
+                ];
+            };
+
+            const sources = [
+                { id: 'descriptif', label: 'Descriptif RICT', metier: 'CT', kind: 'module', unite: 'RICT',
+                  events: descriptifIA.map(i => ev(i, i.contractNumber, 1)), parc: parcOf(rict) },
+                { id: 'analyse-cctp', label: 'Analyse CCTP', metier: 'CT', kind: 'module', unite: 'affaire',
+                  events: cctpOk.map(i => ev(i, i.contractNumber, 1)), parc: null },
+                { id: 'autocontact', label: 'Autocontact', metier: 'CT', kind: 'module', unite: 'affaire',
+                  events: autocontactCTIA.map(i => ev(i, i.contractNumber, 1)), parc: parcOf(autocontactCT) },
+                { id: 'comparateur', label: "Comparateur d'indices", metier: 'CT', kind: 'module', unite: 'affaire',
+                  events: comparateurData.map(i => ev(i, i.contractNumber, 1)), parc: null },
+                { id: 'analyse-geo', label: 'Analyse géotechnique', metier: 'CT', kind: 'module', unite: 'affaire',
+                  events: uniqueDeliverables(geotechData).map(i => ev(i, i.contractNumber, 1)), parc: null },
+                { id: 'analyse-acou', label: 'Analyse acoustique', metier: 'CT', kind: 'module', unite: 'affaire',
+                  events: uniqueDeliverables(acoustiqueData).map(i => ev(i, i.contractNumber, 1)), parc: null },
+                ...usageLibre('CT', 'ct', chatBTPData, expertBTPData, fromDomain('@btp-consultants.fr')),
+
+                { id: 'autocontact-sps', label: 'Autocontact SPS', metier: 'SPS', kind: 'module', unite: 'affaire',
+                  events: autocontactSpsData.filter(i => i.fromAI).map(i => ev(i, i.contractNumber, 1)),
+                  parc: parcOf(autocontactSpsData) },
+                ...usageLibre('SPS', 'sps', chatBtpSpsData, expertBtpSpsData, any),
+
+                ...usageLibre('DIAG', 'diag', chatBTPDiagData, expertBTPDiagData, fromDomain('@btp-diagnostics.fr')),
+
+                // PPI : seule Citae est tracée (Nextiim et MBAcity pas encore).
+                { id: 'nf-habitat', label: 'NF Habitat', metier: 'PPI', kind: 'module', unite: 'projet',
+                  events: nfHabitatData.filter(isNFHabitatItem).map(i => ev(i, i.projectId, 1)), parc: null },
+                ...usageLibre('PPI', 'ppi', chatCitaeData, expertCitaeData, fromDomain('@citae.fr')),
+            ];
+
+            // Heures gagnées par grand métier : le COPIL ne pilote plus les
+            // modules en heures, mais la cible mensuelle reste suivie.
+            const hoursByMonth = {};
+            calculateMonthlyGains().forEach(m => {
+                hoursByMonth[m.key] = {
+                    total: m.hours,
+                    CT: m.hoursDescriptif + m.hoursAutocontact + m.hoursComparateur
+                        + m.hoursChatBTP + m.hoursExpertBTP + m.hoursAO,
+                    SPS: m.hoursChatBtpSps + m.hoursExpertBtpSps + m.hoursAutocontactSps,
+                    DIAG: m.hoursChatBTPDiag + m.hoursExpertBTPDiag,
+                    PPI: m.hoursChatCitae + m.hoursExpertCitae + m.hoursNFHabitat,
+                };
+            });
+
+            // Plage commune : du premier mois vu au mois en cours, sans trou
+            // (un mois à zéro doit rester visible sur les courbes).
+            const seenMonths = Object.keys(hoursByMonth);
+            sources.forEach(src => src.events.forEach(e => { if (e.month) seenMonths.push(e.month); }));
+            const now = new Date();
+            const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const firstKey = seenMonths.length ? seenMonths.reduce((a, b) => (a < b ? a : b)) : currentKey;
+            const months = KPICopil.monthRange(firstKey, currentKey);
+
+            // Une série ne commence qu'au premier usage : avant, une adoption à
+            // 0 % se lirait comme un échec.
+            const trimmed = (series) => {
+                const firstUse = series.findIndex(r => r.activeUsers > 0);
+                return {
+                    startMonth: firstUse >= 0 ? series[firstUse].month : null,
+                    series: firstUse >= 0 ? series.slice(firstUse) : [],
+                };
+            };
+
+            const modules = sources.map(src => Object.assign({
+                id: src.id, label: src.label, metier: src.metier, kind: src.kind, unite: src.unite,
+                parent: src.parent || null,
+                hasParc: Array.isArray(src.parc),
+            }, trimmed(KPICopil.buildModuleSeries(src.events, src.parc, months))));
+
+            // Par métier, tous modules confondus : un utilisateur compte une
+            // fois par mois quel que soit le nombre de modules utilisés.
+            const metiers = KPICopil.METIER_ORDER.map(k => Object.assign({
+                id: k, label: KPICopil.METIERS[k].label, metier: k,
+            }, trimmed(KPICopil.buildModuleSeries(
+                [].concat(...sources.filter(src => src.metier === k && src.kind !== 'libre-detail')
+                    .map(src => src.events)), null, months))));
+
+            sessionStorage.setItem('kpi_snapshot_copil', JSON.stringify({
+                generatedAt: new Date().toISOString(),
+                months,
+                // CT : population_cible.csv (contrôleurs par agence). Les autres
+                // métiers : KPICopil.POPULATIONS (null tant que non renseignée).
+                populations: Object.assign({}, KPICopil.POPULATIONS, { CT: TOTAL_EFFECTIF }),
+                hoursByMonth,
+                metiers,
+                modules,
+            }));
+        });
+    } catch (e) {
+        // Même règle que l'instantané des gains : la page COPIL se dégrade
+        // (message « ouvrir d'abord la plateforme »), le dashboard continue.
+        console.warn('Instantané COPIL non publié.', e);
     }
 }
 
@@ -4318,17 +4565,17 @@ function updateObjectiveGauges() {
     updateGaugeSVG(
         'gauge-monthly-arc', 'gauge-monthly-value', 'gauge-monthly-sub',
         'gauge-monthly-badge', 'gauge-monthly-label',
-        monthlyHours, 772,
+        monthlyHours, KPICopil.CIBLES.gainMensuelHeures,
         `${monthLabel} ${selectedYear}`,
-        'sur 772 h'
+        `sur ${formatNumber(KPICopil.CIBLES.gainMensuelHeures)} h`
     );
 
     updateGaugeSVG(
         'gauge-annual-arc', 'gauge-annual-value', 'gauge-annual-sub',
         'gauge-annual-badge', 'gauge-annual-label',
-        annualHours, 9256,
+        annualHours, KPICopil.CIBLES.gainAnnuelHeures,
         annualLabel,
-        'sur 9 256 h'
+        `sur ${formatNumber(KPICopil.CIBLES.gainAnnuelHeures)} h`
     );
 }
 
