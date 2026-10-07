@@ -385,3 +385,110 @@ test('aggregateCctp — lot vide', () => {
     assert.equal(s.totalAvis, 0);
     assert.deepEqual(s.byMission, {});
 });
+
+// ===================== note d'adoption =====================
+
+test('weekIndex — lundi → dimanche dans la même semaine', () => {
+    const lundi = new Date(2026, 9, 5), dimanche = new Date(2026, 9, 11, 23, 59), lundiSuivant = new Date(2026, 9, 12);
+    assert.equal(KPI.weekIndex(lundi), KPI.weekIndex(dimanche));
+    assert.equal(KPI.weekIndex(lundiSuivant), KPI.weekIndex(lundi) + 1);
+});
+
+test('exposureWeight — 0 au lancement, prorata, plein après 8 semaines', () => {
+    const launch = new Date(2026, 8, 17);
+    assert.equal(KPI.exposureWeight(launch, new Date(2026, 8, 17)), 0);
+    assert.equal(KPI.exposureWeight(launch, new Date(2026, 9, 8)), 3 / 8);
+    assert.equal(KPI.exposureWeight(launch, new Date(2026, 11, 31)), 1);
+    assert.equal(KPI.exposureWeight(new Date(2026, 11, 1), new Date(2026, 9, 1)), 0); // lancé après la référence
+    assert.equal(KPI.exposureWeight(null, new Date()), 1);
+});
+
+test('adoptionLevel — seuils', () => {
+    assert.equal(KPI.adoptionLevel(100), 'Adopté');
+    assert.equal(KPI.adoptionLevel(80), 'Adopté');
+    assert.equal(KPI.adoptionLevel(79), 'Régulier');
+    assert.equal(KPI.adoptionLevel(40), 'Occasionnel');
+    assert.equal(KPI.adoptionLevel(39), 'Découverte');
+    assert.equal(KPI.adoptionLevel(0), 'Découverte');
+});
+
+test('adoptionScore — utilisateur assidu : note maximale', () => {
+    const ref = new Date(2026, 9, 6);
+    const r = KPI.adoptionScore({
+        sessions: 582, activeWeeks: 10, firstDate: new Date(2026, 7, 3), lastDate: new Date(2026, 9, 5),
+        modulesUsed: 8, exposure: 7.4,
+    }, ref);
+    assert.equal(r.score, 100);
+    assert.equal(r.level, 'Adopté');
+});
+
+test('adoptionScore — une seule session aujourd\'hui : Découverte', () => {
+    const ref = new Date(2026, 9, 6);
+    const r = KPI.adoptionScore({
+        sessions: 1, activeWeeks: 1, firstDate: ref, lastDate: ref, modulesUsed: 1, exposure: 3,
+    }, ref);
+    // récurrence 1/8 · volume ln2/ln101 · diversité 1/3 · fraîcheur pleine
+    assert.equal(r.details.weeksObserved, 8);
+    assert.equal(r.score, Math.round(35 / 8 + 25 * Math.log(2) / Math.log(101) + 20 / 3 + 20));
+    assert.equal(r.level, 'Découverte');
+});
+
+test('adoptionScore — fraîcheur par paliers', () => {
+    const ref = new Date(2026, 9, 6);
+    const at = days => KPI.adoptionScore({
+        sessions: 0, activeWeeks: 0, firstDate: null, lastDate: new Date(2026, 9, 6 - days), modulesUsed: 0, exposure: 1,
+    }, ref).parts.freshness;
+    assert.equal(at(7), 20);
+    assert.equal(at(8), 14);
+    assert.equal(at(30), 14);
+    assert.equal(at(60), 8);
+    assert.equal(at(90), 4);
+    assert.equal(at(91), 0);
+});
+
+test('adoptionScore — un module récent ne pénalise pas, l\'utiliser tôt rapporte', () => {
+    const ref = new Date(2026, 9, 6);
+    const base = { sessions: 10, activeWeeks: 4, firstDate: new Date(2026, 8, 1), lastDate: ref };
+    const sansNouveau = KPI.adoptionScore(Object.assign({ modulesUsed: 5, exposure: 7 }, base), ref);
+    const nouveauAjoute = KPI.adoptionScore(Object.assign({ modulesUsed: 5, exposure: 7 + 0.375 }, base), ref);
+    const avecNouveau = KPI.adoptionScore(Object.assign({ modulesUsed: 6, exposure: 7 + 0.375 }, base), ref);
+    assert.ok(sansNouveau.parts.diversity - nouveauAjoute.parts.diversity < 1);
+    assert.ok(avecNouveau.parts.diversity > sansNouveau.parts.diversity);
+    // jamais plus que le plein score
+    assert.equal(KPI.adoptionScore(Object.assign({ modulesUsed: 6, exposure: 5.2 }, base), ref).parts.diversity, 20);
+});
+
+test('adoptionScore — déterministe (indépendant de l\'heure d\'appel)', () => {
+    const u = { sessions: 13, activeWeeks: 5, firstDate: new Date(2026, 6, 28), lastDate: new Date(2026, 9, 3), modulesUsed: 2, exposure: 3 };
+    const ref = new Date(2026, 9, 6);
+    assert.deepEqual(KPI.adoptionScore(u, ref), KPI.adoptionScore(Object.assign({}, u), new Date(2026, 9, 6, 23, 0)));
+});
+
+test('median — impair, pair, vide', () => {
+    assert.equal(KPI.median([3, 1, 2]), 2);
+    assert.equal(KPI.median([10, 40, 20, 30]), 25);
+    assert.equal(KPI.median([]), null);
+    assert.equal(KPI.median(null), null);
+});
+
+test('mode — plus fréquent, égalité départagée par ordre alphabétique, vides ignorés', () => {
+    assert.equal(KPI.mode(['LYCT', 'BXCT', 'LYCT']), 'LYCT');
+    assert.equal(KPI.mode(['LYCT', 'BXCT']), 'BXCT');
+    assert.equal(KPI.mode(['', '', 'BXCT']), 'BXCT');
+    assert.equal(KPI.mode(['', null]), null);
+});
+
+test('adoptionSummary — effectif, médiane, niveaux à zéro inclus, part Régulier et plus', () => {
+    const s = KPI.adoptionSummary([
+        { score: 90, level: 'Adopté' }, { score: 65, level: 'Régulier' },
+        { score: 45, level: 'Occasionnel' }, { score: 10, level: 'Découverte' },
+    ]);
+    assert.equal(s.count, 4);
+    assert.equal(s.median, 55);
+    assert.deepEqual(s.levels, { 'Adopté': 1, 'Régulier': 1, 'Occasionnel': 1, 'Découverte': 1 });
+    assert.equal(s.regularShare, 0.5);
+    const vide = KPI.adoptionSummary([]);
+    assert.equal(vide.median, null);
+    assert.equal(vide.regularShare, null);
+    assert.equal(vide.levels['Adopté'], 0);
+});

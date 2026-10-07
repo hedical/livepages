@@ -661,19 +661,31 @@
                     <h3 class="text-lg font-semibold text-gray-900">Utilisateurs</h3>
                     <p class="text-sm text-gray-500 mt-0.5" id="users-list-subtitle">Données de population et d'activité</p>
                 </div>
+                <div class="flex items-center gap-2">
+                <button id="export-adoption-xlsx" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors" title="Synthèse, utilisateurs actifs et adoption par agence — période du filtre de dates">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    <span id="export-adoption-xlsx-label">Exporter Excel</span>
+                </button>
                 <button id="close-users-list-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
+                </div>
             </div>
             <!-- Tabs -->
             <div class="flex border-b border-gray-200 px-6 flex-shrink-0">
                 <button id="tab-population" class="px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors">
                     Population cible <span class="ml-1.5 px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full" id="tab-population-count">—</span>
                 </button>
-                <button id="tab-active-users" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2">
+                <button id="tab-synthesis" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2">
+                    Synthèse adoption
+                </button>
+                <button id="tab-active-users"class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2">
                     Utilisateurs actifs <span class="ml-1.5 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full" id="tab-active-count">—</span>
+                </button>
+                <button id="tab-agencies" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2">
+                    Adoption par agence <span class="ml-1.5 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full" id="tab-agencies-count">—</span>
                 </button>
             </div>
             <!-- Tab content -->
@@ -697,6 +709,45 @@
                     </table>
                 </div>
 
+                <!-- Synthèse adoption tab -->
+                <div id="panel-synthesis" class="hidden">
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <p class="text-sm text-gray-600">Répartition des utilisateurs actifs par profil d'adoption, sur la période du filtre de dates.</p>
+                        <select id="synthesis-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Toutes les filiales</option>
+                            <option value="BTP Consultants">BTP Consultants</option>
+                            <option value="BTP Consultants SPS">BTP Consultants SPS</option>
+                            <option value="Citae">Citae</option>
+                            <option value="BTP Diagnostics">BTP Diagnostics</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5" id="synthesis-tiles"></div>
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+                        <div class="lg:col-span-2 border border-gray-200 rounded-xl p-4">
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Profils d'adoption</h4>
+                            <div class="relative mx-auto" style="max-width: 260px;">
+                                <canvas id="synthesis-pie" role="img" aria-label="Répartition des utilisateurs par profil d'adoption"></canvas>
+                            </div>
+                            <ul id="synthesis-legend" class="mt-4 space-y-1.5 text-sm"></ul>
+                        </div>
+                        <div class="lg:col-span-3 border border-gray-200 rounded-xl p-4">
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Par filiale</h4>
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-left text-gray-500 text-xs">
+                                        <th class="pb-2 font-semibold">Filiale</th>
+                                        <th class="pb-2 font-semibold text-right">Utilisateurs</th>
+                                        <th class="pb-2 font-semibold text-right">Médiane</th>
+                                        <th class="pb-2 font-semibold pl-4">Répartition</th>
+                                        <th class="pb-2 font-semibold text-right">Régulier +</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="synthesis-filiales" class="divide-y divide-gray-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Utilisateurs actifs tab -->
                 <div id="panel-active-users" class="hidden">
                     <div class="flex items-center gap-3 mb-4">
@@ -704,7 +755,7 @@
                             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
-                            <input id="users-list-search" type="text" placeholder="Rechercher par email…" class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <input id="users-list-search" type="text" placeholder="Rechercher par email ou agence…" class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                         </div>
                         <select id="users-list-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="">Toutes les filiales</option>
@@ -712,7 +763,9 @@
                             <option value="Citae">Citae</option>
                             <option value="BTP Diagnostics">BTP Diagnostics</option>
                             <option value="BTP Consultants SPS">BTP Consultants SPS</option>
-                            <option value="Autre">Autre</option>
+                        </select>
+                        <select id="users-list-niveau" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Tous les niveaux</option>
                         </select>
                     </div>
                     <table class="w-full text-sm">
@@ -722,14 +775,55 @@
                                 <th class="px-4 py-2.5 font-semibold text-gray-600">Filiale</th>
                                 <th class="px-4 py-2.5 font-semibold text-gray-600">Fonctionnalités</th>
                                 <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Sessions</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg">Dernière activité</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Dernière activité</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg whitespace-nowrap">
+                                    <button id="users-sort-adoption" type="button" class="font-semibold hover:text-indigo-600" title="Trier par note d'adoption">Adoption <span id="users-sort-adoption-arrow" class="text-gray-400">↕</span></button>
+                                    <span id="adoption-method-info" class="inline-flex align-middle ml-1 cursor-help text-gray-400 hover:text-indigo-600" aria-label="Méthode de calcul de la note d'adoption">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody id="active-users-table-body" class="divide-y divide-gray-100"></tbody>
                     </table>
                     <p class="text-xs text-gray-400 text-center mt-4" id="active-users-count-label"></p>
                 </div>
+
+                <!-- Adoption par agence tab -->
+                <div id="panel-agencies" class="hidden">
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <p class="text-sm text-gray-600">Note médiane des utilisateurs actifs rattachés à l'agence.</p>
+                        <select id="agencies-list-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Toutes les filiales</option>
+                            <option value="BTP Consultants">BTP Consultants</option>
+                            <option value="BTP Consultants SPS">BTP Consultants SPS</option>
+                            <option value="Citae">Citae</option>
+                            <option value="BTP Diagnostics">BTP Diagnostics</option>
+                        </select>
+                    </div>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-left">
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 rounded-tl-lg">Agence</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600">Filiale</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Utilisateurs actifs</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right" title="Utilisateurs actifs ÷ effectif de la population cible">Couverture</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600">Répartition par niveau</th>
+                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg whitespace-nowrap">
+                                    Note médiane
+                                    <span id="agency-method-info" class="inline-flex align-middle ml-1 cursor-help text-gray-400 hover:text-indigo-600" aria-label="Méthode de calcul de la note par agence">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="agencies-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                    <p class="text-xs text-gray-400 text-center mt-4" id="agencies-count-label"></p>
+                </div>
             </div>
+            <!-- Infobulle partagée par les deux onglets (méthode + détail des notes), positionnée en fixed -->
+            <div id="adoption-tooltip" class="hidden fixed z-[60] max-w-sm bg-gray-900 text-white text-xs leading-relaxed rounded-lg shadow-xl px-4 py-3 pointer-events-none"></div>
         </div>
     </div>
 

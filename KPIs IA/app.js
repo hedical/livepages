@@ -3279,107 +3279,163 @@ applyDateFilterBtn.addEventListener('click', () => {
 // ==================== USERS LIST MODAL ====================
 
 /**
- * Collect all unique active users from every data source.
- * Returns [{email, filiale, features: Set, sessions, lastActivity}]
+ * Catalogue des modules IA suivis par utilisateur (popup « Utilisateurs
+ * actifs » et note d'adoption). Ajouter un module = ajouter UNE entrée ici :
+ * il apparaît dans la popup, entre dans le périmètre de sa filiale et prend
+ * un poids d'exposition calculé depuis son premier usage observé (ou depuis
+ * `lancement`, à renseigner si les données contiennent des essais antérieurs
+ * au vrai lancement).
+ *
+ * events() renvoie les lignes d'usage réel, toutes périodes confondues
+ * ({ email, createdAt }) : une ligne = une session. Le filtre de dates est
+ * appliqué ensuite par collectActiveUsers.
+ * Mêmes règles d'usage réel que le COPIL (publishCopilSnapshot).
+ */
+const ADOPTION_FILIALES = {
+    CT:    { label: 'BTP Consultants',     domain: '@btp-consultants.fr' },
+    SPS:   { label: 'BTP Consultants SPS', domain: null }, // isolée par la source, pas par le domaine
+    CITAE: { label: 'Citae',               domain: '@citae.fr' },
+    DIAG:  { label: 'BTP Diagnostics',     domain: '@btp-diagnostics.fr' },
+};
+
+function adoptionModules() {
+    const notYield = item => !(item.contractNumber || '').toUpperCase().includes('YIELD');
+    // AIDeliverable / AnalyticEvent : plusieurs lignes par livrable (Notice +
+    // Report) — un livrable = une utilisation.
+    const uniqueDeliverables = items => {
+        const seen = new Set();
+        return items.filter(item => {
+            if (!item.deliverableId) return true;
+            if (seen.has(item.deliverableId)) return false;
+            seen.add(item.deliverableId);
+            return true;
+        });
+    };
+    const wordCount = item => (typeof item.descriptionWordCount === 'number')
+        ? item.descriptionWordCount
+        : countWords(extractText(item.description || ''));
+    const { CT, SPS, CITAE, DIAG } = ADOPTION_FILIALES;
+
+    return [
+        // BTP Consultants (contrôle technique)
+        // Descriptif : au-delà de 100 mots l'IA apporte une valeur réelle (seuil COPIL).
+        { id: 'descriptif', label: 'Descriptif', filiale: CT,
+          events: () => descriptifData.filter(i => notYield(i) && isDescriptifRow(i) && wordCount(i) >= 100) },
+        { id: 'autocontact', label: 'Auto-contact', filiale: CT,
+          events: () => autocontactData.filter(i => notYield(i) && i.fromAI) },
+        { id: 'comparateur', label: 'Comparateur', filiale: CT,
+          events: () => comparateurData },
+        // Géotech / Acoustique / CCTP : l'email est celui du chargé d'affaires.
+        { id: 'analyse-geo', label: 'Géotechnique', filiale: CT,
+          events: () => uniqueDeliverables(geotechData) },
+        { id: 'analyse-acou', label: 'Acoustique', filiale: CT,
+          events: () => uniqueDeliverables(acoustiqueData) },
+        { id: 'analyse-cctp', label: 'CCTP', filiale: CT,
+          events: () => uniqueDeliverables(cctpData).filter(i => i.status !== 'ERROR') },
+        { id: 'expert-ct', label: 'Expert', filiale: CT, events: () => expertBTPData },
+        { id: 'chat-ct', label: 'Chat', filiale: CT, events: () => chatBTPData },
+
+        // BTP Consultants SPS
+        { id: 'autocontact-sps', label: 'Auto-contact', filiale: SPS,
+          events: () => autocontactSpsData.filter(i => i.fromAI) },
+        { id: 'expert-sps', label: 'Expert', filiale: SPS, events: () => expertBtpSpsData },
+        { id: 'chat-sps', label: 'Chat', filiale: SPS, events: () => chatBtpSpsData },
+
+        // Citae
+        { id: 'nf-habitat', label: 'NF Habitat', filiale: CITAE,
+          events: () => nfHabitatData.filter(isNFHabitatItem) },
+        { id: 'expert-citae', label: 'Expert', filiale: CITAE, events: () => expertCitaeData },
+        { id: 'chat-citae', label: 'Chat', filiale: CITAE, events: () => chatCitaeData },
+
+        // BTP Diagnostics
+        { id: 'expert-diag', label: 'Expert', filiale: DIAG, events: () => expertBTPDiagData },
+        { id: 'chat-diag', label: 'Chat', filiale: DIAG, events: () => chatBTPDiagData },
+    ];
+}
+
+/**
+ * Utilisateurs actifs, une ligne par couple (email, filiale) : chacun est noté
+ * sur le périmètre de modules de SA filiale (cf. KPI.adoptionScore).
+ * Respecte le filtre de dates.
+ * Agence de rattachement : agence majoritaire de ses sessions, toutes périodes
+ * confondues (code de l'affaire, ou service de production pour les chats) —
+ * elle ne bouge pas avec le filtre de dates.
+ * Returns { refDate, modules, users: [{email, filiale, agency, features: Set,
+ *           sessions, lastActivity, adoption}] }
  */
 function collectActiveUsers() {
-    const usersMap = new Map(); // email → {filiale, features: Set, sessions, lastActivity}
+    const modules = adoptionModules().map(m => {
+        const domain = m.filiale.domain;
+        const events = [];
+        m.events().forEach(item => {
+            const email = (item.email || '').toLowerCase().trim();
+            if (!email || (domain && !email.includes(domain))) return;
+            const date = parseFrenchDate(item.createdAt);
+            if (!date) return;
+            const agency = (item.agencyCode || extractAgency(item.contractNumber) || item.agency || '').trim().toUpperCase();
+            events.push({ email, date, agency: agency === 'NON SPÉCIFIÉ' ? '' : agency });
+        });
+        // Lancement : premier usage observé, toutes périodes confondues.
+        const launch = m.lancement || events.reduce((min, e) => (!min || e.date < min ? e.date : min), null);
+        return { id: m.id, label: m.label, filiale: m.filiale.label, events, launch };
+    });
 
-    const FEATURE_LABELS = {
-        descriptif:   'Descriptif',
-        autocontact:  'Auto-contact',
-        comparateur:  'Comparateur',
-        expertBTP:    'Expert (BTP)',
-        chatBTP:      'Chat (BTP)',
-        expertCitae:  'Expert (Citae)',
-        chatCitae:    'Chat (Citae)',
-        expertDiag:   'Expert (Diag)',
-        chatDiag:     'Chat (Diag)',
-        expertSps:    'Expert (SPS)',
-        chatSps:      'Chat (SPS)',
-        autocontactSps: 'Auto-contact (SPS)',
-    };
+    const start = dateFilter.startDate ? new Date(dateFilter.startDate) : null;
+    if (start) start.setHours(0, 0, 0, 0);
+    const end = dateFilter.endDate ? new Date(dateFilter.endDate) : null;
+    if (end) end.setHours(23, 59, 59, 999);
+    const inRange = d => (!start || d >= start) && (!end || d <= end);
 
-    const upsert = (email, filiale, featureKey, dateString) => {
-        if (!email || !email.trim()) return;
-        const key = email.toLowerCase().trim();
+    // Date de référence : fin du filtre, plafonnée au dernier usage observé
+    // (jamais « aujourd'hui » — mêmes données, même note).
+    let refDate = null;
+    modules.forEach(m => m.events.forEach(e => { if (!refDate || e.date > refDate) refDate = e.date; }));
+    if (end && refDate && end < refDate) refDate = end;
+
+    // Somme des poids d'exposition des modules de chaque filiale.
+    const exposure = {};
+    modules.forEach(m => {
+        exposure[m.filiale] = (exposure[m.filiale] || 0) + KPI.exposureWeight(m.launch, refDate);
+    });
+
+    const agencies = {}; // email|filiale → [codes agence de toutes ses sessions]
+    modules.forEach(m => m.events.forEach(e => {
+        const key = e.email + '|' + m.filiale;
+        (agencies[key] = agencies[key] || []).push(e.agency);
+    }));
+
+    const usersMap = new Map(); // email|filiale → user
+    modules.forEach(m => m.events.forEach(e => {
+        if (!inRange(e.date)) return;
+        const key = e.email + '|' + m.filiale;
         if (!usersMap.has(key)) {
-            usersMap.set(key, { email: key, filiale, features: new Set(), sessions: 0, lastActivity: null });
+            usersMap.set(key, { email: e.email, filiale: m.filiale, agency: KPI.mode(agencies[key]) || '',
+                                features: new Set(), moduleIds: new Set(),
+                                sessions: 0, weeks: new Set(), firstActivity: null, lastActivity: null });
         }
         const u = usersMap.get(key);
-        u.features.add(FEATURE_LABELS[featureKey]);
+        u.features.add(m.label);
+        u.moduleIds.add(m.id);
         u.sessions += 1;
-        const d = parseFrenchDate(dateString);
-        if (d && (!u.lastActivity || d > u.lastActivity)) u.lastActivity = d;
-    };
+        u.weeks.add(KPI.weekIndex(e.date));
+        if (!u.firstActivity || e.date < u.firstActivity) u.firstActivity = e.date;
+        if (!u.lastActivity || e.date > u.lastActivity) u.lastActivity = e.date;
+    }));
 
-    const getDomainFiliale = (email) => {
-        if (!email) return 'Autre';
-        if (email.includes('@btp-consultants.fr')) return 'BTP Consultants';
-        if (email.includes('@citae.fr')) return 'Citae';
-        if (email.includes('@btp-diagnostics.fr')) return 'BTP Diagnostics';
-        return 'Autre';
-    };
+    const users = Array.from(usersMap.values());
+    users.forEach(u => {
+        u.adoption = KPI.adoptionScore({
+            sessions: u.sessions,
+            activeWeeks: u.weeks.size,
+            firstDate: u.firstActivity,
+            lastDate: u.lastActivity,
+            modulesUsed: u.moduleIds.size,
+            exposure: exposure[u.filiale] || 0,
+        }, refDate);
+    });
+    users.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
 
-    const inDateRange = (dateString) => {
-        if (!dateFilter.startDate && !dateFilter.endDate) return true;
-        const d = parseFrenchDate(dateString);
-        if (!d) return false;
-        if (dateFilter.startDate) {
-            const start = new Date(dateFilter.startDate);
-            start.setHours(0, 0, 0, 0);
-            if (d < start) return false;
-        }
-        if (dateFilter.endDate) {
-            const end = new Date(dateFilter.endDate);
-            end.setHours(23, 59, 59, 999);
-            if (d > end) return false;
-        }
-        return true;
-    };
-
-    // Descriptif
-    descriptifData
-        .filter(item => isDescriptifRow(item) && !item.contractNumber.toUpperCase().includes('YIELD') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, getDomainFiliale(item.email), 'descriptif', item.createdAt));
-
-    // Autocontact (@btp-consultants.fr, fromAI, pas YIELD)
-    autocontactData
-        .filter(item => !item.contractNumber.toUpperCase().includes('YIELD') && item.fromAI && item.email && item.email.includes('@btp-consultants.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Consultants', 'autocontact', item.createdAt));
-
-    // Comparateur
-    comparateurData.filter(item => inDateRange(item.createdAt)).forEach(item =>
-        upsert(item.email, getDomainFiliale(item.email), 'comparateur', item.createdAt));
-
-    // Expert / Chat BTP Consultants
-    expertBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Consultants', 'expertBTP', item.createdAt));
-    chatBTPData.filter(item => item.email && item.email.includes('@btp-consultants.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Consultants', 'chatBTP', item.createdAt));
-
-    // Expert / Chat Citae
-    expertCitaeData.filter(item => item.email && item.email.includes('@citae.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'Citae', 'expertCitae', item.createdAt));
-    chatCitaeData.filter(item => item.email && item.email.includes('@citae.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'Citae', 'chatCitae', item.createdAt));
-
-    // Expert / Chat BTP Diagnostics
-    expertBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Diagnostics', 'expertDiag', item.createdAt));
-    chatBTPDiagData.filter(item => item.email && item.email.includes('@btp-diagnostics.fr') && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Diagnostics', 'chatDiag', item.createdAt));
-
-    // Expert / Chat BTP Consultants SPS — filiale dédiée (données isolées par source)
-    expertBtpSpsData.filter(item => item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'expertSps', item.createdAt));
-    chatBtpSpsData.filter(item => item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'chatSps', item.createdAt));
-    autocontactSpsData.filter(item => item.fromAI && item.email && item.email.trim() !== '' && inDateRange(item.createdAt))
-        .forEach(item => upsert(item.email, 'BTP Consultants SPS', 'autocontactSps', item.createdAt));
-
-    return Array.from(usersMap.values())
-        .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+    return { refDate, modules, users };
 }
 
 const FILIALE_BADGE = {
@@ -3417,81 +3473,623 @@ function renderPopulationTab() {
     }).join('');
 }
 
-function renderActiveUsersTab(search = '', filiale = '') {
+const ADOPTION_BADGE = {
+    'Adopté':      'bg-emerald-100 text-emerald-800',
+    'Régulier':    'bg-indigo-100 text-indigo-800',
+    'Occasionnel': 'bg-amber-100 text-amber-800',
+    'Découverte':  'bg-gray-100 text-gray-600',
+};
+
+let usersSortByAdoption = false;
+
+const fmtScorePart = v => v.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+// Méthode de calcul, construite depuis KPI.ADOPTION : le texte suit les
+// constantes si on les ajuste.
+function adoptionMethodHtml() {
+    const A = KPI.ADOPTION, W = A.weights;
+    const esc = KPI.escapeHtml;
+    const fmtDate = d => d ? new Intl.DateTimeFormat('fr-FR').format(d) : '—';
+    const { refDate, modules } = activeUsersCache;
+    const fresh = A.freshness.map(([days, part]) => `≤ ${days} j : ${Math.round(part * W.freshness)}`).join(' · ');
+    const levels = A.levels.map(([min, label], i) => {
+        const prev = A.levels[i - 1];
+        return prev ? `${min}–${prev[0] - 1} ${label}` : `${min}+ ${label}`;
+    }).join(' · ');
+
+    const byFiliale = {};
+    modules.forEach(m => {
+        const w = KPI.exposureWeight(m.launch, refDate);
+        const label = w < 1 && m.launch
+            ? `${m.label} <span class="text-amber-300">(lancé le ${fmtDate(m.launch)}, compte pour ${Math.round(w * 100)} %)</span>`
+            : m.label;
+        (byFiliale[m.filiale] = byFiliale[m.filiale] || []).push(label);
+    });
+    const perimetres = Object.keys(byFiliale)
+        .map(f => `<li><span class="font-semibold">${esc(f)}</span> : ${byFiliale[f].join(', ')}</li>`).join('');
+
+    return `<p class="font-semibold text-sm mb-1">Note d'adoption /100</p>
+        <p class="text-gray-300 mb-2">Calculée sur les modules de la filiale de l'utilisateur, au ${fmtDate(refDate)}
+        (fin du filtre de dates, sinon dernier usage observé). Mêmes données, même note.</p>
+        <ul class="space-y-1 mb-2">
+            <li><span class="font-semibold">Récurrence (${W.recurrence})</span> : semaines avec au moins un usage ÷ semaines depuis le premier usage (minimum ${A.minWeeks}).</li>
+            <li><span class="font-semibold">Volume (${W.volume})</span> : nombre de sessions, échelle logarithmique, plein à ${A.volumeFull}.</li>
+            <li><span class="font-semibold">Diversité (${W.diversity})</span> : modules utilisés ÷ modules de la filiale. Un module récent compte au prorata de son ancienneté : 0 à son lancement, plein après ${A.exposureWeeks} semaines.</li>
+            <li><span class="font-semibold">Fraîcheur (${W.freshness})</span> : dernier usage ${fresh} · au-delà : 0.</li>
+        </ul>
+        <p class="mb-2"><span class="font-semibold">Niveaux</span> : ${levels}</p>
+        <p class="font-semibold mb-0.5">Modules par filiale</p>
+        <ul class="space-y-0.5 text-gray-300">${perimetres}</ul>`;
+}
+
+// Commentaires de la note d'un utilisateur, partagés par l'infobulle et l'export Excel.
+function adoptionDetailLines(u) {
+    const a = u.adoption, d = a.details, W = KPI.ADOPTION.weights;
+    const days = d.daysSince === Infinity ? '—' : d.daysSince === 0 ? 'le jour même' : `il y a ${d.daysSince} j`;
+    const exposure = d.exposure.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+    return [
+        { label: 'Récurrence', value: a.parts.recurrence, max: W.recurrence, text: `actif ${d.activeWeeks} sem. sur ${d.weeksObserved}` },
+        { label: 'Volume', value: a.parts.volume, max: W.volume, text: `${d.sessions} session${d.sessions > 1 ? 's' : ''}` },
+        { label: 'Diversité', value: a.parts.diversity, max: W.diversity, text: `${d.modulesUsed} module${d.modulesUsed > 1 ? 's' : ''} sur ${exposure} accessibles` },
+        { label: 'Fraîcheur', value: a.parts.freshness, max: W.freshness, text: `dernier usage ${days}` },
+    ];
+}
+
+function adoptionDetailText(u) {
+    return adoptionDetailLines(u).map(l => `${l.label} ${fmtScorePart(l.value)}/${l.max} : ${l.text}`).join(' · ');
+}
+
+// Détail de la note d'un utilisateur (survol de la pastille).
+function adoptionDetailHtml(u) {
+    const a = u.adoption;
+    const rows = adoptionDetailLines(u).map(l => `<tr>
+        <td class="pr-3 font-semibold">${l.label}</td>
+        <td class="pr-3 text-right whitespace-nowrap">${fmtScorePart(l.value)} / ${l.max}</td>
+        <td class="text-gray-300">${l.text}</td></tr>`).join('');
+    return `<p class="font-semibold text-sm mb-1.5">${a.score}/100 · ${a.level}</p>
+        <table class="w-full"><tbody>${rows}</tbody></table>`;
+}
+
+function renderActiveUsersTab() {
     const tbody = document.getElementById('active-users-table-body');
     const countLabel = document.getElementById('active-users-count-label');
     if (!tbody) return;
 
     if (!activeUsersCache) activeUsersCache = collectActiveUsers();
+    const all = activeUsersCache.users;
 
-    const fmt = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const searchLow = search.toLowerCase().trim();
+    const search  = (document.getElementById('users-list-search').value || '').toLowerCase().trim();
+    const filiale = document.getElementById('users-list-filiale').value;
+    const niveauEl = document.getElementById('users-list-niveau');
 
-    const filtered = activeUsersCache.filter(u => {
-        if (searchLow && !u.email.includes(searchLow)) return false;
+    // Compteurs par niveau dans le sélecteur (sur la filiale choisie).
+    const niveau = niveauEl.value;
+    const perLevel = {};
+    all.forEach(u => { if (!filiale || u.filiale === filiale) perLevel[u.adoption.level] = (perLevel[u.adoption.level] || 0) + 1; });
+    niveauEl.innerHTML = '<option value="">Tous les niveaux</option>' + KPI.ADOPTION.levels
+        .map(([, label]) => `<option value="${label}">${label} (${perLevel[label] || 0})</option>`).join('');
+    niveauEl.value = niveau;
+
+    const filtered = all.filter(u => {
+        if (search && !u.email.includes(search) && !u.agency.toLowerCase().includes(search)) return false;
         if (filiale && u.filiale !== filiale) return false;
+        if (niveau && u.adoption.level !== niveau) return false;
         return true;
     });
+    if (usersSortByAdoption) filtered.sort((a, b) => b.adoption.score - a.adoption.score || b.sessions - a.sessions);
+    document.getElementById('users-sort-adoption-arrow').textContent = usersSortByAdoption ? '↓' : '↕';
 
-    document.getElementById('tab-active-count').textContent = activeUsersCache.length + ' utilisateurs';
+    const emails = new Set(all.map(u => u.email));
+    updateUsersTabCounts();
 
+    const fmt = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const esc = KPI.escapeHtml;
     tbody.innerHTML = filtered.map(u => {
         const badgeClass = FILIALE_BADGE[u.filiale] || FILIALE_BADGE['Autre'];
         const features = Array.from(u.features).join(', ') || '—';
         const lastDate = u.lastActivity ? fmt.format(u.lastActivity) : '—';
+        const idx = all.indexOf(u);
         return `<tr class="hover:bg-indigo-50/30 transition-colors">
-            <td class="px-4 py-2.5 font-medium text-gray-800">${u.email}</td>
+            <td class="px-4 py-2.5 font-medium text-gray-800">${esc(u.email)}${u.agency ? `<span class="block text-xs font-normal font-mono text-gray-400">${esc(u.agency)}</span>` : ''}</td>
             <td class="px-4 py-2.5">
-                <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${u.filiale}</span>
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${esc(u.filiale)}</span>
             </td>
-            <td class="px-4 py-2.5 text-gray-600 text-xs">${features}</td>
+            <td class="px-4 py-2.5 text-gray-600 text-xs">${esc(features)}</td>
             <td class="px-4 py-2.5 text-right text-gray-700">${u.sessions}</td>
             <td class="px-4 py-2.5 text-right text-gray-500">${lastDate}</td>
+            <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                <span data-adoption-user="${idx}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold cursor-help ${ADOPTION_BADGE[u.adoption.level]}">
+                    <span class="tabular-nums">${u.adoption.score}</span><span class="font-normal">${u.adoption.level}</span>
+                </span>
+            </td>
         </tr>`;
     }).join('');
 
     if (countLabel) {
-        countLabel.textContent = filtered.length < activeUsersCache.length
-            ? `${filtered.length} utilisateur(s) affiché(s) sur ${activeUsersCache.length}`
-            : `${filtered.length} utilisateur(s) au total`;
+        const multi = all.length - emails.size;
+        const base = filtered.length < all.length
+            ? `${filtered.length} ligne(s) affichée(s) sur ${all.length}`
+            : `${filtered.length} ligne(s) au total`;
+        countLabel.textContent = multi > 0
+            ? `${base} · ${multi} personne(s) active(s) dans plusieurs filiales : une ligne et une note par filiale`
+            : base;
+    }
+}
+
+// Infobulle unique en position fixe : elle n'est pas rognée par le défilement
+// de la modale.
+function showAdoptionTooltip(anchor, html) {
+    const tip = document.getElementById('adoption-tooltip');
+    tip.innerHTML = html;
+    tip.classList.remove('hidden');
+    const r = anchor.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.right - t.width, window.innerWidth - t.width - 8));
+    const below = r.bottom + 8;
+    const top = below + t.height > window.innerHeight - 8 ? Math.max(8, r.top - t.height - 8) : below;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+}
+
+function hideAdoptionTooltip() {
+    const tip = document.getElementById('adoption-tooltip');
+    if (tip) tip.classList.add('hidden');
+}
+
+// Couleur de chaque profil, partagée par le camembert et les barres de
+// répartition (mêmes teintes que les pastilles ADOPTION_BADGE). Le gris de
+// « Découverte » est volontairement neutre ; les autres teintes passent la
+// validation daltonisme (dataviz validate_palette). Libellés + légende +
+// tableau accompagnent toujours la couleur.
+const ADOPTION_LEVEL_COLORS = {
+    'Découverte':  '#9ca3af',
+    'Occasionnel': '#f59e0b',
+    'Régulier':    '#6366f1',
+    'Adopté':      '#059669',
+};
+// Ordre de lecture : du profil le plus faible au plus fort.
+const adoptionLevelsAsc = () => KPI.ADOPTION.levels.map(([, label]) => label).reverse();
+
+// Barre 100 % empilée par profil, segments séparés de 2px.
+function adoptionLevelBar(levels, total, widthClass) {
+    if (!total) return `<div class="h-2 ${widthClass} rounded-full bg-gray-100"></div>`;
+    const segs = adoptionLevelsAsc().map(label => {
+        const n = levels[label] || 0;
+        return n ? `<div title="${label} : ${n}" style="width:${(n / total) * 100}%;background:${ADOPTION_LEVEL_COLORS[label]}"></div>` : '';
+    }).join('');
+    return `<div class="flex gap-[2px] h-2 ${widthClass} rounded-full overflow-hidden">${segs}</div>`;
+}
+
+const fmtPct = v => v === null ? '—' : Math.round(v * 100) + ' %';
+
+let synthesisChart = null;
+
+// Pourcentage écrit dans chaque part (≥ 5 %) : l'identité ne repose pas sur
+// la couleur seule.
+const pieLabelsPlugin = {
+    id: 'adoptionPieLabels',
+    afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const data = chart.data.datasets[0].data;
+        const total = data.reduce((s, v) => s + v, 0);
+        if (!total) return;
+        ctx.save();
+        ctx.font = '600 12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chart.getDatasetMeta(0).data.forEach((arc, i) => {
+            const share = data[i] / total;
+            if (share < 0.05) return;
+            const { x, y } = arc.tooltipPosition();
+            const label = chart.data.labels[i];
+            ctx.fillStyle = (label === 'Régulier' || label === 'Adopté') ? '#ffffff' : '#111827';
+            ctx.fillText(Math.round(share * 100) + ' %', x, y);
+        });
+        ctx.restore();
+    },
+};
+
+// Compteurs des onglets, quel que soit l'onglet ouvert en premier.
+function updateUsersTabCounts() {
+    if (!activeUsersCache) activeUsersCache = collectActiveUsers();
+    if (!agencyScoresCache) agencyScoresCache = collectAgencyScores(activeUsersCache.users);
+    document.getElementById('tab-active-count').textContent =
+        new Set(activeUsersCache.users.map(u => u.email)).size + ' utilisateurs';
+    document.getElementById('tab-agencies-count').textContent =
+        agencyScoresCache.filter(a => a.agency).length + ' agences';
+}
+
+function renderSynthesisTab() {
+    if (!activeUsersCache) activeUsersCache = collectActiveUsers();
+    updateUsersTabCounts();
+    const all = activeUsersCache.users;
+    const filiale = document.getElementById('synthesis-filiale').value;
+    const scope = filiale ? all.filter(u => u.filiale === filiale) : all;
+    const s = KPI.adoptionSummary(scope.map(u => u.adoption));
+    const order = adoptionLevelsAsc();
+
+    // Tuiles
+    const tile = (label, value, sub) => `<div class="border border-gray-200 rounded-xl px-4 py-3">
+        <p class="text-xs text-gray-500">${label}</p>
+        <p class="text-2xl font-semibold text-gray-900 tabular-nums mt-0.5">${value}</p>
+        <p class="text-xs text-gray-400 mt-0.5">${sub}</p></div>`;
+    const people = new Set(scope.map(u => u.email)).size;
+    document.getElementById('synthesis-tiles').innerHTML =
+        tile('Utilisateurs notés', s.count, people !== s.count ? `${people} personnes (une note par filiale)` : 'une note par utilisateur')
+        + tile('Note médiane', s.median === null ? '—' : `${s.median}<span class="text-sm text-gray-400 font-normal"> /100</span>`,
+               s.median === null ? '' : KPI.adoptionLevel(s.median))
+        + tile('Régulier ou Adopté', fmtPct(s.regularShare), `note ≥ ${KPI.ADOPTION.levels[KPI.ADOPTION.levels.length - 3][0]}`);
+
+    // Légende (effectifs + parts)
+    document.getElementById('synthesis-legend').innerHTML = order.slice().reverse().map(label => {
+        const n = s.levels[label] || 0;
+        return `<li class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-sm flex-shrink-0" style="background:${ADOPTION_LEVEL_COLORS[label]}"></span>
+            <span class="text-gray-700 flex-1">${label}</span>
+            <span class="tabular-nums text-gray-900 font-medium">${n}</span>
+            <span class="tabular-nums text-gray-400 w-12 text-right">${s.count ? fmtPct(n / s.count) : '—'}</span></li>`;
+    }).join('');
+
+    // Camembert
+    const canvas = document.getElementById('synthesis-pie');
+    const data = order.map(label => s.levels[label] || 0);
+    if (synthesisChart) {
+        synthesisChart.data.datasets[0].data = data;
+        synthesisChart.update();
+    } else if (canvas && typeof Chart !== 'undefined') {
+        synthesisChart = new Chart(canvas.getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: order,
+                datasets: [{
+                    data,
+                    backgroundColor: order.map(l => ADOPTION_LEVEL_COLORS[l]),
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: { duration: 300 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: c => {
+                                const total = c.dataset.data.reduce((a, b) => a + b, 0);
+                                return ` ${c.label} : ${c.parsed} utilisateur${c.parsed > 1 ? 's' : ''} (${total ? Math.round(c.parsed / total * 100) : 0} %)`;
+                            },
+                        },
+                    },
+                },
+            },
+            plugins: [pieLabelsPlugin],
+        });
+    }
+
+    // Par filiale (toujours toutes les filiales ; la sélection est surlignée)
+    const filiales = Object.values(ADOPTION_FILIALES).map(f => f.label);
+    document.getElementById('synthesis-filiales').innerHTML = filiales.map(f => {
+        const fs = KPI.adoptionSummary(all.filter(u => u.filiale === f).map(u => u.adoption));
+        const badgeClass = FILIALE_BADGE[f] || FILIALE_BADGE['Autre'];
+        const selected = filiale === f ? 'bg-indigo-50/60' : '';
+        return `<tr class="${selected}">
+            <td class="py-2.5"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${KPI.escapeHtml(f)}</span></td>
+            <td class="py-2.5 text-right tabular-nums text-gray-700">${fs.count}</td>
+            <td class="py-2.5 text-right tabular-nums font-medium text-gray-900">${fs.median === null ? '—' : fs.median}</td>
+            <td class="py-2.5 pl-4">${adoptionLevelBar(fs.levels, fs.count, 'w-40')}</td>
+            <td class="py-2.5 text-right tabular-nums text-gray-700">${fmtPct(fs.regularShare)}</td>
+        </tr>`;
+    }).join('');
+}
+
+// Seuil sous lequel une médiane d'agence est signalée comme peu représentative.
+const AGENCY_MIN_USERS = 3;
+
+/**
+ * Note d'adoption par agence = médiane des notes de ses utilisateurs actifs
+ * (agence de rattachement, cf. collectActiveUsers). Une ligne par couple
+ * (filiale, agence) ; les utilisateurs sans agence identifiable forment une
+ * ligne « Agence non renseignée » par filiale.
+ */
+function collectAgencyScores(users) {
+    const groups = new Map();
+    users.forEach(u => {
+        const key = u.filiale + '|' + u.agency;
+        if (!groups.has(key)) groups.set(key, { filiale: u.filiale, agency: u.agency, users: [] });
+        groups.get(key).users.push(u);
+    });
+    return Array.from(groups.values()).map(g => {
+        const scores = g.users.map(u => u.adoption.score);
+        const med = KPI.median(scores);
+        const levels = {};
+        g.users.forEach(u => { levels[u.adoption.level] = (levels[u.adoption.level] || 0) + 1; });
+        // Effectif : population cible (contrôle technique uniquement).
+        const effectif = g.agency && g.filiale === ADOPTION_FILIALES.CT.label ? (agencyPopulation[g.agency] || 0) : 0;
+        const sorted = scores.slice().sort((a, b) => a - b);
+        return {
+            filiale: g.filiale,
+            agency: g.agency,
+            direction: g.agency ? (agencyToDirection[g.agency] || '') : '',
+            active: g.users.length,
+            effectif,
+            coverage: effectif ? g.users.length / effectif : null,
+            median: med === null ? null : Math.round(med),
+            level: med === null ? null : KPI.adoptionLevel(Math.round(med)),
+            levels,
+            min: sorted[0],
+            max: sorted[sorted.length - 1],
+        };
+    // Agences identifiées d'abord, puis celles à trop peu d'utilisateurs, puis les
+    // « non renseignées » ; dans chaque bloc, par médiane décroissante.
+    }).sort((a, b) => (!a.agency) - (!b.agency)
+        || (a.active < AGENCY_MIN_USERS) - (b.active < AGENCY_MIN_USERS)
+        || (b.median - a.median) || (b.active - a.active) || a.agency.localeCompare(b.agency));
+}
+
+let agencyScoresCache = null;
+
+function agencyMethodHtml() {
+    return `<p class="font-semibold text-sm mb-1">Note d'adoption par agence</p>
+        <ul class="space-y-1">
+            <li><span class="font-semibold">Note</span> : médiane des notes d'adoption des utilisateurs actifs rattachés à l'agence (survoler l'en-tête « Adoption » de l'onglet Utilisateurs actifs pour le calcul d'une note).</li>
+            <li><span class="font-semibold">Rattachement</span> : agence majoritaire des sessions de l'utilisateur, toutes périodes confondues (agence de l'affaire, ou service de production pour les chats). Une personne active dans deux filiales compte dans chacune.</li>
+            <li><span class="font-semibold">Couverture</span> : utilisateurs actifs ÷ effectif de la population cible (contrôle technique). La médiane ne dit rien de ceux qui n'utilisent pas l'IA : la lire avec la couverture.</li>
+            <li><span class="font-semibold">Moins de ${AGENCY_MIN_USERS} utilisateurs</span> : médiane grisée, peu représentative.</li>
+        </ul>`;
+}
+
+// Commentaire d'une agence, partagé par l'infobulle et l'export Excel.
+function agencyDetailText(a) {
+    const levels = KPI.ADOPTION.levels.map(([, label]) => `${label} ${a.levels[label] || 0}`).join(', ');
+    return `${a.active} utilisateur${a.active > 1 ? 's' : ''} actif${a.active > 1 ? 's' : ''} · notes de ${a.min} à ${a.max} · ${levels}`
+        + (a.active < AGENCY_MIN_USERS ? ' · échantillon faible' : '');
+}
+
+function agencyDetailHtml(a) {
+    const lines = KPI.ADOPTION.levels.map(([, label]) => `<tr><td class="pr-3">${label}</td><td class="text-right">${a.levels[label] || 0}</td></tr>`).join('');
+    return `<p class="font-semibold text-sm mb-1.5">${KPI.escapeHtml(a.agency || 'Agence non renseignée')} · médiane ${a.median}/100</p>
+        <p class="text-gray-300 mb-1.5">${a.active} utilisateur${a.active > 1 ? 's' : ''} actif${a.active > 1 ? 's' : ''} · notes de ${a.min} à ${a.max}</p>
+        <table><tbody>${lines}</tbody></table>`;
+}
+
+function renderAgenciesTab() {
+    const tbody = document.getElementById('agencies-table-body');
+    if (!tbody) return;
+    if (!activeUsersCache) activeUsersCache = collectActiveUsers();
+    if (!agencyScoresCache) agencyScoresCache = collectAgencyScores(activeUsersCache.users);
+
+    const filiale = document.getElementById('agencies-list-filiale').value;
+    const rows = agencyScoresCache.filter(a => !filiale || a.filiale === filiale);
+    updateUsersTabCounts();
+
+    const esc = KPI.escapeHtml;
+    tbody.innerHTML = rows.map(a => {
+        const idx = agencyScoresCache.indexOf(a);
+        const badgeClass = FILIALE_BADGE[a.filiale] || FILIALE_BADGE['Autre'];
+        const weak = a.active < AGENCY_MIN_USERS;
+        const coverage = a.coverage === null ? '<span class="text-gray-300">—</span>'
+            : `${Math.round(a.coverage * 100)} %<span class="text-gray-400 text-xs"> (${a.active}/${a.effectif})</span>`;
+        return `<tr class="hover:bg-indigo-50/30 transition-colors">
+            <td class="px-4 py-2.5">
+                ${a.agency ? `<span class="font-mono font-medium text-indigo-700">${esc(a.agency)}</span>`
+                           : '<span class="italic text-gray-400">Agence non renseignée</span>'}
+                ${a.direction ? `<span class="block text-xs text-gray-400">${esc(a.direction)}</span>` : ''}
+            </td>
+            <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${esc(a.filiale)}</span></td>
+            <td class="px-4 py-2.5 text-right text-gray-700">${a.active}</td>
+            <td class="px-4 py-2.5 text-right text-gray-700 whitespace-nowrap">${coverage}</td>
+            <td class="px-4 py-2.5">${adoptionLevelBar(a.levels, a.active, 'w-32')}</td>
+            <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                <span data-adoption-agency="${idx}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold cursor-help ${weak ? 'bg-gray-50 text-gray-400' : ADOPTION_BADGE[a.level]}">
+                    <span class="tabular-nums">${a.median}</span><span class="font-normal">${a.level}</span>
+                </span>
+            </td>
+        </tr>`;
+    }).join('');
+
+    const label = document.getElementById('agencies-count-label');
+    if (label) {
+        const without = rows.filter(a => !a.agency).reduce((s, a) => s + a.active, 0);
+        label.textContent = `${rows.filter(a => a.agency).length} agence(s) affichée(s)`
+            + (without ? ` · ${without} utilisateur(s) sans agence identifiable (sessions sans code agence : chats sans service de production, NF Habitat…)` : '');
     }
 }
 
 function switchUsersListTab(tab) {
     currentUsersTab = tab;
-    const tabPop    = document.getElementById('tab-population');
-    const tabActive = document.getElementById('tab-active-users');
-    const panelPop    = document.getElementById('panel-population');
-    const panelActive = document.getElementById('panel-active-users');
-
-    if (tab === 'population') {
-        tabPop.className    = 'px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors';
-        tabActive.className = 'px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2';
-        panelPop.classList.remove('hidden');
-        panelActive.classList.add('hidden');
-        document.getElementById('users-list-subtitle').textContent = 'Collaborateurs BTP Consultants (population cible)';
-    } else {
-        tabActive.className = 'px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors ml-2';
-        tabPop.className    = 'px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors';
-        panelPop.classList.add('hidden');
-        panelActive.classList.remove('hidden');
-        document.getElementById('users-list-subtitle').textContent = 'Tous les utilisateurs ayant utilisé au moins une fonctionnalité';
-        renderActiveUsersTab(
-            document.getElementById('users-list-search').value,
-            document.getElementById('users-list-filiale').value
-        );
-    }
+    const tabs = {
+        population: { btn: 'tab-population', panel: 'panel-population', subtitle: 'Collaborateurs BTP Consultants (population cible)' },
+        synthesis:  { btn: 'tab-synthesis', panel: 'panel-synthesis', subtitle: "Répartition des profils d'adoption" },
+        active:     { btn: 'tab-active-users', panel: 'panel-active-users', subtitle: 'Tous les utilisateurs ayant utilisé au moins une fonctionnalité' },
+        agencies:   { btn: 'tab-agencies', panel: 'panel-agencies', subtitle: "Note d'adoption médiane par agence" },
+    };
+    hideAdoptionTooltip();
+    Object.keys(tabs).forEach((key, i) => {
+        const on = key === tab;
+        document.getElementById(tabs[key].btn).className = 'px-4 py-3 text-sm font-medium border-b-2 transition-colors'
+            + (i ? ' ml-2' : '')
+            + (on ? ' border-indigo-600 text-indigo-600' : ' border-transparent text-gray-500 hover:text-gray-700');
+        document.getElementById(tabs[key].panel).classList.toggle('hidden', !on);
+    });
+    document.getElementById('users-list-subtitle').textContent = tabs[tab].subtitle;
+    if (tab === 'active') renderActiveUsersTab();
+    if (tab === 'agencies') renderAgenciesTab();
+    if (tab === 'synthesis') renderSynthesisTab();
 }
 
 function openUsersListModal() {
     activeUsersCache = null; // always refresh on open
+    agencyScoresCache = null;
     document.getElementById('users-list-modal').classList.remove('hidden');
     renderPopulationTab();
     switchUsersListTab('population');
 }
 
 function closeUsersListModal() {
+    hideAdoptionTooltip();
     document.getElementById('users-list-modal').classList.add('hidden');
+}
+
+// ==================== EXPORT EXCEL (ADOPTION) ====================
+
+// SheetJS n'est chargé qu'au premier export (inutile au reste du dashboard).
+const XLSX_LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+function loadXlsxLib() {
+    if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX);
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = XLSX_LIB_URL;
+        s.onload = () => resolve(XLSX);
+        s.onerror = () => reject(new Error('Chargement de SheetJS impossible'));
+        document.head.appendChild(s);
+    });
+}
+
+// Feuille depuis un tableau [en-têtes, ...lignes], avec largeurs de colonnes
+// et formats numériques optionnels ({ indexColonne: '0%' }).
+function adoptionSheet(lib, rows, widths, formats) {
+    const ws = lib.utils.aoa_to_sheet(rows, { cellDates: true });
+    ws['!cols'] = widths.map(wch => ({ wch }));
+    ws['!autofilter'] = { ref: lib.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: rows[0].length - 1 } }) };
+    Object.keys(formats || {}).forEach(c => {
+        for (let r = 1; r < rows.length; r++) {
+            const cell = ws[lib.utils.encode_cell({ r, c: +c })];
+            if (cell && cell.t !== 's') cell.z = formats[c];
+        }
+    });
+    return ws;
+}
+
+/**
+ * Classeur des deux onglets « Utilisateurs actifs » et « Adoption par agence »
+ * (toutes les lignes, sans les filtres de recherche / filiale / niveau de la
+ * popup, sur la période du filtre de dates), plus une feuille Méthode.
+ */
+function buildAdoptionWorkbook(lib) {
+    if (!activeUsersCache) activeUsersCache = collectActiveUsers();
+    if (!agencyScoresCache) agencyScoresCache = collectAgencyScores(activeUsersCache.users);
+    const { refDate, modules, users } = activeUsersCache;
+    const A = KPI.ADOPTION, W = A.weights;
+    const r1 = v => Math.round(v * 10) / 10;
+    const day = d => d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : '';
+
+    const usersRows = [[
+        'Email', 'Filiale', 'Agence', 'Direction régionale', 'Fonctionnalités', 'Sessions',
+        'Semaines actives', 'Semaines observées', 'Modules utilisés', 'Modules accessibles (pondérés)',
+        'Première activité', 'Dernière activité', 'Jours depuis le dernier usage',
+        `Récurrence /${W.recurrence}`, `Volume /${W.volume}`, `Diversité /${W.diversity}`, `Fraîcheur /${W.freshness}`,
+        'Note /100', 'Niveau', 'Commentaire',
+    ]];
+    users.slice().sort((a, b) => b.adoption.score - a.adoption.score || a.email.localeCompare(b.email)).forEach(u => {
+        const a = u.adoption, d = a.details;
+        usersRows.push([
+            u.email, u.filiale, u.agency || '', u.agency ? (agencyToDirection[u.agency] || '') : '',
+            Array.from(u.features).join(', '), u.sessions,
+            d.activeWeeks, d.weeksObserved, d.modulesUsed, r1(d.exposure),
+            day(u.firstActivity), day(u.lastActivity), d.daysSince === Infinity ? '' : d.daysSince,
+            r1(a.parts.recurrence), r1(a.parts.volume), r1(a.parts.diversity), r1(a.parts.freshness),
+            a.score, a.level, adoptionDetailText(u),
+        ]);
+    });
+
+    const levelLabels = A.levels.map(([, label]) => label);
+    const agencyRows = [[
+        'Agence', 'Direction régionale', 'Filiale', 'Utilisateurs actifs', 'Effectif (population cible)', 'Couverture',
+        'Note médiane', 'Niveau', 'Note min', 'Note max', ...levelLabels, `Moins de ${AGENCY_MIN_USERS} utilisateurs`,
+        'Commentaire',
+    ]];
+    agencyScoresCache.forEach(a => {
+        agencyRows.push([
+            a.agency || 'Agence non renseignée', a.direction, a.filiale, a.active, a.effectif || '',
+            a.coverage === null ? '' : a.coverage,
+            a.median, a.level, a.min, a.max, ...levelLabels.map(l => a.levels[l] || 0),
+            a.active < AGENCY_MIN_USERS ? 'oui' : 'non',
+            agencyDetailText(a),
+        ]);
+    });
+
+    const fmtDate = d => d ? new Intl.DateTimeFormat('fr-FR').format(d) : '—';
+    const periode = (dateFilter.startDate || dateFilter.endDate)
+        ? `${dateFilter.startDate ? fmtDate(new Date(dateFilter.startDate)) : 'début'} → ${dateFilter.endDate ? fmtDate(new Date(dateFilter.endDate)) : 'fin'}`
+        : 'Tout l\'historique';
+    const methodRows = [
+        ['Paramètre', 'Valeur'],
+        ['Généré le', new Date()],
+        ['Période (filtre de dates)', periode],
+        ['Date de référence', day(refDate)],
+        ['Note', 'Calculée sur les modules de la filiale de l\'utilisateur ; une ligne par couple email × filiale.'],
+        [`Récurrence (${W.recurrence})`, `Semaines avec au moins un usage ÷ semaines depuis le premier usage (minimum ${A.minWeeks}).`],
+        [`Volume (${W.volume})`, `Sessions, échelle logarithmique, plein à ${A.volumeFull}.`],
+        [`Diversité (${W.diversity})`, `Modules utilisés ÷ modules de la filiale, un module récent comptant au prorata de son ancienneté (plein après ${A.exposureWeeks} semaines).`],
+        [`Fraîcheur (${W.freshness})`, A.freshness.map(([days, part]) => `≤ ${days} j : ${Math.round(part * W.freshness)}`).join(' · ') + ' · au-delà : 0'],
+        ['Niveaux', A.levels.map(([min, label]) => `${label} ≥ ${min}`).join(' · ')],
+        ['Note par agence', 'Médiane des notes des utilisateurs actifs rattachés à l\'agence (agence majoritaire de leurs sessions, toutes périodes).'],
+        ['Couverture', 'Utilisateurs actifs ÷ effectif de la population cible (contrôle technique uniquement).'],
+        [],
+        ['Module', 'Filiale', 'Lancement (premier usage observé)', 'Poids dans la diversité'],
+        ...modules.map(m => [m.label, m.filiale, day(m.launch), KPI.exposureWeight(m.launch, refDate)]),
+    ];
+
+    // Synthèse : répartition des profils, toutes filiales puis par filiale.
+    // (SheetJS édition communautaire ne crée pas de graphique : le camembert
+    // est dans la popup, ici les mêmes chiffres en tableau.)
+    const asc = adoptionLevelsAsc();
+    const synthRows = [['Périmètre', 'Utilisateurs notés', 'Note médiane',
+        ...asc, ...asc.map(l => `% ${l}`), '% Régulier ou Adopté']];
+    const synthLine = (label, list) => {
+        const sm = KPI.adoptionSummary(list.map(u => u.adoption));
+        synthRows.push([label, sm.count, sm.median === null ? '' : sm.median,
+            ...asc.map(l => sm.levels[l] || 0),
+            ...asc.map(l => sm.count ? (sm.levels[l] || 0) / sm.count : ''),
+            sm.regularShare === null ? '' : sm.regularShare]);
+    };
+    synthLine('Toutes filiales', users);
+    Object.values(ADOPTION_FILIALES).forEach(f => synthLine(f.label, users.filter(u => u.filiale === f.label)));
+    const pctCols = {};
+    for (let c = 3 + asc.length; c < synthRows[0].length; c++) pctCols[c] = '0%';
+
+    const wb = lib.utils.book_new();
+    lib.utils.book_append_sheet(wb, adoptionSheet(lib, synthRows,
+        [22, 10, 10, ...asc.map(() => 11), ...asc.map(() => 13), 14], pctCols), 'Synthèse');
+    lib.utils.book_append_sheet(wb, adoptionSheet(lib, usersRows,
+        [34, 20, 10, 18, 40, 9, 9, 9, 9, 11, 12, 12, 10, 10, 9, 9, 9, 9, 12, 110],
+        { 10: 'dd/mm/yyyy', 11: 'dd/mm/yyyy' }), 'Utilisateurs actifs');
+    lib.utils.book_append_sheet(wb, adoptionSheet(lib, agencyRows,
+        [24, 20, 20, 10, 12, 11, 10, 12, 9, 9, 9, 9, 11, 11, 12, 70],
+        { 5: '0%' }), 'Adoption par agence');
+    const wsMethod = lib.utils.aoa_to_sheet(methodRows, { cellDates: true });
+    wsMethod['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 30 }, { wch: 22 }];
+    ['B2', 'B4'].forEach(ref => { if (wsMethod[ref]) wsMethod[ref].z = ref === 'B2' ? 'dd/mm/yyyy hh:mm' : 'dd/mm/yyyy'; });
+    for (let r = 14; r < methodRows.length; r++) {
+        const c = wsMethod[lib.utils.encode_cell({ r, c: 2 })];
+        if (c && c.t !== 's') c.z = 'dd/mm/yyyy';
+        const w = wsMethod[lib.utils.encode_cell({ r, c: 3 })];
+        if (w) w.z = '0%';
+    }
+    lib.utils.book_append_sheet(wb, wsMethod, 'Méthode');
+
+    const stamp = refDate ? refDate.toISOString().slice(0, 10) : 'na';
+    return { wb, filename: `adoption-ia_${stamp}.xlsx` };
+}
+
+async function exportAdoptionXlsx() {
+    const label = document.getElementById('export-adoption-xlsx-label');
+    const initial = label ? label.textContent : '';
+    try {
+        if (label) label.textContent = 'Export…';
+        const lib = await loadXlsxLib();
+        const { wb, filename } = buildAdoptionWorkbook(lib);
+        lib.writeFile(wb, filename);
+    } catch (e) {
+        console.error('Export Excel adoption :', e);
+        alert('Export Excel impossible : ' + e.message);
+    } finally {
+        if (label) label.textContent = initial;
+    }
 }
 
 (function initUsersListModal() {
@@ -3508,12 +4106,47 @@ function closeUsersListModal() {
     const tabActive = document.getElementById('tab-active-users');
     if (tabPop)    tabPop.addEventListener('click', () => switchUsersListTab('population'));
     if (tabActive) tabActive.addEventListener('click', () => switchUsersListTab('active'));
+    const exportBtn = document.getElementById('export-adoption-xlsx');
+    if (exportBtn) exportBtn.addEventListener('click', exportAdoptionXlsx);
+    const tabSynthesis = document.getElementById('tab-synthesis');
+    if (tabSynthesis) tabSynthesis.addEventListener('click', () => switchUsersListTab('synthesis'));
+    const synthesisFiliale = document.getElementById('synthesis-filiale');
+    if (synthesisFiliale) synthesisFiliale.addEventListener('change', renderSynthesisTab);
+    const tabAgencies = document.getElementById('tab-agencies');
+    if (tabAgencies) tabAgencies.addEventListener('click', () => switchUsersListTab('agencies'));
+    const agenciesFiliale = document.getElementById('agencies-list-filiale');
+    if (agenciesFiliale) agenciesFiliale.addEventListener('change', renderAgenciesTab);
 
     const search  = document.getElementById('users-list-search');
     const filiale = document.getElementById('users-list-filiale');
-    const refresh = () => renderActiveUsersTab(search.value, filiale.value);
+    const niveau  = document.getElementById('users-list-niveau');
+    const refresh = () => renderActiveUsersTab();
     if (search)  search.addEventListener('input', refresh);
     if (filiale) filiale.addEventListener('change', refresh);
+    if (niveau)  niveau.addEventListener('change', refresh);
+
+    const sortBtn = document.getElementById('users-sort-adoption');
+    if (sortBtn) sortBtn.addEventListener('click', () => { usersSortByAdoption = !usersSortByAdoption; refresh(); });
+
+    // Survol : méthode de calcul (icônes d'en-tête) et détail des notes (pastilles),
+    // pour les onglets Utilisateurs actifs et Adoption par agence.
+    const HOVER = '#adoption-method-info, #agency-method-info, [data-adoption-user], [data-adoption-agency]';
+    const scroller = document.getElementById('panel-active-users')?.parentElement;
+    if (scroller) {
+        scroller.addEventListener('mouseover', e => {
+            const el = e.target.closest(HOVER);
+            if (!el || !activeUsersCache) return;
+            if (el.id === 'adoption-method-info') showAdoptionTooltip(el, adoptionMethodHtml());
+            else if (el.id === 'agency-method-info') showAdoptionTooltip(el, agencyMethodHtml());
+            else if (el.dataset.adoptionUser) showAdoptionTooltip(el, adoptionDetailHtml(activeUsersCache.users[+el.dataset.adoptionUser]));
+            else if (agencyScoresCache) showAdoptionTooltip(el, agencyDetailHtml(agencyScoresCache[+el.dataset.adoptionAgency]));
+        });
+        scroller.addEventListener('mouseout', e => {
+            const from = e.target.closest(HOVER);
+            if (from && !from.contains(e.relatedTarget)) hideAdoptionTooltip();
+        });
+        scroller.addEventListener('scroll', hideAdoptionTooltip);
+    }
 })();
 
 // ==================== USERS EVOLUTION MODAL ====================
@@ -3597,8 +4230,8 @@ function calculateMonthlyUsers() {
     });
 }
 
-// Répartition des utilisateurs uniques actifs par filiale (réutilise collectActiveUsers,
-// qui dédoublonne par email et respecte le filtre de date — comme l'onglet « Utilisateurs actifs »).
+// Répartition des utilisateurs actifs par filiale (réutilise collectActiveUsers : une
+// ligne par couple email × filiale, filtre de date respecté — comme l'onglet « Utilisateurs actifs »).
 const FILIALE_PIE_COLORS = {
     'BTP Consultants':     'rgba(59, 130, 246, 0.85)',
     'Citae':               'rgba(16, 185, 129, 0.85)',
@@ -3608,7 +4241,7 @@ const FILIALE_PIE_COLORS = {
 };
 function calculateUsersByFiliale() {
     const counts = {};
-    collectActiveUsers().forEach(u => {
+    collectActiveUsers().users.forEach(u => {
         counts[u.filiale] = (counts[u.filiale] || 0) + 1;
     });
     const order = ['BTP Consultants', 'Citae', 'BTP Diagnostics', 'BTP Consultants SPS', 'Autre'];

@@ -463,6 +463,130 @@ const KPI = (function () {
         return s;
     }
 
+    // ===================== NOTE D'ADOPTION PAR UTILISATEUR =====================
+    //
+    // Note /100 d'un utilisateur sur le périmètre de SA filiale (popup
+    // « Utilisateurs actifs »). Fonctions pures, déterministes : aucune
+    // dépendance à « aujourd'hui », tout est mesuré à une date de référence
+    // fournie par l'appelant (fin du filtre de dates, plafonnée au dernier
+    // usage observé). Mêmes données + même filtre → même note.
+    //
+    // Un module récent ne pénalise personne : il pèse dans le dénominateur de
+    // la diversité au prorata de son ancienneté (poids d'exposition), et pèse
+    // plein au bout de exposureWeeks semaines.
+
+    const ADOPTION = {
+        weights: { recurrence: 35, volume: 25, diversity: 20, freshness: 20 },
+        volumeFull: 100,     // sessions pour le plein score (échelle log)
+        minWeeks: 8,         // la régularité ne se juge pas sur moins de 8 semaines
+        exposureWeeks: 8,    // un module pèse 1 au bout de 8 semaines
+        // [jours depuis le dernier usage ≤ seuil, part de la note fraîcheur]
+        freshness: [[7, 1], [30, 0.7], [60, 0.4], [90, 0.2]],
+        // [note minimale, niveau] — du plus haut au plus bas
+        levels: [[80, 'Adopté'], [60, 'Régulier'], [40, 'Occasionnel'], [0, 'Découverte']],
+    };
+
+    const _DAY = 24 * 3600 * 1000;
+
+    // Jour calendaire local → nombre de jours depuis l'epoch (insensible à
+    // l'heure et aux changements d'heure).
+    function _dayIndex(d) {
+        return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / _DAY);
+    }
+
+    // Index de semaine (lundi → dimanche). Le 01/01/1970 est un jeudi.
+    function weekIndex(d) {
+        return Math.floor((_dayIndex(d) + 3) / 7);
+    }
+
+    // Poids d'un module dans le dénominateur de la diversité : 0 à son
+    // lancement, 1 après exposureWeeks semaines. Lancé après la référence → 0.
+    function exposureWeight(launchDate, refDate) {
+        if (!launchDate || !refDate) return 1;
+        const weeks = (_dayIndex(refDate) - _dayIndex(launchDate)) / 7;
+        return Math.max(0, Math.min(1, weeks / ADOPTION.exposureWeeks));
+    }
+
+    function adoptionLevel(score) {
+        for (const [min, label] of ADOPTION.levels) if (score >= min) return label;
+        return ADOPTION.levels[ADOPTION.levels.length - 1][1];
+    }
+
+    // u = { sessions, activeWeeks, firstDate, lastDate, modulesUsed, exposure }
+    //   exposure = somme des poids d'exposition des modules de la filiale.
+    // Retourne { score, level, parts: {recurrence, volume, diversity, freshness}, details }.
+    function adoptionScore(u, refDate) {
+        const W = ADOPTION.weights;
+        const sessions = Math.max(0, u.sessions || 0);
+
+        const span = (u.firstDate && refDate)
+            ? Math.max(1, weekIndex(refDate) - weekIndex(u.firstDate) + 1) : 1;
+        const weeksObserved = Math.max(ADOPTION.minWeeks, span);
+        const recurrence = Math.min(1, (u.activeWeeks || 0) / weeksObserved);
+
+        const volume = Math.min(1, Math.log(1 + sessions) / Math.log(1 + ADOPTION.volumeFull));
+
+        const used = u.modulesUsed || 0;
+        const exposure = u.exposure || 0;
+        const diversity = used === 0 ? 0 : (exposure <= used ? 1 : used / exposure);
+
+        const daysSince = (u.lastDate && refDate)
+            ? Math.max(0, _dayIndex(refDate) - _dayIndex(u.lastDate)) : Infinity;
+        const step = ADOPTION.freshness.find(([max]) => daysSince <= max);
+        const freshness = step ? step[1] : 0;
+
+        const parts = {
+            recurrence: recurrence * W.recurrence,
+            volume: volume * W.volume,
+            diversity: diversity * W.diversity,
+            freshness: freshness * W.freshness,
+        };
+        const score = Math.round(parts.recurrence + parts.volume + parts.diversity + parts.freshness);
+        return {
+            score,
+            level: adoptionLevel(score),
+            parts,
+            details: { activeWeeks: u.activeWeeks || 0, weeksObserved, sessions, modulesUsed: used, exposure, daysSince },
+        };
+    }
+
+    // Synthèse d'un lot de notes ({ score, level }) : effectif, médiane, nombre
+    // par niveau (tous les niveaux présents, même à 0) et part des niveaux
+    // « Régulier » et au-delà (note >= 60, cf. ADOPTION.levels).
+    function adoptionSummary(adoptions) {
+        const list = adoptions || [];
+        const levels = {};
+        ADOPTION.levels.forEach(([, label]) => { levels[label] = 0; });
+        list.forEach(a => { levels[a.level] = (levels[a.level] || 0) + 1; });
+        const regularMin = ADOPTION.levels[ADOPTION.levels.length - 3][0];
+        const regular = list.filter(a => a.score >= regularMin).length;
+        const med = median(list.map(a => a.score));
+        return {
+            count: list.length,
+            median: med === null ? null : Math.round(med),
+            levels,
+            regularShare: list.length ? regular / list.length : null,
+        };
+    }
+
+    // Médiane (moyenne des deux valeurs centrales si effectif pair). null si vide.
+    function median(values) {
+        const v = (values || []).filter(x => typeof x === 'number' && !isNaN(x)).sort((a, b) => a - b);
+        if (!v.length) return null;
+        const mid = Math.floor(v.length / 2);
+        return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+    }
+
+    // Valeur la plus fréquente ; égalité départagée par ordre alphabétique
+    // (déterministe). Ignore les valeurs vides. null si aucune.
+    function mode(values) {
+        const counts = {};
+        (values || []).forEach(x => { if (x) counts[x] = (counts[x] || 0) + 1; });
+        let best = null;
+        Object.keys(counts).sort().forEach(k => { if (best === null || counts[k] > counts[best]) best = k; });
+        return best;
+    }
+
     // ===================== AUTH + URLS SIGNÉES =====================
 
     const WEBHOOK_URL = 'https://databuildr.app.n8n.cloud/webhook/passwordROI';
@@ -539,6 +663,15 @@ const KPI = (function () {
         parseCctpRows,
         parseCctpPayload,
         aggregateCctp,
+        // note d'adoption
+        ADOPTION,
+        weekIndex,
+        exposureWeight,
+        adoptionLevel,
+        adoptionScore,
+        adoptionSummary,
+        median,
+        mode,
         // auth + urls signées
         WEBHOOK_URL,
         fetchDataUrls,
