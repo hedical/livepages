@@ -36,6 +36,8 @@ const URL_NAMES = {
   dept: 'DEPT_URL'
 };
 let dataUrls = null;
+// Date de dernière écriture de chaque fichier dans le bucket (en-tête Last-Modified)
+const fileDates = {};
 
 // Helpers
 function num(v) {
@@ -102,10 +104,19 @@ function parseUrlsFromResponse(text) {
   return (urls.contacts && urls.entreprises) ? urls : null;
 }
 
+// « · données du 07/10/2026 à 16:02 », avec l'âge si le fichier a 7 jours ou plus.
+function dateSuffix(key) {
+  const d = fileDates[key];
+  if (!d || isNaN(d)) return '';
+  const txt = d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).replace(' ', ' à ');
+  const days = Math.floor((Date.now() - d) / 86400000);
+  return ` · données du ${txt}` + (days >= 7 ? ` (il y a ${days} j)` : '');
+}
+
 // Chargement d'un fichier JSON depuis une URL
 // Cache-buster + cache:'no-store' pour toujours récupérer la dernière version
-// (évite le cache CDN Supabase / navigateur).
-async function loadJsonFromUrl(url) {
+// (évite le cache CDN Supabase / navigateur). Avec `key`, mémorise la date du fichier.
+async function loadJsonFromUrl(url, key) {
   const bustUrl = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
   const res = await fetch(bustUrl, { cache: 'no-store' });
   if (!res.ok) {
@@ -122,6 +133,10 @@ async function loadJsonFromUrl(url) {
     // URL signée périmée (onglet resté ouvert plus de 12 h)
     if (/exp/i.test(detail)) throw new Error(`Accès expiré sur ${file} — rechargez la page et reconnectez-vous`);
     throw new Error(`HTTP ${res.status} sur ${file} — ${detail || 'aucun détail'}`);
+  }
+  if (key) {
+    const lm = res.headers.get('last-modified');
+    fileDates[key] = lm ? new Date(lm) : null;
   }
   return res.json();
 }
@@ -273,8 +288,8 @@ async function loadAllDataFromUrls(urls) {
       setStatus(el, `Chargé (${(Array.isArray(d) ? d : [d]).length.toLocaleString('fr-FR')} lignes)`, true);
     };
     const [contactsData, entData] = await Promise.all([
-      loadJsonFromUrl(urlsToUse.contacts).then(d => { onDone(statusContacts, d); return d; }),
-      loadJsonFromUrl(urlsToUse.entreprises).then(d => { onDone(statusEntreprises, d); return d; })
+      loadJsonFromUrl(urlsToUse.contacts, 'contacts').then(d => { onDone(statusContacts, d); return d; }),
+      loadJsonFromUrl(urlsToUse.entreprises, 'entreprises').then(d => { onDone(statusEntreprises, d); return d; })
     ]);
     if (progressFill) progressFill.style.width = '100%';
     if (progressText) progressText.textContent = 'Traitement en cours...';
@@ -452,7 +467,7 @@ function renderContacts() {
   buildHead(document.querySelector('#viewContacts thead'), CONTACT_COLS, contactSort, k => {
     nextSort(contactSort, k, CONTACT_COLS); renderContacts();
   });
-  document.getElementById('contactCount').textContent = `${filteredContacts.length.toLocaleString('fr-FR')} contact(s)`;
+  document.getElementById('contactCount').textContent = `${filteredContacts.length.toLocaleString('fr-FR')} contact(s)${dateSuffix('contacts')}`;
   renderContactsPage();
 }
 
@@ -576,7 +591,7 @@ function renderEntreprises() {
   buildHead(document.querySelector('#viewEntreprises thead'), ENT_COLS, entrepriseSort, k => {
     nextSort(entrepriseSort, k, ENT_COLS); renderEntreprises();
   });
-  document.getElementById('entrepriseCount').textContent = `${filteredEntreprises.length.toLocaleString('fr-FR')} entreprise(s)`;
+  document.getElementById('entrepriseCount').textContent = `${filteredEntreprises.length.toLocaleString('fr-FR')} entreprise(s)${dateSuffix('entreprises')}`;
   renderEntreprisesPage();
 }
 
@@ -761,7 +776,7 @@ async function ensureAnalysisData(key) {
   if (!analysisCache[key]) {
     const url = dataUrls && dataUrls[key];
     if (!url) throw new Error('Fichier non fourni par le serveur (signature manquante dans n8n)');
-    const d = await loadJsonFromUrl(url);
+    const d = await loadJsonFromUrl(url, key);
     analysisCache[key] = Array.isArray(d) ? d : [];
   }
   return analysisCache[key];
@@ -836,7 +851,7 @@ function renderAnalysis(a) {
   }));
 
   renderAnalysisChart(a, filtered, cols);
-  document.getElementById('count_' + a.key).textContent = `${filtered.length.toLocaleString('fr-FR')} ligne(s)`;
+  document.getElementById('count_' + a.key).textContent = `${filtered.length.toLocaleString('fr-FR')} ligne(s)${dateSuffix(a.key)}`;
 
   const start = (ui.page - 1) * PAGE_SIZE;
   const pageRows = filtered.slice(start, start + PAGE_SIZE);
@@ -1057,6 +1072,10 @@ document.addEventListener('DOMContentLoaded', () => {
       await fetch('https://databuildr.app.n8n.cloud/webhook/get-risks-files', { method: 'GET' });
       if (overlayText) overlayText.textContent = 'Chargement des données...';
       await loadAllDataFromUrls(dataUrls);
+      // Les analyses aussi : sans ça elles restaient sur les données de la connexion.
+      for (const k of Object.keys(analysisCache)) delete analysisCache[k];
+      const active = ANALYSES.find(a => document.getElementById('view' + cap(a.key))?.classList.contains('active'));
+      if (active) loadAnalysis(active);
     } catch (err) {
       if (overlayText) overlayText.textContent = 'Erreur: ' + err.message;
     } finally {
