@@ -23,11 +23,19 @@ const SANS_SOCIETE = '(Sans société)';
 // Webhook de vérification du mot de passe (retourne les URLs si OK)
 const WEBHOOK_AUTH = 'https://databuildr.app.n8n.cloud/webhook/risk-data';
 
-// URLs des données (fichiers agrégés, secours si webhook non appelé)
-const DATA_URLS = {
-  contacts: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/risk_contacts.json',
-  entreprises: 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/risk_entreprises.json'
+// URLs des données : signées pour 12 h par le webhook (bucket privé).
+// Aucune URL de bucket en dur : sans réponse valide du webhook, rien ne se charge.
+const URL_NAMES = {
+  contacts: 'CONTACTS_URL',
+  entreprises: 'ENTREPRISES_URL',
+  taux: 'TAUX_URL',
+  ouvert: 'OUVERT_URL',
+  collab: 'COLLAB_URL',
+  agence: 'AGENCE_URL',
+  mission: 'MISSION_URL',
+  dept: 'DEPT_URL'
 };
+let dataUrls = null;
 
 // Helpers
 function num(v) {
@@ -83,17 +91,15 @@ function riskRawOf(avgPerOp) {
   return Math.log(1 + (avgPerOp || 0));
 }
 
+// Réponse du webhook : lignes « const X_URL = '...' ». Contacts et entreprises
+// sont obligatoires ; une analyse absente affichera une erreur dans son onglet.
 function parseUrlsFromResponse(text) {
-  const mC = (text || '').match(/CONTACTS_URL\s*=\s*['"]([^'"]+)['"]/i);
-  const mE = (text || '').match(/ENTREPRISES_URL\s*=\s*['"]([^'"]+)['"]/i);
-  if (mC && mE) return { contacts: mC[1], entreprises: mE[1] };
-  try {
-    const o = JSON.parse(text);
-    const c = o.CONTACTS_URL || o.contacts_url || o.contacts;
-    const e = o.ENTREPRISES_URL || o.entreprises_url || o.entreprises;
-    if (c && e) return { contacts: c, entreprises: e };
-  } catch (_) {}
-  return null;
+  const urls = {};
+  for (const [key, name] of Object.entries(URL_NAMES)) {
+    const m = (text || '').match(new RegExp(name + `\\s*=\\s*['"]([^'"]+)['"]`));
+    if (m) urls[key] = m[1];
+  }
+  return (urls.contacts && urls.entreprises) ? urls : null;
 }
 
 // Chargement d'un fichier JSON depuis une URL
@@ -102,7 +108,21 @@ function parseUrlsFromResponse(text) {
 async function loadJsonFromUrl(url) {
   const bustUrl = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
   const res = await fetch(bustUrl, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  if (!res.ok) {
+    // Supabase Storage renvoie un 400 avec un corps JSON explicite
+    // ({"error":"Bucket not found"}, "Object not found", ...). Sans ce détail
+    // le message d'erreur est vide et le diagnostic impossible.
+    let detail = res.statusText || '';
+    try {
+      const body = await res.text();
+      const msg = (() => { try { const o = JSON.parse(body); return o.message || o.error; } catch { return body; } })();
+      if (msg) detail = String(msg).slice(0, 200);
+    } catch (_) {}
+    const file = url.split('/').pop().split('?')[0];
+    // URL signée périmée (onglet resté ouvert plus de 12 h)
+    if (/exp/i.test(detail)) throw new Error(`Accès expiré sur ${file} — rechargez la page et reconnectez-vous`);
+    throw new Error(`HTTP ${res.status} sur ${file} — ${detail || 'aucun détail'}`);
+  }
   return res.json();
 }
 
@@ -219,7 +239,7 @@ function buildAll(contactsRaw, entreprisesRaw) {
 
 // UI: Chargement depuis les URLs
 async function loadAllDataFromUrls(urls) {
-  const urlsToUse = urls || DATA_URLS;
+  const urlsToUse = urls || dataUrls;
   const overlay = document.getElementById('loadingOverlay');
   const progress = document.getElementById('loadProgress');
   const progressText = document.getElementById('progressText');
@@ -268,7 +288,7 @@ async function loadAllDataFromUrls(urls) {
     if (overlayText) overlayText.textContent = 'Chargement terminé';
   } catch (err) {
     if (progressText) progressText.textContent = `Erreur: ${err.message}`;
-    [statusContacts, statusEntreprises].forEach(s => setStatus(s, 'Erreur', false));
+    [statusContacts, statusEntreprises].forEach(s => setStatus(s, `Erreur — ${err.message}`, false));
     console.error(err);
   } finally {
     if (overlay) overlay.style.display = 'none';
@@ -659,14 +679,14 @@ function showEntrepriseDetail(name) {
 // ANALYSES COMPLÉMENTAIRES (onglets génériques, chargés à la demande)
 //   tableau trié + graphique top-15 + détail au clic (collaborateur / agence)
 // ============================================================================
-const DATA_BASE = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/';
+// Le fichier de chaque analyse est l'URL signée dataUrls[key] (cf. URL_NAMES).
 const ANALYSES = [
-  { key: 'taux',    label: 'Taux défav. (entr.)', file: DATA_BASE + 'risk_taux_entreprise.json',  search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables', excludeBtpCol: 'Entreprise' },
-  { key: 'ouvert',  label: 'Risque ouvert',       file: DATA_BASE + 'risk_ouvert_entreprise.json', search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Défav. NON levés', defaultSort: 'Défav. NON levés', excludeBtpCol: 'Entreprise' },
-  { key: 'collab',  label: 'Collaborateurs',      file: DATA_BASE + 'risk_collaborateur.json',      search: ['Collaborateur', 'Agence'], placeholder: 'Rechercher un collaborateur / agence...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
-  { key: 'agence',  label: 'Agences',             file: DATA_BASE + 'risk_agence.json',             search: ['Agence'],       placeholder: 'Rechercher une agence...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
-  { key: 'mission', label: 'Missions',            file: DATA_BASE + 'risk_mission.json',            search: ['Mission'],      placeholder: 'Rechercher une mission...', chartMetric: 'Taux défav. (%)', defaultSort: 'Avis défavorables' },
-  { key: 'dept',    label: 'Départements',        file: DATA_BASE + 'risk_departement.json',        search: ['Département'],  placeholder: 'Rechercher un département...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' }
+  { key: 'taux',    label: 'Taux défav. (entr.)', search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables', excludeBtpCol: 'Entreprise' },
+  { key: 'ouvert',  label: 'Risque ouvert',       search: ['Entreprise'],   placeholder: 'Rechercher une entreprise...', chartMetric: 'Défav. NON levés', defaultSort: 'Défav. NON levés', excludeBtpCol: 'Entreprise' },
+  { key: 'collab',  label: 'Collaborateurs',      search: ['Collaborateur', 'Agence'], placeholder: 'Rechercher un collaborateur / agence...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
+  { key: 'agence',  label: 'Agences',             search: ['Agence'],       placeholder: 'Rechercher une agence...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' },
+  { key: 'mission', label: 'Missions',            search: ['Mission'],      placeholder: 'Rechercher une mission...', chartMetric: 'Taux défav. (%)', defaultSort: 'Avis défavorables' },
+  { key: 'dept',    label: 'Départements',        search: ['Département'],  placeholder: 'Rechercher un département...', chartMetric: 'Avis défavorables', defaultSort: 'Avis défavorables' }
 ];
 const analysisCache = {};
 const analysisUI = {};
@@ -739,8 +759,9 @@ async function loadAnalysis(a) {
 
 async function ensureAnalysisData(key) {
   if (!analysisCache[key]) {
-    const a = ANALYSES.find(x => x.key === key);
-    const d = await loadJsonFromUrl(a.file);
+    const url = dataUrls && dataUrls[key];
+    if (!url) throw new Error('Fichier non fourni par le serveur (signature manquante dans n8n)');
+    const d = await loadJsonFromUrl(url);
     analysisCache[key] = Array.isArray(d) ? d : [];
   }
   return analysisCache[key];
@@ -980,55 +1001,48 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginError = document.getElementById('loginError');
   const loginSubmit = document.getElementById('loginSubmit');
 
-  const AUTH_KEY = 'risques_auth';
-
   // Nettoyage de l'ancien loader 3 fichiers + bandeau KPI
   fixLayout();
 
-  function checkAuth() { return sessionStorage.getItem(AUTH_KEY) === '1'; }
-  function setAuth() { sessionStorage.setItem(AUTH_KEY, '1'); }
+  // Les URLs signées expirent en 12 h : la réponse du webhook n'est jamais
+  // mise en cache, chaque chargement de page redemande le mot de passe.
+  // On purge aussi les clés laissées par l'ancienne version.
+  try {
+    sessionStorage.removeItem('risques_auth');
+    sessionStorage.removeItem('risques_urls');
+  } catch (_) {}
+
   function showApp(urls) {
+    dataUrls = urls;
     if (loginOverlay) loginOverlay.style.display = 'none';
     if (mainContent) mainContent.style.display = 'block';
     loadAllDataFromUrls(urls);
   }
 
-  if (checkAuth()) {
-    let urls;
-    const stored = sessionStorage.getItem('risques_urls');
-    if (stored) {
-      try {
-        urls = JSON.parse(stored);
-        if (!urls.contacts || !urls.entreprises) urls = null;
-      } catch (_) { urls = null; }
+  loginForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pwd = loginPassword?.value?.trim();
+    if (!pwd) return;
+    loginError.textContent = '';
+    loginSubmit.disabled = true;
+    try {
+      const res = await fetch(WEBHOOK_AUTH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwd })
+      });
+      const text = await res.text();
+      if (res.status === 401) throw new Error('Mot de passe incorrect');
+      if (!res.ok) throw new Error(`Serveur indisponible (HTTP ${res.status})`);
+      const urls = parseUrlsFromResponse(text);
+      if (!urls) throw new Error('Réponse du serveur invalide : aucune URL de données');
+      showApp(urls);
+    } catch (err) {
+      loginError.textContent = err.message || 'Mot de passe incorrect';
+    } finally {
+      loginSubmit.disabled = false;
     }
-    showApp(urls || undefined);
-  } else {
-    loginForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const pwd = loginPassword?.value?.trim();
-      if (!pwd) return;
-      loginError.textContent = '';
-      loginSubmit.disabled = true;
-      try {
-        const res = await fetch(WEBHOOK_AUTH, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: pwd })
-        });
-        const text = await res.text();
-        if (!res.ok) throw new Error('Mot de passe incorrect');
-        const urls = parseUrlsFromResponse(text) || DATA_URLS;
-        sessionStorage.setItem('risques_urls', JSON.stringify(urls));
-        setAuth();
-        showApp(urls);
-      } catch (err) {
-        loginError.textContent = err.message || 'Mot de passe incorrect';
-      } finally {
-        loginSubmit.disabled = false;
-      }
-    });
-  }
+  });
 
   document.getElementById('reloadData')?.addEventListener('click', async () => {
     const btn = document.getElementById('reloadData');
@@ -1038,15 +1052,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (overlay) overlay.style.display = 'flex';
     if (overlayText) overlayText.textContent = 'Rafraîchissement des données (peut prendre ~1 min)...';
     try {
-      let urls = DATA_URLS;
-      const res = await fetch('https://databuildr.app.n8n.cloud/webhook/get-risks-files', { method: 'GET' });
-      if (res.ok) {
-        const text = await res.text();
-        const parsed = parseUrlsFromResponse(text);
-        if (parsed) urls = parsed;
-      }
+      // Le refresh réécrit les fichiers aux mêmes chemins : les URLs signées
+      // obtenues à la connexion restent valables.
+      await fetch('https://databuildr.app.n8n.cloud/webhook/get-risks-files', { method: 'GET' });
       if (overlayText) overlayText.textContent = 'Chargement des données...';
-      await loadAllDataFromUrls(urls);
+      await loadAllDataFromUrls(dataUrls);
     } catch (err) {
       if (overlayText) overlayText.textContent = 'Erreur: ' + err.message;
     } finally {
