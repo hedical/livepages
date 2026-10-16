@@ -639,8 +639,10 @@ async function processFile(file) {
     }
 }
 
-// Un code d'exigence complet, et rien d'autre, dans l'item de texte
-const CODE_PATTERN = /^[A-Z]{2,4}(?:\.\d{1,3}){1,4}$/;
+// Un code d'exigence complet, et rien d'autre, dans l'item de texte.
+// Les segments peuvent porter une lettre : les territorialisations sont
+// numerotees DRIHL.V2.6, ANRU.V1.2...
+const CODE_PATTERN = /^[A-Z]{2,6}(?:\.[A-Z]{0,2}\d{1,3}){1,5}$/;
 
 // Thème déduit du préfixe : les rapports contiennent des exigences absentes
 // du référentiel embarqué, on veut quand même les classer.
@@ -681,17 +683,47 @@ const THEMES_PAR_PREFIXE = {
 // NF EN 12828, BW31...) et surtout ne dépend plus d'une liste blanche.
 function detectCodesOnPage(textContent, viewport, pageNumber) {
     const colonneMax = viewport.width * 0.15;
-    const found = [];
 
+    // Items de la premiere colonne uniquement
+    const colonne = [];
     textContent.items.forEach(item => {
         const str = (item.str || '').trim();
-        if (!CODE_PATTERN.test(str)) return;
-
+        if (!str) return;
         const x = item.transform ? item.transform[4] : 0;
         const y = item.transform ? item.transform[5] : 0;
         if (x > colonneMax) return;
+        colonne.push({ str: str, x: x, y: y });
+    });
 
-        found.push({ code: str, page: pageNumber, y: y });
+    // pdf.js peut decouper un code en plusieurs items (changement de fonte,
+    // chasse...). On regroupe donc par ligne avant de tester le motif, tout
+    // en testant aussi les items pris isolement.
+    const lignes = new Map();
+    colonne.forEach(item => {
+        const cle = Math.round(item.y / 2);
+        if (!lignes.has(cle)) lignes.set(cle, []);
+        lignes.get(cle).push(item);
+    });
+
+    const found = [];
+    const vus = new Set();
+
+    const retenir = (code, y) => {
+        if (vus.has(code + '@' + Math.round(y))) return;
+        vus.add(code + '@' + Math.round(y));
+        found.push({ code: code, page: pageNumber, y: y });
+    };
+
+    lignes.forEach(items => {
+        items.sort((a, b) => a.x - b.x);
+        const recolle = items.map(i => i.str).join('');
+        if (CODE_PATTERN.test(recolle)) {
+            retenir(recolle, items[0].y);
+            return;
+        }
+        items.forEach(i => {
+            if (CODE_PATTERN.test(i.str)) retenir(i.str, i.y);
+        });
     });
 
     // Ordre de lecture : du haut vers le bas de la page
