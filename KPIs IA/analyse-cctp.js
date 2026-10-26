@@ -104,6 +104,48 @@ function plural(n, word) {
     return `${formatNumber(n)} ${word}${n > 1 ? 's' : ''}`;
 }
 
+// 3.86 → « 3,86 » (2 décimales max, sans zéros inutiles).
+function formatDecimal(n) {
+    return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(n);
+}
+
+// Durée en heures → « 45 min », « 1 h 13 min », « 128 h ».
+function formatDuree(hours) {
+    const totalMin = Math.round(hours * 60);
+    if (totalMin < 60) return `${totalMin} min`;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h >= 100 || m === 0) return `${formatNumber(Math.round(hours))} h`;
+    return `${h} h ${String(m).padStart(2, '0')} min`;
+}
+
+// ==================== PARAMÈTRES DU GAIN ====================
+
+// Minutes gagnées par avis repris : défaut partagé (KPI.CCTP_GAIN), surchargé
+// par le réglage enregistré dans CE navigateur (localStorage, comme le
+// descriptif). Lecture/écriture protégées : navigation privée, stockage bloqué.
+const PARAMS_KEY = 'cctp_parameters';
+let parameters = { minutesParAvis: KPI.CCTP_GAIN.minutesParAvis };
+
+function loadParameters() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(PARAMS_KEY) || 'null');
+        const m = saved && Number(saved.minutesParAvis);
+        if (m > 0) parameters.minutesParAvis = m;
+    } catch (e) {
+        console.warn('Paramètres CCTP illisibles, valeur par défaut utilisée');
+    }
+}
+
+function saveParameters() {
+    try {
+        if (parameters.minutesParAvis === KPI.CCTP_GAIN.minutesParAvis) localStorage.removeItem(PARAMS_KEY);
+        else localStorage.setItem(PARAMS_KEY, JSON.stringify(parameters));
+    } catch (e) {
+        console.warn('Paramètres CCTP non enregistrés (stockage indisponible)');
+    }
+}
+
 // ==================== POPULATION ====================
 
 async function loadAgencyPopulation() {
@@ -497,6 +539,41 @@ function updateChart(data) {
     });
 }
 
+// ==================== GAIN DE TEMPS ====================
+
+function updateGain(s) {
+    const minutes = parameters.minutesParAvis;
+    const hours = KPI.cctpGainHeures(s.avisRepris, minutes);
+    $('gain-time').textContent = formatDuree(hours);
+    // « avis » est invariable : pas de plural().
+    $('gain-time-formula').textContent = `${formatNumber(s.avisRepris)} avis repris dans S+ × ${formatDecimal(minutes)} min ÷ 60`;
+    $('gain-time-per-analysis').textContent = s.analysesExploitees
+        ? `Soit ${formatDuree(hours / s.analysesExploitees)} par analyse exploitée (${s.analysesExploitees})`
+        : 'Aucune analyse exploitée dans S+ sur ce périmètre';
+
+    // Origine de l'hypothèse : référence calculée sur TOUTES les données depuis
+    // le lancement officiel, indépendamment des filtres (c'est une constante
+    // de calibrage, pas un indicateur de la période).
+    $('hyp-minutes').textContent = formatDecimal(minutes);
+    $('hyp-minutes-2').textContent = formatDecimal(minutes);
+    const [y, mo, d] = KPI.CCTP_GAIN.dateLancement.split('-');
+    $('hyp-date').textContent = `${d}/${mo}/${y}`;
+    const ref = KPI.cctpAvisParAffaire(allData, KPI.CCTP_GAIN.dateLancement);
+    $('hyp-avis-affaire').textContent = ref.moyenne === null
+        ? 'pas encore de donnée'
+        : `${formatDecimal(ref.moyenne)} avis par affaire`;
+    $('hyp-avis-detail').textContent = ref.moyenne === null
+        ? ''
+        : `(${formatNumber(ref.avis)} avis sur ${plural(ref.affaires, 'affaire')}, ${plural(ref.analyses, 'analyse')})`;
+
+    const custom = minutes !== KPI.CCTP_GAIN.minutesParAvis;
+    const note = $('hyp-custom-note');
+    note.classList.toggle('hidden', !custom);
+    note.textContent = custom
+        ? `Valeur personnalisée dans ce navigateur : ${formatDecimal(minutes)} min (défaut : ${formatDecimal(KPI.CCTP_GAIN.minutesParAvis)} min).`
+        : '';
+}
+
 // ==================== ORCHESTRATION ====================
 
 function updateKPIs() {
@@ -504,6 +581,7 @@ function updateKPIs() {
     const stats = KPI.aggregateCctp(filtered);
 
     updateCards(stats);
+    updateGain(stats);
     const firstDate = getFirstDate(allData);
     if (firstDate) firstDateTextEl.textContent = formatFirstDate(firstDate);
 
@@ -562,6 +640,40 @@ cumulToggleEl.addEventListener('change', e => {
     updateKPIs();
 });
 
+// Modale « Paramètres de calcul »
+const settingsModal = $('settings-modal');
+const inputMinutesAvisEl = $('input-minutes-avis');
+
+function closeSettings() {
+    settingsModal.classList.add('hidden');
+}
+
+$('settings-btn').addEventListener('click', () => {
+    inputMinutesAvisEl.value = parameters.minutesParAvis;
+    settingsModal.classList.remove('hidden');
+    inputMinutesAvisEl.focus();
+});
+$('save-settings').addEventListener('click', () => {
+    const m = parseFloat(String(inputMinutesAvisEl.value).replace(',', '.'));
+    if (!(m > 0)) {
+        inputMinutesAvisEl.classList.add('border-red-500');
+        return;
+    }
+    inputMinutesAvisEl.classList.remove('border-red-500');
+    parameters.minutesParAvis = m;
+    saveParameters();
+    closeSettings();
+    updateKPIs();
+});
+$('reset-settings').addEventListener('click', () => {
+    inputMinutesAvisEl.value = KPI.CCTP_GAIN.minutesParAvis;
+    inputMinutesAvisEl.classList.remove('border-red-500');
+});
+$('cancel-settings').addEventListener('click', closeSettings);
+$('close-modal').addEventListener('click', closeSettings);
+settingsModal.addEventListener('click', e => { if (e.target === settingsModal) closeSettings(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+
 // ==================== AUTH + INIT ====================
 
 async function init() {
@@ -608,6 +720,7 @@ async function init() {
         populateSelect(drFilterEl, 'Toutes les directions', availableDRs);
 
         applyInitialFilters();
+        loadParameters();
         updateKPIs();
 
         loadingEl.classList.add('hidden');

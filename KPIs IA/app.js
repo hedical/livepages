@@ -49,6 +49,10 @@ const MINUTES_PER_MESSAGE = 2.8125; // For chat tools (BTP and Citae)
 const MINUTES_PER_MESSAGE_EXPERT = 5; // For expert technique tools (BTP and Citae)
 const HOURS_PER_POINT_NF = 0.02816; // NF Habitat: hours gained per point checked
 const MINUTES_PER_AO_ANALYSE = 15; // Analyse AO: minutes gagnées par AO analysé (lead créé)
+// Analyse CCTP : minutes gagnées par avis REPRIS dans S+ (défaut partagé, cf. shared/utils.js).
+// Le réglage personnalisé de analyse-cctp.html est local à un navigateur : il ne
+// modifie pas ce total, sinon deux postes afficheraient deux gains différents.
+const MINUTES_PER_AVIS_CCTP = KPI.CCTP_GAIN.minutesParAvis;
 // Date de mise en place effective du module Analyse AO (cf. shared/utils.js).
 const AO_MODULE_START_DATE = KPI.AO_MODULE_START_DATE;
 const NF_HABITAT_REVENUE = 7000000; // NF Habitat specific revenue base
@@ -1754,7 +1758,7 @@ function processCctpData(data) {
 /**
  * Calculate gains - MUST match the logic in descriptif.js, autocontact.js, comparateur.js, chat and expert pages
  */
-function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses, chatBtpSpsMessages, expertBtpSpsMessages, autocontactSpsContacts) {
+function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMessages, expertBTPMessages, chatCitaeMessages, expertCitaeMessages, chatBTPDiagMessages, expertBTPDiagMessages, nfHabitatPoints, aoAnalyses, chatBtpSpsMessages, expertBtpSpsMessages, autocontactSpsContacts, cctpAvisRepris) {
     // Gain en temps pour descriptifs (minutes → heures)
     const timeGainMinutesDescriptif = descriptifCount * MINUTES_PER_DESCRIPTIF;
     const timeGainHoursDescriptif = timeGainMinutesDescriptif / 60;
@@ -1811,11 +1815,14 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
     const timeGainMinutesAO = (aoAnalyses || 0) * MINUTES_PER_AO_ANALYSE;
     const timeGainHoursAO = timeGainMinutesAO / 60;
 
+    // Gain en temps pour Analyse CCTP : seuls les avis repris dans S+ comptent
+    const timeGainHoursCctp = KPI.cctpGainHeures(cctpAvisRepris || 0, MINUTES_PER_AVIS_CCTP);
+
     // Total time gain
     const totalTimeGain = timeGainHoursDescriptif + timeGainHoursAutocontact + timeGainHoursComparateur
         + timeGainHoursChatBTP + timeGainHoursExpertBTP + timeGainHoursChatCitae + timeGainHoursExpertCitae
         + timeGainHoursChatBTPDiag + timeGainHoursExpertBTPDiag + timeGainHoursChatBtpSps + timeGainHoursExpertBtpSps
-        + timeGainHoursAutocontactSps + timeGainHoursNFHabitat + timeGainHoursAO;
+        + timeGainHoursAutocontactSps + timeGainHoursNFHabitat + timeGainHoursAO + timeGainHoursCctp;
 
     // Gain en % volume d'affaire (BTP Consultants scope: 44M€)
     const percentGain = (totalTimeGain / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
@@ -1839,6 +1846,7 @@ function calculateGains(descriptifCount, aiContactsCount, totalPages, chatBTPMes
         timeGainHoursAutocontactSps,
         timeGainHoursNFHabitat,
         timeGainHoursAO,
+        timeGainHoursCctp,
         percentGain,
         euroGain
     };
@@ -2346,6 +2354,7 @@ function updateKPIs() {
         ['Auto SPS',     gains.timeGainHoursAutocontactSps],
         ['NF Habitat',   gains.timeGainHoursNFHabitat],
         ['Analyse AO',   gains.timeGainHoursAO],
+        ['CCTP',         gains.timeGainHoursCctp],
     ].map(([label, h]) => `${label}: ${fmt1(h)}h`).join(' + ');
 
     // Entête arrondi à l'entier, comme les jauges (formatNumber(Math.round(...))) → chiffres identiques.
@@ -4574,6 +4583,7 @@ function calculateMonthlyGains() {
                 autocontactSpsContacts: 0,
                 nfHabitatPoints: 0,
                 aoAnalyses: 0,
+                cctpAvisRepris: 0,
             };
         }
     };
@@ -4721,6 +4731,17 @@ function calculateMonthlyGains() {
         monthlyData[key].aoAnalyses += leads;
     });
 
+    // ── Analyse CCTP ─────────────────────────────────────────────────────────────
+    // Mirror analyse-cctp.html : avis repris dans S+, attribués au mois de l'analyse.
+    getFilteredData(cctpData)
+        .filter(item => item.status !== 'ERROR')
+        .forEach(item => {
+            const key = getMonthKey(item.createdAt);
+            if (!key) return;
+            ensureMonth(key);
+            monthlyData[key].cctpAvisRepris += (item.avisRepris || 0);
+        });
+
     // ── Build sorted result ──────────────────────────────────────────────────────
     const sortedMonths = Object.keys(monthlyData).sort();
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -4741,7 +4762,8 @@ function calculateMonthlyGains() {
             d.aoAnalyses,
             d.chatBtpSpsMessages,
             d.expertBtpSpsMessages,
-            d.autocontactSpsContacts
+            d.autocontactSpsContacts,
+            d.cctpAvisRepris
         );
         const [year, month] = key.split('-');
         return {
@@ -4763,6 +4785,7 @@ function calculateMonthlyGains() {
             hoursAutocontactSps: gains.timeGainHoursAutocontactSps,
             hoursNFHabitat:     gains.timeGainHoursNFHabitat,
             hoursAO:            gains.timeGainHoursAO,
+            hoursCctp:          gains.timeGainHoursCctp,
         };
     });
 }
@@ -4794,7 +4817,7 @@ function calculateWindowedGains() {
         timeGainHoursChatBTPDiag: 0, timeGainHoursExpertBTPDiag: 0,
         timeGainHoursChatBtpSps: 0, timeGainHoursExpertBtpSps: 0,
         timeGainHoursAutocontactSps: 0,
-        timeGainHoursNFHabitat: 0, timeGainHoursAO: 0,
+        timeGainHoursNFHabitat: 0, timeGainHoursAO: 0, timeGainHoursCctp: 0,
     };
     monthly.forEach(m => {
         if (startKey && m.key < startKey) return;
@@ -4815,6 +4838,7 @@ function calculateWindowedGains() {
         acc.timeGainHoursAutocontactSps += m.hoursAutocontactSps;
         acc.timeGainHoursNFHabitat   += m.hoursNFHabitat;
         acc.timeGainHoursAO          += m.hoursAO;
+        acc.timeGainHoursCctp        += m.hoursCctp;
     });
     acc.percentGain = (acc.timeGainHours / (TOTAL_EFFECTIF * ANNUAL_HOURS)) * 100;
     return acc;
@@ -5008,7 +5032,7 @@ function publishCopilSnapshot() {
                 hoursByMonth[m.key] = {
                     total: m.hours,
                     CT: m.hoursDescriptif + m.hoursAutocontact + m.hoursComparateur
-                        + m.hoursChatBTP + m.hoursExpertBTP + m.hoursAO,
+                        + m.hoursChatBTP + m.hoursExpertBTP + m.hoursAO + m.hoursCctp,
                     SPS: m.hoursChatBtpSps + m.hoursExpertBtpSps + m.hoursAutocontactSps,
                     DIAG: m.hoursChatBTPDiag + m.hoursExpertBTPDiag,
                     PPI: m.hoursChatCitae + m.hoursExpertCitae + m.hoursNFHabitat,
@@ -5237,6 +5261,7 @@ function buildGainChart() {
         { key: 'hoursAutocontactSps', label: 'Autocontact SPS',    color: 'rgba(103, 232, 249, 0.85)' },
         { key: 'hoursNFHabitat',     label: 'NF Habitat',          color: 'rgba(52, 211, 153, 0.85)'  },
         { key: 'hoursAO',            label: 'Analyse AO',          color: 'rgba(217, 70, 239, 0.85)'  },
+        { key: 'hoursCctp',          label: 'Analyse CCTP',        color: 'rgba(132, 204, 22, 0.85)'  },
     ];
 
     // Build cumulative or monthly series per feature + euros line

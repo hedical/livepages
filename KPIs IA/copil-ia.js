@@ -15,11 +15,21 @@
 const PLATFORM_URL = 'https://hedical.github.io/livepages/KPIs%20IA/index.html';
 
 // Palettes catégorielles validées (dataviz), une par famille d'entités.
+// Couleur fixe par module : distincte, dans chaque onglet métier, des autres
+// modules et de la courbe « tous modules » du métier (METIER_COLORS).
 const MODULE_COLORS = {
-    'descriptif': '#2a78d6', 'analyse-cctp': '#eb6834', 'autocontact': '#1baf7a',
-    'libre-ct': '#eda100', 'autocontact-sps': '#e87ba4',
+    // CT (tous modules : violet)
+    'descriptif': '#2a78d6', 'analyse-cctp': '#eb6834', 'autocontact': '#1baf7a', 'libre-ct': '#eda100',
+    'comparateur': '#e87ba4', 'analyse-geo': '#008300', 'analyse-acou': '#e34948',
+    // SPS (tous modules : magenta)
+    'autocontact-sps': '#eb6834', 'libre-sps': '#eda100', 'chat-sps': '#1baf7a', 'expert-sps': '#2a78d6',
+    // Diag (tous modules : vert)
+    'libre-diag': '#eda100', 'chat-diag': '#2a78d6', 'expert-diag': '#eb6834',
+    // PPI (tous modules : jaune)
+    'nf-habitat': '#2a78d6', 'libre-ppi': '#1baf7a', 'chat-ppi': '#eb6834', 'expert-ppi': '#e87ba4',
 };
 const METIER_COLORS = { CT: '#4a3aa7', SPS: '#e87ba4', DIAG: '#008300', PPI: '#eda100' };
+const METIER_TABS = { CT: 'CT', SPS: 'SPS', DIAG: 'Diag', PPI: 'PPI' };
 const INK = { secondary: '#52514e', muted: '#898781', grid: '#e5e7eb', target: '#52514e' };
 
 // Divergent bleu (hausse) ↔ rouge (baisse), milieu gris neutre.
@@ -29,8 +39,10 @@ const HEAT = {
     down: ['#fbdcdb', '#f5adac', '#ee8180'],
 };
 
-// Modules CT tracés sur le graphe d'adoption (les autres sont dans la carte).
-const CT_ADOPTION_MODULES = ['descriptif', 'analyse-cctp', 'autocontact', 'libre-ct'];
+// Graphe d'adoption : modules masqués par défaut (clic sur la légende pour les
+// afficher) — volumes faibles qui écraseraient la lecture des modules majeurs.
+const ADOPTION_HIDDEN = ['comparateur', 'analyse-geo', 'analyse-acou'];
+let adoptionMetier = 'CT';
 const SYS_MODULES = ['descriptif', 'autocontact', 'autocontact-sps'];
 
 const HEAT_METRICS = [
@@ -200,28 +212,46 @@ function renderSynthese(s) {
 
 function renderAdoption() {
     const cible = KPICopil.CIBLES.adoption;
-    // Axe : 12 derniers mois, prolongé jusqu'à l'échéance de la cible pour
-    // qu'on voie la distance à parcourir.
+    const metier = adoptionMetier;
+    const pop = populationOf(metier);
+    // Axe : 12 derniers mois, prolongé jusqu'à l'échéance de la cible (quand
+    // le métier en a une, c.-à-d. une population) pour voir la distance à parcourir.
     const base = lastMonths(12);
-    const end = cible && cible.month > selectedMonth ? cible.month : selectedMonth;
+    const end = pop && cible.month > selectedMonth ? cible.month : selectedMonth;
     const months = KPICopil.monthRange(base[0], end);
     const labels = months.map(k => monthLabel(k, true));
-    const popCT = populationOf('CT');
+    const metierLabel = KPICopil.METIERS[metier].label;
 
-    // Tous modules CT d'abord : c'est la courbe que la cible d'adoption juge.
-    const ctTotal = Object.assign({}, snapshot.metiers.find(x => x.id === 'CT'),
-        { label: 'Tous modules CT', color: METIER_COLORS.CT });
-    const series = [ctTotal].concat(CT_ADOPTION_MODULES.map(moduleById).filter(Boolean)
-        .map(mod => Object.assign({ color: MODULE_COLORS[mod.id] }, mod)));
+    $('adoption-tabs').innerHTML = KPICopil.METIER_ORDER.map(k =>
+        `<button role="tab" data-metier="${k}" aria-selected="${k === metier}" class="px-3 py-1 text-sm font-medium rounded-md text-gray-600 ${k === metier ? 'seg-active' : ''}">${METIER_TABS[k]}</button>`).join('');
+    $('adoption-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        adoptionMetier = b.dataset.metier;
+        renderAdoption();
+    }));
+    $('adoption-title').textContent = `${metierLabel} : global et par module`;
+
+    // Fonctionnalités du métier. Le détail chat / expert n'apparaît que si
+    // l'usage libre est la seule fonctionnalité (Diag) : il y remplace la
+    // courbe d'usage libre, identique au « tous modules ».
+    const mods = snapshot.modules.filter(mod => mod.metier === metier && mod.startMonth);
+    const seulLibre = mods.every(mod => mod.kind === 'libre' || mod.kind === 'libre-detail');
+    const modules = mods.filter(mod => (seulLibre ? mod.kind === 'libre-detail' : mod.kind !== 'libre-detail'));
+
+    // Tous modules d'abord : c'est la courbe que la cible d'adoption juge.
+    const total = Object.assign({}, snapshot.metiers.find(x => x.id === metier),
+        { label: `Tous modules ${METIER_TABS[metier]}`, color: METIER_COLORS[metier] });
+    const series = [total].concat(modules.map(mod => Object.assign({ color: MODULE_COLORS[mod.id] || INK.muted }, mod)));
     const datasets = series.map(item => Object.assign(lineDataset(
         item.label,
         months.map(k => {
             if (k > selectedMonth || !item.startMonth || k < item.startMonth) return null;
-            return popCT ? KPICopil.adoption(rowAt(item, k) || { activeUsers: 0 }, popCT) : (rowAt(item, k) || {}).activeUsers || 0;
+            return pop ? KPICopil.adoption(rowAt(item, k) || { activeUsers: 0 }, pop) : (rowAt(item, k) || {}).activeUsers || 0;
         }),
-        item.color), item === ctTotal ? { borderWidth: 3 } : {}));
+        item.color),
+        item === total ? { borderWidth: 3 } : {},
+        ADOPTION_HIDDEN.includes(item.id) ? { hidden: true } : {}));
 
-    if (popCT) {
+    if (pop) {
         datasets.push({
             label: `Cible d'adoption : plus de ${pct(cible.value)} (fin ${cible.month.slice(0, 4)})`,
             data: months.map(() => cible.value),
@@ -230,10 +260,15 @@ function renderAdoption() {
             pointBackgroundColor: INK.target, fill: false,
         });
     }
-    $('adoption-ct-unit').textContent = popCT ? `actifs du mois ÷ ${fmt(popCT)} CT` : 'actifs du mois';
+    const masques = modules.filter(mod => ADOPTION_HIDDEN.includes(mod.id)).length;
+    $('adoption-ct-unit').textContent = (pop
+        ? `actifs du mois ÷ ${fmt(pop)} (population ${METIER_TABS[metier]})`
+        : 'actifs du mois · population à renseigner, pas de % ni de cible')
+        + (masques ? ` · ${masques} module${masques > 1 ? 's' : ''} masqué${masques > 1 ? 's' : ''}, cliquer la légende` : '');
+    $('adoption-ct-chart').setAttribute('aria-label', `Adoption mensuelle ${metierLabel}, tous modules et par module${pop ? ", avec la cible d'adoption" : ''}`);
     drawChart('adoptionCt', 'adoption-ct-chart', {
         type: 'line', data: { labels, datasets },
-        options: popCT ? pctOptions(0.6) : countOptions(),
+        options: pop ? pctOptions(0.6) : countOptions(),
     });
 
     const mMonths = lastMonths(12);

@@ -70,11 +70,12 @@
                     <p class="text-sm text-gray-500 mb-5">Utilisateurs actifs du mois ÷ population concernée. Mensuelle, pas cumulée : un mois qui décroche se voit.</p>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <div class="flex items-baseline justify-between mb-3 gap-3">
-                                <h3 class="text-base font-semibold text-gray-700">Contrôle technique : global et par module</h3>
-                                <span class="text-xs text-gray-400" id="adoption-ct-unit">—</span>
+                            <div class="flex flex-wrap items-center justify-between mb-1 gap-3">
+                                <h3 class="text-base font-semibold text-gray-700" id="adoption-title">—</h3>
+                                <div class="inline-flex rounded-lg bg-gray-100 p-1" role="tablist" aria-label="Grand métier" id="adoption-tabs"></div>
                             </div>
-                            <div class="relative h-80"><canvas id="adoption-ct-chart" role="img" aria-label="Adoption mensuelle CT, tous modules et par module, avec la cible d'adoption de 50 %"></canvas></div>
+                            <p class="text-xs text-gray-400 mb-3" id="adoption-ct-unit">—</p>
+                            <div class="relative h-80"><canvas id="adoption-ct-chart" role="img" aria-label="Adoption mensuelle par grand métier"></canvas></div>
                         </div>
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                             <div class="flex items-baseline justify-between mb-3 gap-3">

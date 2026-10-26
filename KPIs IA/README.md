@@ -433,7 +433,7 @@ Auto Contacts affichent des « utilisations » (`<carte>-ops`) : elles n’étai
 
 ### Analyse CCTP vs Référentiel (`analyse-cctp.html`)
 
-Brique **qualité** (pas de gain h/€, comme géotech et acoustique) : l'IA confronte le CCTP
+Brique **qualité** avec un **gain de temps estimé** (pas de gain €) : l'IA confronte le CCTP
 au référentiel réglementaire, mission par mission (L, P1, F, PV…), et produit des avis
 Favorable / Suspendu / Défavorable. Ouverture à tous les utilisateurs S+ le 12/10/2026.
 
@@ -462,6 +462,30 @@ KPIs affichés :
 L'analyse compte dans le total « utilisations » du dashboard (1 analyse = 1 utilisation) et dans
 les utilisateurs uniques. La page détail s'ouvre en mode « Depuis le début » : la brique a démarré
 le 17/09/2026, et le mois en cours n'en montrerait qu'une fraction.
+
+**Gain de temps** :
+
+```
+heures gagnées = avis repris dans S+ × minutes par avis ÷ 60
+```
+
+- **Seuls les avis repris dans S+ comptent**, pas les avis émis : un avis que personne ne reprend
+  n'a remplacé aucun travail. Le gain suit donc les filtres de période, DR et agence.
+- **Minutes par avis** : 3,86 par défaut (`KPI.CCTP_GAIN.minutesParAvis`). Valeur calibrée sur le
+  nombre moyen d'avis par affaire depuis le lancement officiel du 12/10/2026
+  (`KPI.CCTP_GAIN.dateLancement`). La page affiche cette référence **recalculée en direct**
+  (`KPI.cctpAvisParAffaire`, toutes données confondues, filtres ignorés) dans l'encadré
+  « D'où viennent les … min par avis ? ».
+- **Modifiable** via le bouton « Paramètres » de la section. Le réglage est stocké dans
+  `localStorage['cctp_parameters']`, donc **propre à chaque navigateur**, comme celui du descriptif.
+  Une valeur personnalisée est signalée sous l'encadré. Revenir au défaut efface la clé.
+- **Intégré au gain total du dashboard** (`calculateGains` dans `app.js`, constante
+  `MINUTES_PER_AVIS_CCTP`) : carte « Gain total », poste « CCTP » du détail, série « Analyse CCTP »
+  du graphe mensuel empilé, jauges d'objectifs, instantané `pilotage-ia` et heures CT du COPIL.
+  Les avis repris sont attribués au **mois de l'analyse**. Le dashboard utilise **toujours la valeur
+  par défaut** : le réglage personnalisé de la page est local à un navigateur, et le laisser modifier
+  le total ferait afficher deux gains différents à deux postes. Pour changer l'hypothèse pour tout le
+  monde, modifier `KPI.CCTP_GAIN.minutesParAvis`.
 
 ### COPIL IA (`copil-ia.html`)
 

@@ -386,6 +386,37 @@ test('aggregateCctp — lot vide', () => {
     assert.deepEqual(s.byMission, {});
 });
 
+test('cctpGainHeures — avis repris × minutes ÷ 60', () => {
+    assert.equal(KPI.CCTP_GAIN.minutesParAvis, 3.86);
+    assert.equal(KPI.cctpGainHeures(60, 3.86), 3.86);
+    assert.ok(Math.abs(KPI.cctpGainHeures(19, 3.86) - 1.2223) < 1e-3);
+    assert.equal(KPI.cctpGainHeures(0, 3.86), 0);
+});
+
+test('cctpGainHeures — valeurs invalides → 0 (pas de NaN affiché)', () => {
+    assert.equal(KPI.cctpGainHeures(10, NaN), 0);
+    assert.equal(KPI.cctpGainHeures(10, -1), 0);
+    assert.equal(KPI.cctpGainHeures(undefined, 3.86), 0);
+    assert.equal(KPI.cctpGainHeures('12', '5'), 1);
+});
+
+test('cctpAvisParAffaire — depuis le lancement, affaire analysée 2 fois cumulée, erreurs exclues', () => {
+    const items = KPI.parseCctpRows([
+        { DeliverableId: 'a', Status: 'COMPLETED', EventDate: '2026-10-11T23:59:00', ContractNumber: 'C-X-1', TotalAvis: 100 },
+        { DeliverableId: 'b', Status: 'COMPLETED', EventDate: '2026-10-12T08:00:00', ContractNumber: 'C-X-2', TotalAvis: 20 },
+        { DeliverableId: 'c', Status: 'COMPLETED', EventDate: '2026-10-20T08:00:00', ContractNumber: 'C-X-2', TotalAvis: 10 },
+        { DeliverableId: 'd', Status: 'COMPLETED', EventDate: '2026-10-21T08:00:00', ContractNumber: 'C-X-3', TotalAvis: 30 },
+        { DeliverableId: 'e', Status: 'ERROR', EventDate: '2026-10-22T08:00:00', ContractNumber: 'C-X-4', TotalAvis: 0 },
+    ]);
+    const r = KPI.cctpAvisParAffaire(items, '2026-10-12');
+    assert.equal(r.analyses, 3);
+    assert.equal(r.affaires, 2);
+    assert.equal(r.avis, 60);
+    assert.equal(r.moyenne, 30);
+    assert.equal(KPI.cctpAvisParAffaire(items).affaires, 3); // sans date : tout l'historique
+    assert.equal(KPI.cctpAvisParAffaire([], '2026-10-12').moyenne, null);
+});
+
 // ===================== note d'adoption =====================
 
 test('weekIndex — lundi → dimanche dans la même semaine', () => {

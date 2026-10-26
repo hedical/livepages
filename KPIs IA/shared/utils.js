@@ -463,6 +463,44 @@ const KPI = (function () {
         return s;
     }
 
+    // Gain de temps CCTP : seuls les avis REPRIS dans S+ font gagner du temps.
+    // Hypothèse par défaut (modifiable sur la page, stockée par navigateur) :
+    // 3,86 min par avis, calibrée sur le nombre moyen d'avis par affaire depuis
+    // le lancement officiel du module (12/10/2026).
+    const CCTP_GAIN = {
+        minutesParAvis: 3.86,
+        dateLancement: '2026-10-12',
+    };
+
+    // Heures gagnées = avis repris × minutes par avis ÷ 60. Valeur invalide → 0.
+    function cctpGainHeures(avisRepris, minutesParAvis) {
+        const n = Number(avisRepris);
+        const m = Number(minutesParAvis);
+        if (!isFinite(n) || !isFinite(m) || n <= 0 || m <= 0) return 0;
+        return n * m / 60;
+    }
+
+    // Référence de l'hypothèse : avis moyens par affaire sur les analyses
+    // terminées à partir de `depuis` (YYYY-MM-DD, minuit local inclus).
+    // Une affaire analysée plusieurs fois cumule ses avis.
+    function cctpAvisParAffaire(items, depuis) {
+        const start = depuis ? new Date(depuis + 'T00:00:00') : null;
+        const parAffaire = {};
+        let analyses = 0;
+        (items || []).forEach(it => {
+            if (!it || it.status === 'ERROR' || !it.contractNumber) return;
+            if (start) {
+                const d = new Date(it.createdAt);
+                if (isNaN(d.getTime()) || d < start) return;
+            }
+            analyses++;
+            parAffaire[it.contractNumber] = (parAffaire[it.contractNumber] || 0) + (it.totalAvis || 0);
+        });
+        const affaires = Object.keys(parAffaire).length;
+        const avis = Object.values(parAffaire).reduce((a, b) => a + b, 0);
+        return { analyses, affaires, avis, moyenne: affaires ? avis / affaires : null };
+    }
+
     // ===================== NOTE D'ADOPTION PAR UTILISATEUR =====================
     //
     // Note /100 d'un utilisateur sur le périmètre de SA filiale (popup
@@ -663,6 +701,9 @@ const KPI = (function () {
         parseCctpRows,
         parseCctpPayload,
         aggregateCctp,
+        CCTP_GAIN,
+        cctpGainHeures,
+        cctpAvisParAffaire,
         // note d'adoption
         ADOPTION,
         weekIndex,
