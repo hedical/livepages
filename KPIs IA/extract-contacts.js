@@ -312,26 +312,29 @@ function updatePositionChart() {
     
     // Generate colors
     const colors = [
-        '#3b82f6', // blue-500
-        '#10b981', // green-500
-        '#f59e0b', // amber-500
-        '#ef4444', // red-500
-        '#8b5cf6', // violet-500
-        '#ec4899', // pink-500
-        '#06b6d4', // cyan-500
-        '#f97316', // orange-500
-        '#14b8a6', // teal-500
-        '#a855f7', // purple-500
+        // Charte AnalyzTech : même ordre que les séries de shared/analyztech-theme.js
+        // (vert, noir, Stone Grey, Graphite). Au-delà de 4 parts, le thème ajoute une
+        // texture au camembert ; la légende reprend la couleur de base de la part.
+        '#BAF266', // Compliant Green
+        '#1A1A1A', // Black
+        '#B6B9AD', // Stone Grey
+        '#595959', // Graphite
+        '#BAF266', // Compliant Green (hachures 45° dans le camembert)
+        '#1A1A1A', // Black (hachures 45°)
+        '#B6B9AD', // Stone Grey (hachures 45°)
+        '#595959', // Graphite (hachures 45°)
+        '#BAF266', // Compliant Green (hachures 135°)
+        '#1A1A1A', // Black (hachures 135°)
     ];
     
     const hasPositionFilter = activeFilters.position !== null;
     const backgroundColors = sortedPositions.map(([position], index) => {
-        if (hasPositionFilter && activeFilters.position !== position) return '#e5e7eb';
+        if (hasPositionFilter && activeFilters.position !== position) return '#EDEAE0';
         return colors[index % colors.length];
     });
     const borderColors = sortedPositions.map(([position], index) => {
-        if (hasPositionFilter && activeFilters.position !== position) return '#d1d5db';
-        return '#ffffff';
+        if (hasPositionFilter && activeFilters.position !== position) return '#DADACF';
+        return '#FFFDF6';
     });
 
     // Destroy existing chart if it exists
@@ -406,11 +409,11 @@ function updatePositionChart() {
                                     const isExcluded = hasPositionFilter && !isActive;
                                     return {
                                         text: `${label} (${value} — ${percentage}%)${isActive ? ' ✓' : ''}`,
-                                        fillStyle: isExcluded ? '#e5e7eb' : baseColors[i],
-                                        strokeStyle: isExcluded ? '#d1d5db' : baseColors[i],
+                                        fillStyle: isExcluded ? '#EDEAE0' : baseColors[i],
+                                        strokeStyle: isExcluded ? '#DADACF' : baseColors[i],
                                         hidden: false,
                                         index: i,
-                                        fontColor: isExcluded ? '#9ca3af' : (isActive ? '#111827' : '#374151'),
+                                        fontColor: isExcluded ? '#B6B9AD' : (isActive ? '#1A1A1A' : '#595959'),
                                         fontStyle: isActive ? 'bold' : 'normal',
                                         strikethrough: isExcluded,
                                         lineWidth: isActive ? 2 : 1,
@@ -479,26 +482,29 @@ function updateTypologieChart() {
     
     // Generate colors
     const colors = [
-        '#3b82f6', // blue-500
-        '#10b981', // green-500
-        '#f59e0b', // amber-500
-        '#ef4444', // red-500
-        '#8b5cf6', // violet-500
-        '#ec4899', // pink-500
-        '#06b6d4', // cyan-500
-        '#f97316', // orange-500
-        '#14b8a6', // teal-500
-        '#a855f7', // purple-500
+        // Charte AnalyzTech : même ordre que les séries de shared/analyztech-theme.js
+        // (vert, noir, Stone Grey, Graphite). Au-delà de 4 parts, le thème ajoute une
+        // texture au camembert ; la légende reprend la couleur de base de la part.
+        '#BAF266', // Compliant Green
+        '#1A1A1A', // Black
+        '#B6B9AD', // Stone Grey
+        '#595959', // Graphite
+        '#BAF266', // Compliant Green (hachures 45° dans le camembert)
+        '#1A1A1A', // Black (hachures 45°)
+        '#B6B9AD', // Stone Grey (hachures 45°)
+        '#595959', // Graphite (hachures 45°)
+        '#BAF266', // Compliant Green (hachures 135°)
+        '#1A1A1A', // Black (hachures 135°)
     ];
     
     const hasTypologieFilter = activeFilters.typologie !== null;
     const backgroundColors = sortedTypologies.map(([typologie], index) => {
-        if (hasTypologieFilter && activeFilters.typologie !== typologie) return '#e5e7eb';
+        if (hasTypologieFilter && activeFilters.typologie !== typologie) return '#EDEAE0';
         return colors[index % colors.length];
     });
     const borderColors = sortedTypologies.map(([typologie]) => {
-        if (hasTypologieFilter && activeFilters.typologie !== typologie) return '#d1d5db';
-        return '#ffffff';
+        if (hasTypologieFilter && activeFilters.typologie !== typologie) return '#DADACF';
+        return '#FFFDF6';
     });
 
     // Destroy existing chart if it exists
@@ -564,11 +570,11 @@ function updateTypologieChart() {
                                         const isExcluded = hasTypologieFilter && !isActive;
                                         return {
                                             text: `${label} (${value} — ${percentage}%)${isActive ? ' ✓' : ''}`,
-                                            fillStyle: isExcluded ? '#e5e7eb' : baseColors[i],
-                                            strokeStyle: isExcluded ? '#d1d5db' : baseColors[i],
+                                            fillStyle: isExcluded ? '#EDEAE0' : baseColors[i],
+                                            strokeStyle: isExcluded ? '#DADACF' : baseColors[i],
                                             hidden: false,
                                             index: i,
-                                            fontColor: isExcluded ? '#9ca3af' : (isActive ? '#111827' : '#374151'),
+                                            fontColor: isExcluded ? '#B6B9AD' : (isActive ? '#1A1A1A' : '#595959'),
                                             fontStyle: isActive ? 'bold' : 'normal',
                                             strikethrough: isExcluded,
                                             lineWidth: isActive ? 2 : 1,

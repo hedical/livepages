@@ -1,44 +1,38 @@
 <!DOCTYPE html>
-<html lang="fr" class="bg-gray-100">
+<html lang="fr" class="bg-off">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Explorateur de Descriptifs - AnalyzTech</title>
-    
-    <!-- Tailwind CSS via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts: Inter -->
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind, thème des graphiques.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js ; chart.js → analyztech-theme.js. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- D3.js via CDN for charting -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="shared/analyztech-tailwind.js"></script>
+    <!-- D3.js pour le graphique de similarité (couleurs : bloc <style> ci-dessous) -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-
-        /* Text highlighting styles */
+        /* Surlignage des segments : nuances de la charte (pas de vert en texte, le texte reste noir). */
         .highlight {
-            background-color: #fef08a; /* Tailwind yellow-200 */
+            background-color: #E9F4CA; /* vert pâle : segment repris par l'IA */
             padding: 0.1em 0.3em;
             border-radius: 0.2em;
         }
         .highlight-found {
-            background-color: #bbf7d0; /* Tailwind green-200 */
+            background-color: #BAF266; /* Compliant Green : segment retrouvé */
         }
         .highlight-not-found {
-            background-color: #fecaca; /* Tailwind red-200 */
+            background-color: #DADACF; /* Stone Grey clair : segment non retrouvé */
         }
 
-        /* Custom spinner for loading overlay */
+        /* Indicateur de chargement : Off White sur le voile noir. */
         .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
+            border: 4px solid rgba(248, 245, 235, 0.3);
             border-radius: 50%;
-            border-top: 4px solid #ffffff;
+            border-top: 4px solid #F8F5EB;
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
@@ -48,11 +42,13 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* Chart-specific styles */
+        /* Graphique d3 (similarité quotidienne) : couleurs de la charte.
+           Les trois courbes se distinguent par le trait (plein, tirets, pointillés),
+           pas seulement par la couleur ; la légende sous le graphique les reprend. */
         .chart-container {
             width: 100%;
             height: 400px;
-            background-color: #fff;
+            background-color: #FFFDF6;
             border-radius: 0.5em;
             display: flex;
             flex-direction: column;
@@ -66,62 +62,70 @@
         }
         .axis text {
             font-size: 0.8em;
-            fill: #4b5563;
+            fill: #595959;
         }
         .axis line, .axis path {
-            stroke: #d1d5db;
+            stroke: #B6B9AD;
             shape-rendering: crispEdges;
         }
         .line-daily {
             fill: none;
-            stroke: #3b82f6;
+            stroke: #1A1A1A;
             stroke-width: 2px;
         }
         .line-trend {
             fill: none;
-            stroke: #f97316;
+            stroke: #595959;
             stroke-width: 2px;
             stroke-dasharray: 5,5;
         }
         .dot {
-            fill: #3b82f6;
-            stroke: #fff;
+            fill: #1A1A1A;
+            stroke: #FFFDF6;
             stroke-width: 1.5px;
         }
         .tooltip {
             position: absolute;
             text-align: center;
             padding: 0.5em;
-            background: rgba(17, 24, 39, 0.8);
-            color: #fff;
+            background: rgba(26, 26, 26, 0.9);
+            color: #F8F5EB;
             border-radius: 0.375rem;
             pointer-events: none;
             font-size: 0.8em;
             transition: opacity 0.2s;
         }
         .average-line {
-            stroke: #16a34a;
-            stroke-width: 2px;
+            stroke: #1A1A1A;
+            stroke-width: 1.5px;
             stroke-dasharray: 2,2;
         }
+
+        /* Barre de score : explorer-descriptifs.js écrit bg-green-500 / bg-yellow-500 /
+           bg-red-500, que la palette ramène toutes au noir. On garde trois niveaux
+           distincts : élevé = Compliant Green, moyen = Graphite, faible = noir. */
+        html #score-bar.bg-green-500 { background-color: #BAF266; }
+        html #score-bar.bg-yellow-500 { background-color: #595959; }
+        html #score-bar.bg-red-500 { background-color: #1A1A1A; }
     </style>
 </head>
-<body class="antialiased text-gray-800">
+<body class="antialiased text-ink bg-off">
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex flex-col items-center justify-center">
+    <div id="loading-overlay" class="fixed inset-0 bg-ink bg-opacity-90 z-50 flex flex-col items-center justify-center">
         <div class="spinner"></div>
-        <p class="text-white mt-4 font-semibold">Chargement des données...</p>
+        <p class="text-off mt-4 font-medium">Chargement des données...</p>
     </div>
 
     <!-- Header -->
-    <header class="bg-white shadow-sm sticky top-0 z-40">
+    <header class="bg-paper border-b border-stone sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <a href="descriptif.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour aux statistiques</a>
-                    <h1 class="text-2xl font-bold text-gray-900">Explorateur de Descriptifs Sommaires</h1>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-x-8 gap-y-3">
+                    <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo">
+                    <h1 class="at-title text-2xl sm:text-3xl text-ink">Explorateur de Descriptifs Sommaires</h1>
                 </div>
+                <a href="descriptif.html" class="at-back">← Retour aux statistiques</a>
             </div>
         </div>
     </header>
@@ -131,32 +135,32 @@
         <!-- Main Content Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Left Column: Summary -->
-            <div id="summary" class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg space-y-3">
-                <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-3">Résumé Global</h2>
-                <p id="total-records" class="text-sm text-gray-600"></p>
-                <p id="unique-users" class="text-sm text-gray-600 font-medium"></p>
-                <p id="unique-operations" class="text-sm text-gray-600 font-medium"></p>
-                <hr class="my-3">
-                <p id="score-stats" class="text-sm text-gray-600"></p>
-                <p id="high-quality" class="text-sm text-gray-600"></p>
-                <p id="medium-quality" class="text-sm text-gray-600"></p>
-                <p id="low-quality" class="text-sm text-gray-600"></p>
-                <hr class="my-3">
-                <p id="low-word-count" class="text-sm text-gray-600"></p>
-                <hr class="my-3">
-                <div class="bg-green-50 p-3 rounded-lg">
-                    <p id="avg-score" class="text-sm font-bold text-green-800"></p>
+            <div id="summary" class="lg:col-span-1 at-card p-6 space-y-3">
+                <h2 class="at-title text-2xl text-ink border-b border-stone pb-3 mb-3">Résumé Global</h2>
+                <p id="total-records" class="text-sm text-graphite"></p>
+                <p id="unique-users" class="text-sm text-ink font-medium"></p>
+                <p id="unique-operations" class="text-sm text-ink font-medium"></p>
+                <hr class="my-3 border-stone">
+                <p id="score-stats" class="text-sm text-graphite"></p>
+                <p id="high-quality" class="text-sm text-graphite"></p>
+                <p id="medium-quality" class="text-sm text-graphite"></p>
+                <p id="low-quality" class="text-sm text-graphite"></p>
+                <hr class="my-3 border-stone">
+                <p id="low-word-count" class="text-sm text-graphite"></p>
+                <hr class="my-3 border-stone">
+                <div class="bg-ink p-3 rounded-lg">
+                    <p id="avg-score" class="text-sm font-medium text-compliant"></p>
                 </div>
             </div>
 
             <!-- Right Column: Quick Filters -->
-            <div id="filters-section" class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-4">Filtres rapides</h2>
+            <div id="filters-section" class="lg:col-span-2 at-card p-6">
+                <h2 class="at-title text-2xl text-ink border-b border-stone pb-3 mb-4">Filtres rapides</h2>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <!-- Filter by quality -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Filtrer par qualité</label>
-                        <select id="quality-filter" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label for="quality-filter" class="block text-sm font-medium text-ink mb-2">Filtrer par qualité</label>
+                        <select id="quality-filter" class="at-field">
                             <option value="all">Tous</option>
                             <option value="high">Élevée (≥70%)</option>
                             <option value="medium">Moyenne (30-70%)</option>
@@ -166,16 +170,16 @@
                     
                     <!-- Filter by agency -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Filtrer par agence</label>
-                        <select id="agency-filter" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label for="agency-filter" class="block text-sm font-medium text-ink mb-2">Filtrer par agence</label>
+                        <select id="agency-filter" class="at-field">
                             <option value="all">Toutes les agences</option>
                         </select>
                     </div>
 
                     <!-- Sort by -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Trier par</label>
-                        <select id="sort-by" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label for="sort-by" class="block text-sm font-medium text-ink mb-2">Trier par</label>
+                        <select id="sort-by" class="at-field">
                             <option value="date-desc">Date (plus récent)</option>
                             <option value="date-asc">Date (plus ancien)</option>
                             <option value="score-desc">Score (décroissant)</option>
@@ -183,94 +187,94 @@
                         </select>
                     </div>
                 </div>
-                <button id="reset-filters" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                <button id="reset-filters" class="at-btn at-btn-sm">
                     Réinitialiser les filtres
                 </button>
             </div>
         </div>
 
         <!-- Chart Section -->
-        <div class="bg-white p-6 rounded-xl shadow-lg">
-            <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-4">Taux de Similarité Quotidien</h2>
+        <div class="at-card p-6">
+            <h2 class="at-title text-2xl text-ink border-b border-stone pb-3 mb-4">Taux de Similarité Quotidien</h2>
             <div class="chart-container">
                 <svg id="daily-similarity-chart"></svg>
             </div>
-            <div class="text-xs mt-3 flex justify-center gap-4 text-gray-600">
-                <span class="flex items-center"><span class="w-3 h-1.5 rounded-full bg-blue-500 mr-2"></span>Moy. Quotidienne</span>
-                <span class="flex items-center"><span class="w-3 h-0.5 border-t-2 border-dashed border-orange-500 mr-2"></span>Tendance (7j)</span>
-                <span class="flex items-center"><span class="w-3 h-0.5 border-t-2 border-dotted border-green-600 mr-2"></span>Moy. Globale</span>
+            <div class="text-xs mt-3 flex flex-wrap justify-center gap-4 text-graphite">
+                <span class="flex items-center"><span class="w-3 h-1.5 rounded-full bg-ink mr-2"></span>Moy. Quotidienne</span>
+                <span class="flex items-center"><span class="w-3 h-0.5 border-t-2 border-dashed border-graphite mr-2"></span>Tendance (7j)</span>
+                <span class="flex items-center"><span class="w-3 h-0.5 border-t-2 border-dotted border-ink mr-2"></span>Moy. Globale</span>
             </div>
         </div>
 
         <!-- User Tables -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <section id="best-users-section" class="bg-white p-6 rounded-xl shadow-lg">
-                 <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-3">🏆 Meilleurs Utilisateurs (>70%)</h2>
+            <section id="best-users-section" class="at-card p-6">
+                 <h2 class="at-title text-2xl text-ink border-b border-stone pb-3 mb-3">🏆 Meilleurs Utilisateurs (>70%)</h2>
                  <div id="best-users-table" class="overflow-x-auto"></div>
             </section>
-            <section id="low-score-users-section" class="bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-3">📉 Utilisateurs à Améliorer (<30%)</h2>
+            <section id="low-score-users-section" class="at-card p-6">
+                <h2 class="at-title text-2xl text-ink border-b border-stone pb-3 mb-3">📉 Utilisateurs à Améliorer (<30%)</h2>
                 <div id="low-score-users-table" class="overflow-x-auto"></div>
             </section>
         </div>
         
         <!-- Record Details Section -->
-        <section id="record" class="bg-white p-6 rounded-xl shadow-lg">
-            <div class="flex flex-wrap gap-4 justify-between items-center border-b pb-4 mb-4">
-                 <h2 class="text-xl font-semibold text-gray-800">Explorateur d'Enregistrements</h2>
+        <section id="record" class="at-card p-6">
+            <div class="flex flex-wrap gap-4 justify-between items-center border-b border-stone pb-4 mb-4">
+                 <h2 class="at-title text-2xl text-ink">Explorateur d'Enregistrements</h2>
                  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <input type="text" id="search-contract" placeholder="Rechercher contrat..." class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                    <button id="search-button" class="px-4 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition">Rechercher</button>
-                    <input type="text" id="search-email" placeholder="Rechercher email..." class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
-                    <button id="search-email-button" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">Rechercher</button>
+                    <input type="text" id="search-contract" aria-label="Rechercher un contrat" placeholder="Rechercher contrat..." class="at-field" style="width:auto">
+                    <button id="search-button" class="at-btn at-btn-primary">Rechercher</button>
+                    <input type="text" id="search-email" aria-label="Rechercher un email" placeholder="Rechercher email..." class="at-field" style="width:auto">
+                    <button id="search-email-button" class="at-btn at-btn-primary">Rechercher</button>
                  </div>
             </div>
 
             <div class="flex justify-center gap-4 my-4">
-                <button id="prev" class="px-5 py-2 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed">← Précédent</button>
-                <span id="record-counter" class="px-5 py-2 text-gray-700 font-medium">-</span>
-                <button id="next" class="px-5 py-2 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Suivant →</button>
+                <button id="prev" class="at-btn at-btn-primary">← Précédent</button>
+                <span id="record-counter" class="px-5 py-2 text-ink font-medium self-center">-</span>
+                <button id="next" class="at-btn at-btn-primary">Suivant →</button>
             </div>
             
-            <div class="bg-gray-50 p-4 rounded-lg grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-sm mb-6">
-                <div><strong class="block text-gray-500">Contrat:</strong> <span id="rec-contract" class="font-mono text-xs break-all"></span></div>
-                <div><strong class="block text-gray-500">Agence:</strong> <span id="rec-agency" class="font-mono"></span></div>
-                <div><strong class="block text-gray-500">Email:</strong> <span id="rec-email" class="font-mono text-xs break-all"></span></div>
-                <div><strong class="block text-gray-500">Date:</strong> <span id="rec-date" class="font-mono text-xs"></span></div>
-                <div><strong class="block text-gray-500">Score:</strong> <span id="rec-score" class="font-mono text-lg font-bold"></span></div>
+            <div class="bg-off border border-stone p-4 rounded-lg grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-sm mb-6">
+                <div><strong class="block text-graphite font-medium">Contrat:</strong> <span id="rec-contract" class="font-mono text-xs break-all"></span></div>
+                <div><strong class="block text-graphite font-medium">Agence:</strong> <span id="rec-agency" class="font-mono"></span></div>
+                <div><strong class="block text-graphite font-medium">Email:</strong> <span id="rec-email" class="font-mono text-xs break-all"></span></div>
+                <div><strong class="block text-graphite font-medium">Date:</strong> <span id="rec-date" class="font-mono text-xs"></span></div>
+                <div><strong class="block text-graphite font-medium">Score:</strong> <span id="rec-score" class="font-mono text-lg font-bold"></span></div>
             </div>
 
             <div class="mb-6">
                 <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-lg font-semibold text-gray-700">Analyse de similarité</h4>
-                    <div class="text-sm text-gray-600">
+                    <h4 class="text-lg font-medium text-ink">Analyse de similarité</h4>
+                    <div class="text-sm text-graphite">
                         <span id="rec-matches" class="font-mono font-semibold"></span>
                     </div>
                 </div>
-                <div class="bg-gray-50 p-3 rounded-md">
+                <div class="bg-off border border-stone p-3 rounded-md">
                     <div class="flex items-center gap-2">
-                        <div class="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
+                        <div class="flex-1 bg-paper border border-stone rounded-full h-4 overflow-hidden">
                             <div id="score-bar" class="h-full transition-all duration-500" style="width: 0%;"></div>
                         </div>
-                        <span id="score-percentage" class="text-sm font-semibold text-gray-700">0%</span>
+                        <span id="score-percentage" class="text-sm font-medium text-ink">0%</span>
                     </div>
-                    <p class="text-xs text-gray-500 mt-2">Cette barre indique le pourcentage de segments du descriptif original retrouvés dans le résultat IA</p>
+                    <p class="text-xs text-graphite mt-2">Cette barre indique le pourcentage de segments du descriptif original retrouvés dans le résultat IA</p>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div>
-                    <h4 class="text-lg font-semibold mb-2 text-gray-700">Description originale <span id="desc-word-count" class="text-sm font-normal text-gray-500"></span></h4>
-                    <div id="desc-block" class="h-96 overflow-y-auto p-4 border rounded-md bg-white text-sm leading-relaxed"></div>
+                    <h4 class="text-lg font-medium mb-2 text-ink">Description originale <span id="desc-word-count" class="text-sm font-normal text-graphite"></span></h4>
+                    <div id="desc-block" class="h-96 overflow-y-auto p-4 border border-stone rounded-md bg-paper text-sm leading-relaxed"></div>
                 </div>
                  <div>
-                    <h4 class="text-lg font-semibold mb-2 text-gray-700">Résultat IA <span id="ai-word-count" class="text-sm font-normal text-gray-500"></span></h4>
-                    <div id="ai-block" class="h-96 overflow-y-auto p-4 border rounded-md bg-white text-sm leading-relaxed"></div>
+                    <h4 class="text-lg font-medium mb-2 text-ink">Résultat IA <span id="ai-word-count" class="text-sm font-normal text-graphite"></span></h4>
+                    <div id="ai-block" class="h-96 overflow-y-auto p-4 border border-stone rounded-md bg-paper text-sm leading-relaxed"></div>
                 </div>
             </div>
             
             <div>
-                 <h4 class="text-lg font-semibold mb-2 text-gray-700">Segments testés (échantillon de 50)</h4>
+                 <h4 class="text-lg font-medium mb-2 text-ink">Segments testés (échantillon de 50)</h4>
                  <ul id="segments-list" class="max-h-64 overflow-y-auto space-y-2 text-sm"></ul>
             </div>
         </section>

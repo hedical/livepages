@@ -4,50 +4,57 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Appropriation de l'IA par agence — BTP Consultants CT</title>
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="shared/analyztech-tailwind.js"></script>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            background-color: #f8fafc;
-        }
+        /* Règles propres à la page (police et fond : shared/analyztech-theme.css). */
         .tabular { font-variant-numeric: tabular-nums; }
         th[data-sort] { cursor: pointer; user-select: none; }
-        th[data-sort]:hover { color: #4338ca; }
+        th[data-sort]:hover { color: #1A1A1A; text-decoration: underline; text-decoration-color: #BAF266; text-decoration-thickness: 2px; text-underline-offset: 4px; }
     </style>
 </head>
 <body>
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-off">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
             <!-- En-tête -->
-            <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Appropriation de l'IA par agence</h1>
-                    <p class="text-gray-500 text-sm max-w-2xl">
-                        Part des collaborateurs de chaque agence qui utilisent l'IA de façon régulière (note d'adoption de 60 sur 100 ou plus).
-                        <a href="methode-adoption.html" class="text-indigo-600 hover:text-indigo-800 font-medium">Comment ce taux est calculé</a>
-                    </p>
-                    <div class="mt-3 flex items-center gap-2 flex-wrap text-xs">
-                        <span class="px-3 py-1 font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants · Contrôle technique</span>
-                        <span id="period-badge" class="px-3 py-1 font-medium rounded-full bg-gray-100 text-gray-600"></span>
-                        <span id="ref-badge" class="px-3 py-1 font-medium rounded-full bg-emerald-50 text-emerald-700"></span>
+            <div class="mb-8 pb-6 border-b border-stone flex items-end justify-between gap-6 flex-wrap">
+                <div class="flex flex-col gap-5">
+                    <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo self-start">
+                    <div>
+                        <h1 class="at-title text-4xl sm:text-5xl text-ink mb-3">Appropriation de l'IA par agence</h1>
+                        <p class="text-graphite text-sm max-w-2xl">
+                            Part des collaborateurs de chaque agence qui utilisent l'IA de façon régulière (note d'adoption de 60 sur 100 ou plus).
+                            <a href="methode-adoption.html" class="text-ink font-medium underline decoration-compliant decoration-2 underline-offset-4 hover:decoration-ink">Comment ce taux est calculé</a>
+                        </p>
+                        <div class="mt-3 flex items-center gap-2 flex-wrap text-xs">
+                            <span class="px-3 py-1 font-medium rounded-full bg-ink text-off">BTP Consultants · Contrôle technique</span>
+                            <span id="period-badge" class="px-3 py-1 font-medium rounded-full bg-paper border border-stone text-ink"></span>
+                            <span id="ref-badge" class="px-3 py-1 font-medium rounded-full bg-compliant text-ink"></span>
+                        </div>
                     </div>
                 </div>
-                <button id="logout-btn" class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg">Déconnexion</button>
+                <button id="logout-btn" class="at-btn at-btn-ghost">Déconnexion</button>
             </div>
 
             <!-- Connexion -->
-            <div id="login-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
-                <div class="p-8 bg-white w-full max-w-md rounded-lg shadow-lg text-center">
-                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Accès sécurisé</h3>
-                    <p class="text-gray-600 mb-6">Entrez le mot de passe agences ou celui du tableau de bord.</p>
+            <div id="login-modal" class="hidden fixed inset-0 bg-ink bg-opacity-80 z-50 flex items-center justify-center p-4">
+                <div class="p-8 bg-paper w-full max-w-md rounded-lg border border-stone text-center">
+                    <svg viewBox="0 0 144.2 144.19" class="h-10 w-10 mx-auto mb-6 text-ink" aria-hidden="true"><g fill="currentColor"><path d="M66.74,102.88h36.12v41.3h-38.87C28.9,144.43.24,116.16,0,81.06,0,80.91,0,80.77,0,80.62v-39.31h41.3v36.14c0,14.05,11.39,25.43,25.43,25.43"/><path d="M41.31,0v41.3h61.55v61.57h41.34V0H41.31Z"/></g></svg>
+                    <h3 class="at-title text-3xl text-ink mb-3">Accès sécurisé</h3>
+                    <p class="text-graphite mb-6">Entrez le mot de passe agences ou celui du tableau de bord.</p>
                     <form id="login-form" class="space-y-4">
                         <label for="password-input" class="sr-only">Mot de passe</label>
                         <input type="password" id="password-input" placeholder="Mot de passe" autocomplete="current-password"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
-                        <div id="login-error" class="hidden text-red-600 text-sm">Mot de passe incorrect.</div>
-                        <button type="submit" id="login-button" class="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md disabled:opacity-50">
+                            class="at-field" required />
+                        <div id="login-error" class="hidden text-ink text-sm bg-compliant rounded-md px-3 py-2">Mot de passe incorrect.</div>
+                        <button type="submit" id="login-button" class="at-btn at-btn-primary w-full justify-center">
                             <span id="login-text">Se connecter</span>
                         </button>
                     </form>
@@ -56,12 +63,12 @@
 
             <!-- Chargement / erreur -->
             <div id="loading" class="hidden py-24 text-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-                <p class="mt-4 text-gray-600">Chargement des données…</p>
+                <div class="animate-spin rounded-full h-12 w-12 border-2 border-stone mx-auto" style="border-top-color:#1A1A1A"></div>
+                <p class="mt-4 text-graphite">Chargement des données…</p>
             </div>
             <div id="error" class="hidden py-16 text-center">
-                <p class="text-red-700 font-medium" id="error-message"></p>
-                <button id="retry-btn" class="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm rounded-md">Réessayer</button>
+                <p class="text-ink font-medium" id="error-message"></p>
+                <button id="retry-btn" class="mt-4 at-btn at-btn-primary at-btn-sm">Réessayer</button>
             </div>
 
             <!-- Contenu -->
@@ -69,15 +76,15 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="tiles"></div>
 
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
-                    <div class="flex items-center justify-between gap-3 flex-wrap p-4 border-b border-gray-100">
+                <div class="at-card">
+                    <div class="flex items-center justify-between gap-3 flex-wrap p-4 border-b border-stone">
                         <div class="flex items-center gap-3 flex-wrap">
-                            <label class="text-sm text-gray-600" for="dr-filter">Direction régionale</label>
-                            <select id="dr-filter" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <label class="text-sm text-graphite" for="dr-filter">Direction régionale</label>
+                            <select id="dr-filter" class="at-field" style="width:auto">
                                 <option value="">Toutes</option>
                             </select>
-                            <label class="text-sm text-gray-600" for="period-select">Période</label>
-                            <select id="period-select" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <label class="text-sm text-graphite" for="period-select">Période</label>
+                            <select id="period-select" class="at-field" style="width:auto">
                                 <option value="3">3 derniers mois</option>
                                 <option value="6" selected>6 derniers mois</option>
                                 <option value="12">12 derniers mois</option>
@@ -85,25 +92,25 @@
                         </div>
                         <div class="relative">
                             <label for="search" class="sr-only">Rechercher une agence</label>
-                            <input id="search" type="search" placeholder="Code agence…" class="pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-40" />
+                            <input id="search" type="search" placeholder="Code agence…" class="at-field w-40" />
                         </div>
                     </div>
-                    <div id="profile-legend" class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-gray-600 border-b border-gray-100"></div>
+                    <div id="profile-legend" class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-graphite border-b border-stone"></div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="bg-gray-50 text-left text-gray-600">
-                                    <th class="px-4 py-3 font-semibold" data-sort="agency">Agence</th>
-                                    <th class="px-4 py-3 font-semibold" data-sort="dr">Direction régionale</th>
-                                    <th class="px-4 py-3 font-semibold" data-sort="taux">Appropriation agence</th>
-                                    <th class="px-4 py-3 font-semibold" data-sort="actifs">Profils de l'effectif</th>
-                                    <th class="px-4 py-3 font-semibold text-right" data-sort="mediane">Note médiane</th>
+                                <tr class="bg-off text-left text-graphite">
+                                    <th class="px-4 py-3 font-medium" data-sort="agency">Agence</th>
+                                    <th class="px-4 py-3 font-medium" data-sort="dr">Direction régionale</th>
+                                    <th class="px-4 py-3 font-medium" data-sort="taux">Appropriation agence</th>
+                                    <th class="px-4 py-3 font-medium" data-sort="actifs">Profils de l'effectif</th>
+                                    <th class="px-4 py-3 font-medium text-right" data-sort="mediane">Note médiane</th>
                                 </tr>
                             </thead>
-                            <tbody id="table-body" class="divide-y divide-gray-100"></tbody>
+                            <tbody id="table-body" class="divide-y divide-stone"></tbody>
                         </table>
                     </div>
-                    <p id="table-note" class="px-4 py-3 text-xs text-gray-500 border-t border-gray-100"></p>
+                    <p id="table-note" class="px-4 py-3 text-xs text-graphite border-t border-stone"></p>
                 </div>
             </div>
         </div>

@@ -4,67 +4,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Méthode de l'appropriation agence — KPIs IA</title>
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="shared/analyztech-tailwind.js"></script>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            background-color: #f8fafc;
-        }
+        /* Règles propres à la page, aux couleurs de la charte (la police et le fond
+           de page viennent de shared/analyztech-theme.css). */
         .tabular { font-variant-numeric: tabular-nums; }
         .prose-block p, .prose-block li { max-width: 68ch; }
 
         /* Blocs dépliables : un clic sur l'en-tête ouvre la formule */
-        details.formula-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
-        details.formula-card[open] { border-color: #c7d2fe; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(79,70,229,.06); }
+        details.formula-card { background: #FFFDF6; border: 1px solid #B6B9AD; border-radius: 8px; }
+        details.formula-card[open] { border-color: #1A1A1A; }
         details.formula-card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
         details.formula-card > summary::-webkit-details-marker { display: none; }
-        details.formula-card > summary:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 12px; }
-        details.formula-card .chev { margin-left: auto; color: #9ca3af; transition: transform .15s ease; flex-shrink: 0; }
-        details.formula-card[open] .chev { transform: rotate(90deg); color: #4f46e5; }
+        details.formula-card > summary:focus-visible { outline: 2px solid #BAF266; outline-offset: 2px; border-radius: 8px; }
+        details.formula-card .chev { margin-left: auto; color: #595959; transition: transform .15s ease; flex-shrink: 0; }
+        details.formula-card[open] .chev { transform: rotate(90deg); color: #1A1A1A; }
         @media (prefers-reduced-motion: reduce) { details.formula-card .chev { transition: none; } }
         .formula-body { padding: 0 18px 18px; display: grid; gap: 12px; }
 
-        /* Formule mise en forme */
-        .formula { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 14px 16px; background: #f5f7ff; border-radius: 10px;
-                   font-size: 15px; color: #111827; overflow-x: auto; }
+        /* Formule mise en forme : noir sur Off White */
+        .formula { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 14px 16px; background: #F8F5EB; border: 1px solid #DADACF; border-radius: 7px;
+                   font-size: 15px; color: #1A1A1A; overflow-x: auto; }
         .formula .var { font-style: italic; }
-        .formula .op { color: #4f46e5; font-weight: 600; padding: 0 2px; }
+        .formula .op { color: #1A1A1A; font-weight: 500; padding: 0 2px; }
         .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; line-height: 1.25; }
-        .frac > span:first-child { border-bottom: 1.5px solid #111827; padding: 0 6px 2px; }
+        .frac > span:first-child { border-bottom: 1.5px solid #1A1A1A; padding: 0 6px 2px; }
         .frac > span:last-child { padding: 2px 6px 0; }
-        .fn { font-weight: 600; }
-        .example { font-size: 14px; color: #374151; border-left: 3px solid #e0e7ff; padding-left: 12px; }
-        .example strong { color: #111827; }
-        .pts { font-variant-numeric: tabular-nums; font-weight: 700; color: #4f46e5; }
+        .fn { font-weight: 500; }
+        /* Filet Compliant Green : élément graphique, jamais du texte vert sur fond clair */
+        .example { font-size: 14px; color: #595959; border-left: 3px solid #BAF266; padding-left: 12px; }
+        .example strong { color: #1A1A1A; font-weight: 500; }
+        .pts { font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: -0.02em; color: #1A1A1A; }
     </style>
 </head>
 <body>
-    <div class="min-h-screen bg-gray-50">
-        <div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-10 prose-block text-gray-800">
+    <div class="min-h-screen bg-off">
+        <div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-10 prose-block text-ink">
 
-            <header class="space-y-3 border-b border-gray-200 pb-6">
-                <a href="adoption-agences.html" class="text-sm text-indigo-600 hover:text-indigo-800">← Appropriation de l'IA par agence</a>
-                <h1 class="text-3xl font-bold text-gray-900">Comment est calculée l'appropriation agence</h1>
-                <p class="text-gray-600">L'appropriation agence mesure la part des collaborateurs d'une agence pour qui l'IA est devenue une habitude de travail. Elle est calculée automatiquement à partir des usages enregistrés dans les outils IA. Cliquez sur un élément pour afficher sa formule et un exemple.</p>
+            <header class="space-y-4 border-b border-stone pb-6">
+                <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo">
+                <a href="adoption-agences.html" class="at-back">← Appropriation de l'IA par agence</a>
+                <h1 class="at-title text-4xl text-ink">Comment est calculée l'appropriation agence</h1>
+                <p class="text-graphite">L'appropriation agence mesure la part des collaborateurs d'une agence pour qui l'IA est devenue une habitude de travail. Elle est calculée automatiquement à partir des usages enregistrés dans les outils IA. Cliquez sur un élément pour afficher sa formule et un exemple.</p>
             </header>
 
             <section class="space-y-3">
-                <h2 class="text-xl font-bold text-gray-900">La formule finale</h2>
+                <h2 class="at-title text-2xl text-ink">La formule finale</h2>
                 <div id="card-agence"></div>
             </section>
 
             <section class="space-y-4">
-                <h2 class="text-xl font-bold text-gray-900">1. La note d'adoption de chaque collaborateur</h2>
+                <h2 class="at-title text-2xl text-ink">1. La note d'adoption de chaque collaborateur</h2>
                 <p>Chaque collaborateur reçoit une note sur 100, calculée à partir de ses usages des outils IA de sa filiale. Elle additionne quatre composantes.</p>
                 <div id="cards-components" class="space-y-3"></div>
                 <div id="card-note"></div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="levels"></div>
-                <p class="text-xs text-gray-500" id="example-profile"></p>
+                <p class="text-xs text-graphite" id="example-profile"></p>
             </section>
 
             <section class="space-y-3">
-                <h2 class="text-xl font-bold text-gray-900">2. Du collaborateur à l'agence</h2>
+                <h2 class="at-title text-2xl text-ink">2. Du collaborateur à l'agence</h2>
                 <ul class="list-disc pl-5 space-y-2">
                     <li><strong>Période.</strong> Les six derniers mois jusqu'à la date de référence. La page permet aussi de regarder 3 ou 12 mois.</li>
                     <li><strong>Date de référence.</strong> La date du dernier usage enregistré, jamais « aujourd'hui » : avec les mêmes données, on obtient toujours le même résultat.</li>
@@ -75,9 +81,9 @@
             </section>
 
             <section class="space-y-3">
-                <h2 class="text-xl font-bold text-gray-900">3. Les outils pris en compte</h2>
+                <h2 class="at-title text-2xl text-ink">3. Les outils pris en compte</h2>
                 <p>Contrôle technique : <span id="modules-ct" class="font-medium"></span>.</p>
-                <ul class="list-disc pl-5 space-y-2 text-sm text-gray-700">
+                <ul class="list-disc pl-5 space-y-2 text-sm text-ink">
                     <li>Une session = un usage : un descriptif généré, un contact créé par l'IA, une comparaison, une analyse, une conversation.</li>
                     <li>Descriptif : seuls les descriptifs d'au moins 100 mots comptent, comme au COPIL IA.</li>
                     <li>Les dossiers de test (YIELD) sont exclus ; une analyse géotechnique, acoustique ou CCTP compte une fois par livrable, au nom du chargé d'affaires du dossier.</li>
@@ -86,12 +92,12 @@
             </section>
 
             <section class="space-y-3">
-                <h2 class="text-xl font-bold text-gray-900">4. Mise à jour</h2>
+                <h2 class="at-title text-2xl text-ink">4. Mise à jour</h2>
                 <p>Chaque matin à 6 h, les données d'usage sont extraites des outils et déposées pour le tableau de bord. La page recalcule l'appropriation à chaque ouverture : elle montre toujours les données de la dernière extraction, dont la date figure en haut de la page.</p>
             </section>
 
             <section class="space-y-3">
-                <h2 class="text-xl font-bold text-gray-900">5. Ce que l'indicateur ne dit pas</h2>
+                <h2 class="at-title text-2xl text-ink">5. Ce que l'indicateur ne dit pas</h2>
                 <ul class="list-disc pl-5 space-y-2">
                     <li><strong>Il ne juge pas les personnes.</strong> Seule l'appropriation de l'agence est affichée ; les notes individuelles ne servent pas à évaluer les collaborateurs.</li>
                     <li><strong>Petites agences.</strong> Sous 5 personnes, un seul collaborateur fait varier le taux de 20 points ou plus : la page le signale.</li>
@@ -100,7 +106,7 @@
                 </ul>
             </section>
 
-            <footer class="border-t border-gray-200 pt-5 text-xs text-gray-500">
+            <footer class="border-t border-stone pt-5 text-xs text-graphite">
                 Barème, formules, exemples et liste des outils sont lus directement dans le code de calcul (shared/utils.js, shared/adoption.js) : cette page suit toute évolution de la méthode.
             </footer>
         </div>
@@ -115,7 +121,7 @@
             const frac = (num, den) => `<span class="frac"><span>${num}</span><span>${den}</span></span>`;
             const op = s => `<span class="op">${s}</span>`;
             const v = s => `<span class="var">${s}</span>`;
-            const chev = '<svg class="chev w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>';
+            const chev = '<svg class="chev w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 5l7 7-7 7"/></svg>';
             const card = (id, title, badge, sub, body) => `<details class="formula-card" id="${id}">
                 <summary>
                     <span class="flex-1 min-w-0"><span class="block font-semibold text-gray-900">${title}</span><span class="block text-sm text-gray-500">${sub}</span></span>

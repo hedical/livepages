@@ -4,67 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Explorateur de Comparaisons - AnalyzTech</title>
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: #f8fafc;
-        }
-    </style>
+    <script src="shared/analyztech-tailwind.js"></script>
 </head>
 <body>
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-off">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <!-- Header -->
-            <div class="mb-10">
-                <a href="comparateur.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour à Comparateur d'Indices</a>
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">
-                    Explorateur de Comparaisons
-                </h1>
-                <p class="text-gray-500 text-sm">Visualisez et explorez les comparaisons d'indices effectuées</p>
+            <div class="mb-10 pb-6 border-b border-stone flex flex-col gap-5">
+                <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo self-start">
+                <div>
+                    <a href="comparateur.html" class="at-back mb-3">← Retour à Comparateur d'Indices</a>
+                    <h1 class="at-title text-4xl sm:text-5xl text-ink mb-3">
+                        Explorateur de Comparaisons
+                    </h1>
+                    <p class="text-graphite text-sm">Visualisez et explorez les comparaisons d'indices effectuées</p>
+                </div>
             </div>
 
             <!-- Placeholder Content -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+            <div class="at-card p-12 text-center">
                 <div class="max-w-md mx-auto">
-                    <svg class="w-24 h-24 mx-auto text-gray-300 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <svg class="w-24 h-24 mx-auto text-stone mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <h2 class="text-2xl font-semibold text-gray-900 mb-4">
+                    <h2 class="at-title text-3xl text-ink mb-4">
                         Fonctionnalité en développement
                     </h2>
-                    <p class="text-gray-600 mb-8">
+                    <p class="text-graphite mb-8">
                         L'explorateur de comparaisons sera bientôt disponible. Cette fonctionnalité vous permettra de visualiser en détail toutes les comparaisons d'indices effectuées.
                     </p>
-                    <div class="space-y-4 text-left bg-gray-50 rounded-lg p-6">
-                        <h3 class="font-semibold text-gray-900 mb-3">Fonctionnalités à venir :</h3>
+                    <div class="space-y-4 text-left bg-off border border-stone rounded-lg p-6">
+                        <h3 class="font-medium text-ink mb-3">Fonctionnalités à venir :</h3>
                         <div class="space-y-3">
                             <div class="flex items-start">
-                                <svg class="w-5 h-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                <svg class="w-5 h-5 text-ink mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span class="text-gray-700">Visualisation détaillée de chaque comparaison</span>
+                                <span class="text-ink">Visualisation détaillée de chaque comparaison</span>
                             </div>
                             <div class="flex items-start">
-                                <svg class="w-5 h-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                <svg class="w-5 h-5 text-ink mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span class="text-gray-700">Filtres avancés par agence, période et type</span>
+                                <span class="text-ink">Filtres avancés par agence, période et type</span>
                             </div>
                             <div class="flex items-start">
-                                <svg class="w-5 h-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                <svg class="w-5 h-5 text-ink mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span class="text-gray-700">Analyse des changements identifiés</span>
+                                <span class="text-ink">Analyse des changements identifiés</span>
                             </div>
                             <div class="flex items-start">
-                                <svg class="w-5 h-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                <svg class="w-5 h-5 text-ink mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span class="text-gray-700">Export des données en CSV/Excel</span>
+                                <span class="text-ink">Export des données en CSV/Excel</span>
                             </div>
                         </div>
                     </div>

@@ -983,12 +983,14 @@ function updateAdoptionTimeChart() {
     tools.forEach(tool => { const tm = d3.max(chartData, d => d[tool] || 0); if (tm > maxValue) maxValue = tm; });
     const y = d3.scaleLinear().domain([0, Math.max(10, Math.ceil(maxValue * 1.1))]).nice().range([height, 0]);
 
-    const colors = { descriptif: '#3B82F6', autocontact: '#10B981', comparateur: '#F59E0B', expertBTP: '#EF4444', chatBTP: '#8B5CF6', geotech: '#0EA5E9' };
+    // Palette charte AnalyzTech : Chat BTP et Géotech reprennent le noir et le graphite,
+    // distingués par des pointillés et des points creux (CSS de agencesCT.html).
+    const colors = { descriptif: '#1A1A1A', autocontact: '#BAF266', comparateur: '#595959', expertBTP: '#B6B9AD', chatBTP: '#1A1A1A', geotech: '#595959' };
     const toolLabels = { descriptif: 'Descriptif', autocontact: 'Auto Contact', comparateur: 'Comparateur', expertBTP: 'Expert BTP', chatBTP: 'Chat BTP', geotech: 'Géotech' };
     const visibility = {}; tools.forEach(t => visibility[t] = true);
 
     // grid
-    g.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(8).tickSize(-width).tickFormat('')).selectAll('line').style('stroke', '#e5e7eb').style('stroke-dasharray', '3,3');
+    g.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(8).tickSize(-width).tickFormat('')).selectAll('line').style('stroke', '#DADACF').style('stroke-dasharray', '3,3');
 
     // axes
     g.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%m/%Y')));
@@ -1024,7 +1026,7 @@ function updateAdoptionTimeChart() {
             if (!c) { tooltip.style('opacity', 0); highlight.style('opacity', 0); return; }
             const px = x(c.point.date), py = y(c.point[c.tool] || 0);
             tooltipText.selectAll('tspan').remove();
-            tooltipText.append('tspan').attr('x', 0).attr('dy', '-1.2em').style('font-size', '11px').style('font-weight', 'normal').style('fill', '#6b7280').text(d3.timeFormat('%m/%Y')(c.point.date));
+            tooltipText.append('tspan').attr('x', 0).attr('dy', '-1.2em').style('font-size', '11px').style('font-weight', 'normal').style('fill', '#595959').text(d3.timeFormat('%m/%Y')(c.point.date));
             tooltipText.append('tspan').attr('x', 0).attr('dy', '1.2em').style('fill', colors[c.tool]).text(`${toolLabels[c.tool]}: ${(c.point[c.tool] || 0).toFixed(1)}%`);
             tooltip.attr('transform', `translate(${Math.max(50, Math.min(px, width - 50))}, ${py < 30 ? py + 25 : py - 25})`).style('opacity', 1);
             highlight.attr('cx', px).attr('cy', py).attr('stroke', colors[c.tool]).style('opacity', 1);
@@ -1133,7 +1135,9 @@ function updateUsageTimeChart() {
     tools.forEach(tool => { const tm = d3.max(chartData, d => d[tool] || 0); if (tm > maxValue) maxValue = tm; });
     const y = d3.scaleLinear().domain([0, Math.max(5, Math.ceil(maxValue * 1.1))]).nice().range([height, 0]);
 
-    const colors = { descriptif: '#3B82F6', autocontact: '#10B981', comparateur: '#F59E0B', expertBTP: '#EF4444', chatBTP: '#8B5CF6', geotech: '#0EA5E9' };
+    // Palette charte AnalyzTech : Chat BTP et Géotech reprennent le noir et le graphite,
+    // distingués par des pointillés et des points creux (CSS de agencesCT.html).
+    const colors = { descriptif: '#1A1A1A', autocontact: '#BAF266', comparateur: '#595959', expertBTP: '#B6B9AD', chatBTP: '#1A1A1A', geotech: '#595959' };
     const toolLabels = { descriptif: 'Descriptif', autocontact: 'Auto Contact', comparateur: 'Comparateur', expertBTP: 'Expert BTP', chatBTP: 'Chat BTP', geotech: 'Géotech' };
     const visibility = {}; tools.forEach(t => visibility[t] = true);
 
@@ -1141,7 +1145,7 @@ function updateUsageTimeChart() {
     const yTop = y.domain()[1];
     const yStep = Math.max(1, Math.ceil(yTop / 8));
     const yTicks = d3.range(0, yTop + 0.0001, yStep);
-    g.append('g').attr('class', 'grid').call(d3.axisLeft(y).tickValues(yTicks).tickSize(-width).tickFormat('')).selectAll('line').style('stroke', '#e5e7eb').style('stroke-dasharray', '3,3');
+    g.append('g').attr('class', 'grid').call(d3.axisLeft(y).tickValues(yTicks).tickSize(-width).tickFormat('')).selectAll('line').style('stroke', '#DADACF').style('stroke-dasharray', '3,3');
     g.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%m/%Y')));
     g.append('g').attr('class', 'axis').call(d3.axisLeft(y).tickValues(yTicks).tickFormat(d3.format('d')));
     g.append('text').attr('transform', 'rotate(-90)').attr('y', -margin.left).attr('x', -(height / 2)).attr('dy', '1em').style('text-anchor', 'middle').style('font-size', '12px').text("Nombre d'utilisations");
@@ -1175,7 +1179,7 @@ function updateUsageTimeChart() {
             if (!c) { tooltip.style('opacity', 0); highlight.style('opacity', 0); return; }
             const px = x(c.point.date), py = y(c.point[c.tool] || 0);
             tooltipText.selectAll('tspan').remove();
-            tooltipText.append('tspan').attr('x', 0).attr('dy', '-1.2em').style('font-size', '11px').style('font-weight', 'normal').style('fill', '#6b7280').text(d3.timeFormat('%m/%Y')(c.point.date));
+            tooltipText.append('tspan').attr('x', 0).attr('dy', '-1.2em').style('font-size', '11px').style('font-weight', 'normal').style('fill', '#595959').text(d3.timeFormat('%m/%Y')(c.point.date));
             tooltipText.append('tspan').attr('x', 0).attr('dy', '1.2em').style('fill', colors[c.tool]).text(`${toolLabels[c.tool]}: ${formatNumber(c.point[c.tool] || 0)}`);
             tooltip.attr('transform', `translate(${Math.max(50, Math.min(px, width - 50))}, ${py < 30 ? py + 25 : py - 25})`).style('opacity', 1);
             highlight.attr('cx', px).attr('cy', py).attr('stroke', colors[c.tool]).style('opacity', 1);
@@ -1226,7 +1230,7 @@ function updateDescriptifCompareChart() {
     g.append('g').attr('transform', `translate(0,${height})`).attr('class', 'axis').call(d3.axisBottom(x0))
         .selectAll('text').attr('transform', 'rotate(-40)').style('text-anchor', 'end').style('font-size', '10px');
 
-    const colors = { adoption: '#10B981', couverture: '#8B5CF6' };
+    const colors = { adoption: '#BAF266', couverture: '#1A1A1A' };
     const groups = g.selectAll('.grp').data(data).enter().append('g').attr('transform', d => `translate(${x0(d.agency)},0)`);
     ['adoption', 'couverture'].forEach(key => {
         groups.append('rect')
@@ -1262,21 +1266,21 @@ function updateQuadrantChart() {
     const meanX = d3.mean(data, d => d.x), meanY = d3.mean(data, d => d.y);
 
     // Quadrant guides (moyennes)
-    g.append('line').attr('x1', x(meanX)).attr('x2', x(meanX)).attr('y1', 0).attr('y2', height).attr('stroke', '#cbd5e1').attr('stroke-dasharray', '4,4');
-    g.append('line').attr('x1', 0).attr('x2', width).attr('y1', y(meanY)).attr('y2', y(meanY)).attr('stroke', '#cbd5e1').attr('stroke-dasharray', '4,4');
+    g.append('line').attr('x1', x(meanX)).attr('x2', x(meanX)).attr('y1', 0).attr('y2', height).attr('stroke', '#B6B9AD').attr('stroke-dasharray', '4,4');
+    g.append('line').attr('x1', 0).attr('x2', width).attr('y1', y(meanY)).attr('y2', y(meanY)).attr('stroke', '#B6B9AD').attr('stroke-dasharray', '4,4');
 
     g.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(6).tickFormat(d => d + '%'));
     g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(6).tickFormat(d => d + '%'));
-    g.append('text').attr('x', width / 2).attr('y', height + 40).style('text-anchor', 'middle').style('font-size', '12px').style('fill', '#10B981').text("Adoption Descriptif (% collaborateurs) →");
-    g.append('text').attr('transform', 'rotate(-90)').attr('x', -height / 2).attr('y', -42).style('text-anchor', 'middle').style('font-size', '12px').style('fill', '#8B5CF6').text("Couverture (% affaires éligibles) →");
+    g.append('text').attr('x', width / 2).attr('y', height + 40).style('text-anchor', 'middle').style('font-size', '12px').style('fill', '#1A1A1A').text("Adoption Descriptif (% collaborateurs) →");
+    g.append('text').attr('transform', 'rotate(-90)').attr('x', -height / 2).attr('y', -42).style('text-anchor', 'middle').style('font-size', '12px').style('fill', '#1A1A1A').text("Couverture (% affaires éligibles) →");
 
     g.selectAll('.bubble').data(data).enter().append('circle')
         .attr('cx', d => x(d.x)).attr('cy', d => y(d.y)).attr('r', d => r(d.effectif))
-        .attr('fill', '#6366f1').attr('fill-opacity', 0.35).attr('stroke', '#4f46e5').attr('stroke-width', 1)
+        .attr('fill', '#BAF266').attr('fill-opacity', 0.35).attr('stroke', '#1A1A1A').attr('stroke-width', 1)
         .append('title').text(d => `${d.agency}\nAdoption ${d.x.toFixed(1)}% · Couverture ${d.y.toFixed(1)}%\nEffectif ${d.effectif}`);
     g.selectAll('.blabel').data(data).enter().append('text')
         .attr('x', d => x(d.x)).attr('y', d => y(d.y) - r(d.effectif) - 3).attr('text-anchor', 'middle')
-        .style('font-size', '9px').style('fill', '#475569').text(d => d.agency);
+        .style('font-size', '9px').style('fill', '#595959').text(d => d.agency);
 }
 
 // ==================== EVENT LISTENERS ====================

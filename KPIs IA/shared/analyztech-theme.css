@@ -1,0 +1,111 @@
+/* ============================================================================
+   shared/analyztech-theme.css — Habillage charte AnalyzTech (guideline V1.0)
+
+   Chargé sur chaque page, avec shared/analyztech-tailwind.js (palette) et,
+   pour les pages à graphiques, shared/analyztech-theme.js (Chart.js).
+
+   Tailwind (CDN) injecte ses styles APRÈS cette feuille : les règles qui
+   doivent l'emporter sur une classe utilitaire sont préfixées par « html »
+   pour gagner en spécificité, plutôt que d'empiler des !important.
+   ============================================================================ */
+
+:root {
+    --at-paper: #FFFDF6;     /* Digital White */
+    --at-off: #F8F5EB;       /* Off White */
+    --at-stone: #B6B9AD;     /* Stone Grey */
+    --at-graphite: #595959;  /* Graphite */
+    --at-ink: #1A1A1A;       /* Black */
+    --at-green: #BAF266;     /* Compliant Green */
+    --at-stone45: #DADACF;
+}
+
+body {
+    font-family: 'Inter Tight', 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--at-off);
+    color: var(--at-ink);
+}
+
+/* Typographie : Medium pour les titres et chiffres (KMR Apparat Medium dans la
+   charte, substitut web Inter Tight), Regular pour le texte courant. */
+html .font-semibold, html .font-bold, html .font-extrabold, html .font-black { font-weight: 500; }
+html h1, html h2 { letter-spacing: -0.025em; }
+.at-title { font-weight: 500; letter-spacing: -0.03em; line-height: 1.05; }
+.at-num   { font-weight: 500; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+
+/* Ni ombres ni dégradés dans la charte : les surfaces se distinguent par un filet. */
+html .shadow, html .shadow-sm, html .shadow-md, html .shadow-lg, html .shadow-xl, html .shadow-2xl,
+html .hover\:shadow-md:hover, html .hover\:shadow-lg:hover { box-shadow: none; }
+
+/* Boutons : hauteur X, rayon X/6, survol en Compliant Green. */
+.at-btn { display: inline-flex; align-items: center; gap: .5rem; height: 40px; padding: 0 16px; border-radius: 7px;
+          font-size: 14px; font-weight: 500; border: 1px solid var(--at-ink); background: var(--at-paper); color: var(--at-ink);
+          transition: background-color .15s, color .15s, border-color .15s; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.at-btn:hover { background: var(--at-green); color: var(--at-ink); border-color: var(--at-ink); }
+.at-btn-primary { background: var(--at-ink); color: var(--at-off); }
+.at-btn-ghost { border-color: transparent; background: transparent; }
+.at-btn:disabled { opacity: .5; cursor: not-allowed; }
+.at-btn-sm { height: 36px; padding: 0 12px; font-size: 13px; }
+.at-back { display: inline-flex; align-items: center; gap: .375rem; font-size: 13px; color: var(--at-graphite); text-decoration: none; }
+.at-back:hover { color: var(--at-ink); text-decoration: underline; text-decoration-color: var(--at-green); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+
+.at-field { width: 100%; height: 40px; padding: 0 12px; font-size: 14px; border: 1px solid var(--at-stone); border-radius: 7px; background: var(--at-paper); color: var(--at-ink); }
+.at-field:focus, .at-focus:focus { outline: 2px solid var(--at-green); outline-offset: 1px; border-color: var(--at-ink); }
+html input:focus-visible, html select:focus-visible, html textarea:focus-visible, html button:focus-visible, html a:focus-visible {
+    outline: 2px solid var(--at-green); outline-offset: 2px; }
+
+.at-card { background: var(--at-paper); border: 1px solid var(--at-stone); border-radius: 8px; transition: border-color .15s; }
+a.at-card:hover, .at-card.at-click:hover { border-color: var(--at-ink); }
+
+/* Chiffre-étendard : vert sur noir (combinaison n° 05 de la charte). */
+.at-hero { background: var(--at-ink); color: var(--at-off); border-radius: 8px; }
+.at-hero .at-num { color: var(--at-green); }
+
+.at-logo { height: 28px; width: auto; display: block; }
+
+/* Badges « bg-x-100 text-x-700/800 » générés par les scripts : chaque famille
+   garde une identité distincte, dans les combinaisons autorisées par la charte. */
+html .bg-blue-100.text-blue-800, html .bg-blue-100.text-blue-700,
+html .bg-sky-100.text-sky-800, html .bg-purple-100.text-purple-800, html .bg-purple-100.text-purple-700 { background: var(--at-green); color: var(--at-ink); }
+html .bg-green-100.text-green-800, html .bg-green-100.text-green-700,
+html .bg-emerald-100.text-emerald-800, html .bg-emerald-100.text-emerald-700,
+html .bg-teal-100.text-teal-800, html .bg-lime-100.text-lime-800 { background: var(--at-ink); color: var(--at-green); }
+html .bg-orange-100.text-orange-800, html .bg-orange-100.text-orange-700,
+html .bg-red-100.text-red-800, html .bg-red-100.text-red-700, html .bg-rose-100.text-rose-800,
+html .bg-indigo-100.text-indigo-800, html .bg-indigo-100.text-indigo-700,
+html .bg-violet-100.text-violet-800 { background: var(--at-graphite); color: var(--at-off); }
+html .bg-cyan-100.text-cyan-800, html .bg-cyan-100.text-cyan-700,
+html .bg-amber-100.text-amber-800, html .bg-amber-100.text-amber-700,
+html .bg-yellow-100.text-yellow-800, html .bg-yellow-100.text-yellow-700 { background: var(--at-stone); color: var(--at-ink); }
+
+/* Pastilles de paliers « bg-x-500 text-white » (taux par agence…) : la palette
+   les rendrait toutes noires. Quatre niveaux distincts, du validé à l'alerte :
+   vert · jaune/ambre · orange · rouge → noir sur vert · noir sur Stone clair ·
+   noir sur Stone Grey · Off White sur Graphite.
+   Le pourcentage reste écrit : la couleur n'est jamais seule. */
+html .bg-green-500.text-white, html .bg-emerald-500.text-white { background: var(--at-green); color: var(--at-ink); }
+html .bg-yellow-500.text-white, html .bg-amber-500.text-white { background: var(--at-stone45); color: var(--at-ink); }
+html .bg-orange-500.text-white { background: var(--at-stone); color: var(--at-ink); }
+html .bg-red-500.text-white, html .bg-rose-500.text-white { background: var(--at-graphite); color: var(--at-off); }
+
+/* Jauges d'objectifs (index) : app.js écrit la couleur de l'arc dans l'attribut
+   stroke ; une propriété CSS l'emporte sur l'attribut de présentation.
+   Limité aux jauges de gain : ailleurs (budget de pilotage-ia), l'orange est une alerte. */
+:is(#gauge-monthly-arc, #gauge-annual-arc)[stroke="#f97316"] { stroke: var(--at-green); }    /* objectif atteint (≥ 100 %) : validé */
+:is(#gauge-monthly-arc, #gauge-annual-arc)[stroke="#22c55e"] { stroke: var(--at-ink); }      /* ≥ 80 % */
+:is(#gauge-monthly-arc, #gauge-annual-arc)[stroke="#3b82f6"] { stroke: var(--at-graphite); } /* ≥ 50 % */
+:is(#gauge-monthly-arc, #gauge-annual-arc)[stroke="#94a3b8"] { stroke: var(--at-stone); }    /* < 50 % */
+html :is(#gauge-monthly-badge, #gauge-annual-badge).bg-orange-100 { background: var(--at-green); color: var(--at-ink); }
+html :is(#gauge-monthly-badge, #gauge-annual-badge).bg-green-100  { background: var(--at-ink); color: var(--at-off); }
+html :is(#gauge-monthly-badge, #gauge-annual-badge).bg-blue-100   { background: var(--at-graphite); color: var(--at-off); }
+
+/* Profils d'adoption : leur couleur est posée en style inline par les scripts
+   (légendes, barres de répartition). Du plus clair (Découverte) au plus foncé (Adopté). */
+[style*="background:#9ca3af"] { background: var(--at-stone45) !important; }
+[style*="background:#f59e0b"] { background: var(--at-stone) !important; }
+[style*="background:#6366f1"] { background: var(--at-graphite) !important; }
+[style*="background:#059669"] { background: var(--at-ink) !important; }
+
+/* Bascules (Mensuel / Cumulé / Par filiale…) : la pastille active passe en noir. */
+[id$="-toggle"] .bg-white { background: var(--at-ink); color: var(--at-off); }

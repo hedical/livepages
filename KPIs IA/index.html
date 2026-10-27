@@ -4,42 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AnalyzTech - KPIs IA Groupe BTP Consultants</title>
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind, thème des graphiques.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js ; chart.js → analyztech-theme.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="shared/analyztech-tailwind.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: #f8fafc;
-        }
-    </style>
+    <script src="shared/analyztech-theme.js"></script>
 </head>
 <body>
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-off">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <!-- Header -->
             <div class="mb-10">
-                <div class="flex items-center justify-between mb-4">
-                    <div>
-                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
-                            AnalyzTech - KPIs IA Groupe BTP Consultants
-                        </h1>
-                        <p class="text-gray-500 text-sm">Tableau de bord d'utilisation des fonctionnalités IA</p>
+                <div class="flex flex-wrap items-end justify-between gap-6 pb-6 border-b border-stone">
+                    <div class="flex flex-col gap-5">
+                        <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo self-start">
+                        <div>
+                            <h1 class="at-title text-4xl sm:text-5xl text-ink mb-3">
+                                <span class="sr-only">AnalyzTech - </span>KPIs IA Groupe BTP Consultants
+                            </h1>
+                            <p class="text-graphite text-sm">Tableau de bord d'utilisation des fonctionnalités IA</p>
+                        </div>
                     </div>
-                    <div class="flex gap-3">
+                    <div class="flex flex-wrap gap-2">
                         <!-- Navigation dans le MÊME onglet : la page macro relit
                              l'instantané des gains publié en sessionStorage, qui
                              n'est pas partagé avec un nouvel onglet. -->
                         <a
                             href="pilotage-ia.html"
                             id="pilotage-ia-link"
-                            class="px-4 py-3 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg shadow-sm border border-gray-300 transition-all duration-200 flex items-center gap-2"
+                            class="at-btn"
                             title="Coût de la démarche IA, budget et retour"
                         >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             Pilotage économique
                         </a>
@@ -47,30 +49,30 @@
                         <a
                             href="copil-ia.html"
                             id="copil-ia-link"
-                            class="px-4 py-3 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg shadow-sm border border-gray-300 transition-all duration-200 flex items-center gap-2"
+                            class="at-btn"
                             title="Adoption et systématisation des modules, par grand métier"
                         >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6m4 6V7m4 10v-3M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 17v-6m4 6V7m4 10v-3M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
                             </svg>
                             COPIL IA
                         </a>
                         <button
                             id="refresh-data-btn"
-                            class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            class="at-btn at-btn-primary"
                         >
-                            <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                             <span id="refresh-text">Rafraîchir les données</span>
                         </button>
                         <button
                             id="logout-btn"
-                            class="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg shadow-sm transition-all duration-200 flex items-center gap-2"
+                            class="at-btn at-btn-ghost"
                             title="Se déconnecter"
                         >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
                             Déconnexion
                         </button>
@@ -79,31 +81,33 @@
             </div>
 
             <!-- Login Modal -->
-            <div id="login-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
-                <div class="relative p-8 bg-white w-full max-w-md m-auto rounded-lg shadow-lg">
+            <div id="login-modal" class="fixed inset-0 bg-ink bg-opacity-80 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+                <div class="relative p-8 bg-paper w-full max-w-md m-auto rounded-lg border border-stone">
                     <div class="text-center">
-                        <h3 class="text-2xl font-bold text-gray-900 mb-2">Accès sécurisé</h3>
-                        <p class="text-gray-600 mb-6">Veuillez entrer le mot de passe pour accéder aux données</p>
-                        
+                        <svg viewBox="0 0 144.2 144.19" class="h-10 w-10 mx-auto mb-6 text-ink" aria-hidden="true"><g fill="currentColor"><path d="M66.74,102.88h36.12v41.3h-38.87C28.9,144.43.24,116.16,0,81.06,0,80.91,0,80.77,0,80.62v-39.31h41.3v36.14c0,14.05,11.39,25.43,25.43,25.43"/><path d="M41.31,0v41.3h61.55v61.57h41.34V0H41.31Z"/></g></svg>
+                        <h3 class="at-title text-3xl text-ink mb-3">Accès sécurisé</h3>
+                        <p class="text-graphite mb-6">Veuillez entrer le mot de passe pour accéder aux données</p>
+
                         <form id="login-form" class="space-y-4">
                             <div>
+                                <label for="password-input" class="sr-only">Mot de passe</label>
                                 <input
                                     type="password"
                                     id="password-input"
                                     placeholder="Mot de passe"
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    class="at-field"
                                     required
                                 />
                             </div>
-                            
-                            <div id="login-error" class="hidden text-red-600 text-sm">
+
+                            <div id="login-error" class="hidden text-ink text-sm bg-compliant rounded-md px-3 py-2">
                                 Mot de passe incorrect
                             </div>
-                            
+
                             <button
                                 type="submit"
                                 id="login-button"
-                                class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="at-btn at-btn-primary w-full justify-center"
                             >
                                 <span id="login-text">Se connecter</span>
                             </button>
@@ -113,64 +117,64 @@
             </div>
 
             <!-- Loading State -->
-            <div id="loading" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
+            <div id="loading" class="hidden min-h-screen bg-off flex items-center justify-center">
                 <div class="text-center">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                    <div class="animate-spin rounded-full h-12 w-12 border-2 border-stone mx-auto" style="border-top-color:#1A1A1A"></div>
+                    <p class="mt-4 text-graphite">Chargement des données...</p>
                 </div>
             </div>
 
             <!-- Error State -->
-            <div id="error" class="hidden min-h-screen bg-gray-50 flex items-center justify-center">
+            <div id="error" class="hidden min-h-screen bg-off flex items-center justify-center">
                 <div class="text-center">
-                    <p class="text-red-600 text-lg">Erreur lors du chargement des données</p>
+                    <p class="text-ink text-lg"><span class="inline-block bg-ink text-off rounded px-2 py-0.5 mr-2 text-sm">✕</span>Erreur lors du chargement des données</p>
                 </div>
             </div>
 
             <!-- Main Content -->
             <div id="main-content" class="hidden">
                 <!-- Filters -->
-                <div class="mb-8">
+                <div class="mb-10">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
                         <!-- Date Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                        <div class="at-card p-5">
+                            <label class="block text-sm font-medium text-ink mb-4">
                                 Filtrer par période
                             </label>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-2">Date de début</label>
+                                    <label for="start-date" class="block text-xs text-graphite mb-2">Date de début</label>
                                     <input
                                         type="date"
                                         id="start-date"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        class="at-field"
                                     />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-2">Date de fin</label>
+                                    <label for="end-date" class="block text-xs text-graphite mb-2">Date de fin</label>
                                     <input
                                         type="date"
                                         id="end-date"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        class="at-field"
                                     />
                                 </div>
                             </div>
                             <button
                                 id="apply-date-filter"
-                                class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-all duration-200"
+                                class="at-btn at-btn-primary at-btn-sm w-full justify-center"
                             >
                                 Appliquer les dates
                             </button>
                         </div>
 
                         <!-- Filiale Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                        <div class="at-card p-5">
+                            <label for="filiale-filter" class="block text-sm font-medium text-ink mb-4">
                                 Filtrer par filiale
                             </label>
                             <select
                                 id="filiale-filter"
-                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="at-field"
                             >
                                 <option value="">Toutes les filiales</option>
                                 <option value="BTP Consultants">BTP Consultants</option>
@@ -181,25 +185,25 @@
                         </div>
 
                         <!-- Direction & Agency Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                        <div class="at-card p-5">
+                            <label class="block text-sm font-medium text-ink mb-4">
                                 Filtrer par organisation
                             </label>
                             <div class="grid grid-cols-1 gap-4">
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Direction Régionale</label>
+                                    <label for="direction-filter" class="block text-xs text-graphite mb-1">Direction Régionale</label>
                                     <select
                                         id="direction-filter"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+                                        class="at-field mb-3"
                                     >
                                         <option value="">Toutes les directions</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Agence</label>
+                                    <label for="agency-filter" class="block text-xs text-graphite mb-1">Agence</label>
                                     <select
                                         id="agency-filter"
-                                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        class="at-field"
                                     >
                                         <option value="">Toutes les agences</option>
                                     </select>
@@ -209,19 +213,19 @@
                     </div>
                     <button
                         id="reset-filters"
-                        class="hidden px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                        class="hidden at-btn at-btn-sm"
                     >
                         Réinitialiser les filtres
                     </button>
                 </div>
 
                 <!-- Objectifs de gain -->
-                <div class="mb-8">
-                    <div class="flex items-center justify-between mb-5">
-                        <h2 class="text-xl font-semibold text-gray-700">Objectifs de gain (3% du CA)</h2>
+                <div class="mb-10">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+                        <h2 class="at-title text-2xl text-ink">Objectifs de gain (3% du CA)</h2>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs text-gray-500">Période :</span>
-                            <select id="gauge-month-select" class="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <span class="text-xs text-graphite">Période :</span>
+                            <select id="gauge-month-select" aria-label="Mois" class="at-field at-btn-sm" style="width:auto;height:36px">
                                 <option value="1">Janvier</option>
                                 <option value="2">Février</option>
                                 <option value="3">Mars</option>
@@ -235,413 +239,411 @@
                                 <option value="11">Novembre</option>
                                 <option value="12">Décembre</option>
                             </select>
-                            <select id="gauge-year-select" class="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <select id="gauge-year-select" aria-label="Année" class="at-field at-btn-sm" style="width:auto;height:36px">
                                 <!-- populated dynamically -->
                             </select>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- Objectif mensuel -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div class="at-card p-6">
                             <div class="flex items-center justify-between mb-4">
                                 <div>
-                                    <h3 class="text-base font-semibold text-gray-700">Objectif mensuel</h3>
-                                    <p class="text-xs text-gray-400 mt-0.5">Cible : <strong class="text-gray-600">772 h</strong> / mois</p>
+                                    <h3 class="text-lg font-medium text-ink">Objectif mensuel</h3>
+                                    <p class="text-xs text-graphite mt-0.5">Cible : <strong class="text-ink font-medium">772 h</strong> / mois</p>
                                 </div>
                                 <span id="gauge-monthly-badge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-500">—</span>
                             </div>
                             <div class="relative mx-auto" style="width:200px;height:130px;">
-                                <svg width="200" height="105" viewBox="0 0 200 105" style="display:block;">
-                                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round"/>
-                                    <path id="gauge-monthly-arc" d="M 20 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round" style="transition:stroke 0.3s;"/>
+                                <svg width="200" height="105" viewBox="0 0 200 105" style="display:block;" aria-hidden="true">
+                                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#DADACF" stroke-width="18" stroke-linecap="round"/>
+                                    <path id="gauge-monthly-arc" d="M 20 100" fill="none" stroke="#DADACF" stroke-width="18" stroke-linecap="round" style="transition:stroke 0.3s;"/>
                                 </svg>
                                 <div class="absolute bottom-0 left-0 right-0 text-center">
-                                    <p class="text-2xl font-bold text-gray-900" id="gauge-monthly-value">—</p>
-                                    <p class="text-xs text-gray-500" id="gauge-monthly-sub">sur 772 h</p>
+                                    <p class="at-num text-3xl text-ink" id="gauge-monthly-value">—</p>
+                                    <p class="text-xs text-graphite mt-1" id="gauge-monthly-sub">sur 772 h</p>
                                 </div>
                             </div>
-                            <p class="text-center text-xs text-gray-400 mt-1" id="gauge-monthly-label">mois en cours</p>
+                            <p class="text-center text-xs text-graphite mt-1" id="gauge-monthly-label">mois en cours</p>
                         </div>
 
                         <!-- Objectif annuel -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div class="at-card p-6">
                             <div class="flex items-center justify-between mb-4">
                                 <div>
-                                    <h3 class="text-base font-semibold text-gray-700">Objectif annuel</h3>
-                                    <p class="text-xs text-gray-400 mt-0.5">Cible : <strong class="text-gray-600">9 256 h</strong> / an (3% du CA)</p>
+                                    <h3 class="text-lg font-medium text-ink">Objectif annuel</h3>
+                                    <p class="text-xs text-graphite mt-0.5">Cible : <strong class="text-ink font-medium">9 256 h</strong> / an (3% du CA)</p>
                                 </div>
                                 <span id="gauge-annual-badge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-500">—</span>
                             </div>
                             <div class="relative mx-auto" style="width:200px;height:130px;">
-                                <svg width="200" height="105" viewBox="0 0 200 105" style="display:block;">
-                                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round"/>
-                                    <path id="gauge-annual-arc" d="M 20 100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round" style="transition:stroke 0.3s;"/>
+                                <svg width="200" height="105" viewBox="0 0 200 105" style="display:block;" aria-hidden="true">
+                                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#DADACF" stroke-width="18" stroke-linecap="round"/>
+                                    <path id="gauge-annual-arc" d="M 20 100" fill="none" stroke="#DADACF" stroke-width="18" stroke-linecap="round" style="transition:stroke 0.3s;"/>
                                 </svg>
                                 <div class="absolute bottom-0 left-0 right-0 text-center">
-                                    <p class="text-2xl font-bold text-gray-900" id="gauge-annual-value">—</p>
-                                    <p class="text-xs text-gray-500" id="gauge-annual-sub">sur 9 256 h</p>
+                                    <p class="at-num text-3xl text-ink" id="gauge-annual-value">—</p>
+                                    <p class="text-xs text-graphite mt-1" id="gauge-annual-sub">sur 9 256 h</p>
                                 </div>
                             </div>
-                            <p class="text-center text-xs text-gray-400 mt-1" id="gauge-annual-label">année en cours</p>
+                            <p class="text-center text-xs text-graphite mt-1" id="gauge-annual-label">année en cours</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- General KPIs -->
                 <div class="mb-10">
-                    <div class="flex items-center justify-between mb-5">
-                        <h2 class="text-xl font-semibold text-gray-700">Indicateurs généraux</h2>
-                        <div class="flex items-center gap-2">
-                            <button id="open-users-list-btn" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+                        <h2 class="at-title text-2xl text-ink">Indicateurs généraux</h2>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button id="open-users-list-btn" class="at-btn at-btn-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
                                 Voir les utilisateurs
                             </button>
-                            <a href="retention.html" id="open-retention-btn" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            <a href="retention.html" id="open-retention-btn" class="at-btn at-btn-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
                                 Analyse rétention
                             </a>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <!-- Total Utilisations -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-500 mb-2">Utilisation totales des fonctionnalités IA</p>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="total-utilisations">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Nombre total d'utilisations</p>
-                                </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Gain Total Heures : chiffre-étendard, vert sur noir (combinaison charte n° 05) -->
+                        <div id="gain-heures-card" class="md:col-span-2 bg-ink text-off rounded-lg p-7 cursor-pointer group at-click flex flex-col justify-between gap-6 min-h-[220px]" title="Cliquer pour voir l'évolution temporelle">
+                            <div class="flex items-center gap-2">
+                                <p class="text-sm text-stone">Gain total estimé en heures</p>
+                                <svg class="w-4 h-4 text-stone group-hover:text-compliant transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="at-num text-7xl sm:text-8xl text-compliant" id="gain-heures">0</p>
+                                <p class="text-sm text-off mt-3" id="gain-subtitle">Heures économisées</p>
                             </div>
                         </div>
 
-                        <!-- Gain Total Heures -->
-                        <div id="gain-heures-card" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer group" title="Cliquer pour voir l'évolution temporelle">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-2">
-                                        <p class="text-sm font-medium text-gray-500">Gain total estimé en heures</p>
-                                        <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                        </svg>
-                                    </div>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="gain-heures">0</p>
-                                    <p class="text-xs text-gray-400 mt-1" id="gain-subtitle">Heures économisées</p>
-                                </div>
+                        <!-- Total Utilisations -->
+                        <div class="at-card p-6 flex flex-col justify-between gap-4">
+                            <p class="text-sm text-graphite">Utilisation totales des fonctionnalités IA</p>
+                            <div>
+                                <p class="at-num text-5xl text-ink" id="total-utilisations">0</p>
+                                <p class="text-xs text-graphite mt-2">Nombre total d'utilisations</p>
                             </div>
                         </div>
 
                         <!-- Total Users -->
-                        <div id="users-card" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer group" title="Cliquer pour voir l'évolution temporelle">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-2">
-                                        <p class="text-sm font-medium text-gray-500">Nombre total d'utilisateurs</p>
-                                        <svg class="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                    </div>
-                                    <p class="text-3xl font-bold text-gray-900 mb-1" id="total-users">0</p>
-                                    <p class="text-xs text-gray-400 mt-1">Utilisateurs uniques</p>
-                                </div>
+                        <div id="users-card" class="at-card at-click p-6 cursor-pointer group flex flex-col justify-between gap-4" title="Cliquer pour voir l'évolution temporelle">
+                            <div class="flex items-center gap-2">
+                                <p class="text-sm text-graphite">Nombre total d'utilisateurs</p>
+                                <svg class="w-4 h-4 text-stone group-hover:text-ink transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="at-num text-5xl text-ink" id="total-users">0</p>
+                                <p class="text-xs text-graphite mt-2">Utilisateurs uniques</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Feature-specific KPIs -->
+                <!-- Feature-specific KPIs
+                     Chaque tuile garde la classe bg-white : initializeFeatureCards (app.js)
+                     remonte du compteur jusqu'à elle pour appliquer le filtre filiale.
+                     Badges filiale : BTP Consultants noir/vert · Citae vert/noir ·
+                     BTP Diagnostics blanc cassé/graphite · SPS noir/Stone Grey. -->
                 <div>
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Indicateurs par fonctionnalité</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <h2 class="at-title text-2xl text-ink mb-5">Indicateurs par fonctionnalité</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- Descriptif Sommaire -->
-                        <a href="descriptif.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Descriptif sommaire des travaux</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="descriptif.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Descriptif sommaire des travaux</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="descriptif-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="descriptif-count">0</span>
+                                <span class="text-sm text-graphite">utilisations</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="descriptif-ops">0</strong> descriptifs effectifs générés</p>
-                                <p>Sur un total de <strong id="descriptif-total-rict">0</strong> RICT</p>
-                                <p>Avec <strong id="descriptif-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="descriptif-ops">0</strong> descriptifs effectifs générés</p>
+                                <p>Sur un total de <strong class="text-ink font-medium" id="descriptif-total-rict">0</strong> RICT</p>
+                                <p>Avec <strong class="text-ink font-medium" id="descriptif-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
 
                         <!-- Auto Contacts -->
-                        <a href="autocontact.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Auto Contacts</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="autocontact.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Auto Contacts</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="autocontact-ops">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="autocontact-ops">0</span>
+                                <span class="text-sm text-graphite">utilisations</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="autocontact-ai-contacts">0</strong> contacts générés par IA</p>
-                                <p>Sur un total de <strong id="autocontact-total-contacts">0</strong> contacts</p>
-                                <p>Avec <strong id="autocontact-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="autocontact-ai-contacts">0</strong> contacts générés par IA</p>
+                                <p>Sur un total de <strong class="text-ink font-medium" id="autocontact-total-contacts">0</strong> contacts</p>
+                                <p>Avec <strong class="text-ink font-medium" id="autocontact-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
 
                         <!-- Comparateur Indices -->
-                        <a href="comparateur.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Comparateur d'indices</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="comparateur.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Comparateur d'indices</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="comparateur-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="comparateur-count">0</span>
+                                <span class="text-sm text-graphite">utilisations</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="comparateur-ops">0</strong> opérations</p>
-                                <p>Sur un total de <strong id="comparateur-pages">0</strong> pages analysées</p>
-                                <p>Avec <strong id="comparateur-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="comparateur-ops">0</strong> opérations</p>
+                                <p>Sur un total de <strong class="text-ink font-medium" id="comparateur-pages">0</strong> pages analysées</p>
+                                <p>Avec <strong class="text-ink font-medium" id="comparateur-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
 
                         <!-- Chat Projet (BTP Consultants) -->
-                        <a href="chat-btpconsultants.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="chat-btpconsultants.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="chat-projet-btp-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="chat-projet-btp-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="chat-projet-btp-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="chat-projet-btp-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="chat-projet-btp-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="chat-projet-btp-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="chat-projet-btp-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="chat-projet-btp-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Expert Technique (BTP Consultants) -->
-                        <a href="expert-btpconsultants.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="expert-btpconsultants.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="expert-tech-btp-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="expert-tech-btp-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="expert-tech-btp-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="expert-tech-btp-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="expert-tech-btp-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="expert-tech-btp-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="expert-tech-btp-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="expert-tech-btp-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Analyse Géotechnique (BTP Consultants) -->
-                        <a href="analyse-geotechnique.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Analyse géotechnique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="analyse-geotechnique.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Analyse géotechnique</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="analyse-geo-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">opérations IA</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="analyse-geo-count">0</span>
+                                <span class="text-sm text-graphite">opérations IA</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="analyse-geo-notices">0</strong> notices générées</p>
-                                <p>Et <strong id="analyse-geo-reports">0</strong> rapports créés</p>
-                                <p>Par <strong id="analyse-geo-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="analyse-geo-notices">0</strong> notices générées</p>
+                                <p>Et <strong class="text-ink font-medium" id="analyse-geo-reports">0</strong> rapports créés</p>
+                                <p>Par <strong class="text-ink font-medium" id="analyse-geo-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
 
                         <!-- Analyse Acoustique (BTP Consultants) -->
-                        <a href="analyse-acoustique.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Analyse acoustique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="analyse-acoustique.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Analyse acoustique</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="analyse-acou-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">opérations IA</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="analyse-acou-count">0</span>
+                                <span class="text-sm text-graphite">opérations IA</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Sur <strong id="analyse-acou-contracts">0</strong> affaires uniques</p>
-                                <p><strong id="analyse-acou-notices">0</strong> notices injectées · <strong id="analyse-acou-reports">0</strong> rapports</p>
-                                <p>Par <strong id="analyse-acou-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Sur <strong class="text-ink font-medium" id="analyse-acou-contracts">0</strong> affaires uniques</p>
+                                <p><strong class="text-ink font-medium" id="analyse-acou-notices">0</strong> notices injectées · <strong class="text-ink font-medium" id="analyse-acou-reports">0</strong> rapports</p>
+                                <p>Par <strong class="text-ink font-medium" id="analyse-acou-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
 
                         <!-- Analyse CCTP vs Référentiel (BTP Consultants) -->
-                        <a href="analyse-cctp.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Analyse CCTP vs Référentiel</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="analyse-cctp.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Analyse CCTP vs Référentiel</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="analyse-cctp-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">analyses IA</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="analyse-cctp-count">0</span>
+                                <span class="text-sm text-graphite">analyses IA</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Sur <strong id="analyse-cctp-contracts">0</strong> affaires uniques</p>
-                                <p><strong id="analyse-cctp-avis">0</strong> avis émis</p>
-                                <p>Par <strong id="analyse-cctp-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Sur <strong class="text-ink font-medium" id="analyse-cctp-contracts">0</strong> affaires uniques</p>
+                                <p><strong class="text-ink font-medium" id="analyse-cctp-avis">0</strong> avis émis</p>
+                                <p>Par <strong class="text-ink font-medium" id="analyse-cctp-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
 
                         <!-- Analyse AO (BTP Consultants) -->
-                        <a href="analyse-ao.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Analyse AO</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">BTP Consultants</span>
+                        <a href="analyse-ao.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Analyse AO</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-blue-600" id="analyse-ao-captes">0</span>
-                                <span class="text-sm text-gray-400 ml-2">AO captés</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="analyse-ao-captes">0</span>
+                                <span class="text-sm text-graphite">AO captés</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p><strong id="analyse-ao-filtres">0</strong> filtrés &nbsp;·&nbsp; <strong id="analyse-ao-analyses">0</strong> analysés</p>
-                                <p><strong id="analyse-ao-opp">0</strong> passés en opportunité</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p><strong class="text-ink font-medium" id="analyse-ao-filtres">0</strong> filtrés &nbsp;·&nbsp; <strong class="text-ink font-medium" id="analyse-ao-analyses">0</strong> analysés</p>
+                                <p><strong class="text-ink font-medium" id="analyse-ao-opp">0</strong> passés en opportunité</p>
                                 <p>Funnel IA AO : détection → IA → commercial → opp</p>
                             </div>
                         </a>
 
                         <!-- Chat Projet (Citae) -->
-                        <a href="chat-citae.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
+                        <a href="chat-citae.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Citae</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-green-600" id="chat-projet-citae-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="chat-projet-citae-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="chat-projet-citae-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="chat-projet-citae-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="chat-projet-citae-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="chat-projet-citae-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="chat-projet-citae-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="chat-projet-citae-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Expert Technique (Citae) -->
-                        <a href="expert-citae.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
+                        <a href="expert-citae.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Citae</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-green-600" id="expert-tech-citae-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="expert-tech-citae-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="expert-tech-citae-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="expert-tech-citae-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="expert-tech-citae-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="expert-tech-citae-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="expert-tech-citae-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="expert-tech-citae-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- NF Habitat (Citae) -->
-                        <a href="nfhabitat.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">NF Habitat</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Citae</span>
+                        <a href="nfhabitat.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">NF Habitat</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Citae</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-green-600" id="nf-habitat-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">contrôles</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="nf-habitat-count">0</span>
+                                <span class="text-sm text-graphite">contrôles</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="nf-habitat-points">0</strong> points contrôlés</p>
-                                <p>Sur <strong id="nf-habitat-projects">0</strong> projets uniques</p>
-                                <p>Par <strong id="nf-habitat-users">0</strong> utilisateurs</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="nf-habitat-points">0</strong> points contrôlés</p>
+                                <p>Sur <strong class="text-ink font-medium" id="nf-habitat-projects">0</strong> projets uniques</p>
+                                <p>Par <strong class="text-ink font-medium" id="nf-habitat-users">0</strong> utilisateurs</p>
                             </div>
                         </a>
 
                         <!-- Chat Projet (BTP Diagnostics) -->
-                        <a href="chat-btpdiagnostics.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">BTP Diagnostics</span>
+                        <a href="chat-btpdiagnostics.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800">BTP Diagnostics</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-orange-600" id="chat-projet-btpdiag-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="chat-projet-btpdiag-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="chat-projet-btpdiag-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="chat-projet-btpdiag-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="chat-projet-btpdiag-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="chat-projet-btpdiag-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="chat-projet-btpdiag-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="chat-projet-btpdiag-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Expert Technique (BTP Diagnostics) -->
-                        <a href="expert-btpdiagnostics.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">BTP Diagnostics</span>
+                        <a href="expert-btpdiagnostics.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800">BTP Diagnostics</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-orange-600" id="expert-tech-btpdiag-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="expert-tech-btpdiag-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="expert-tech-btpdiag-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="expert-tech-btpdiag-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="expert-tech-btpdiag-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="expert-tech-btpdiag-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="expert-tech-btpdiag-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="expert-tech-btpdiag-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Chat Projet (BTP Consultants SPS / SPS) -->
-                        <a href="chat-btp-sps.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Chat projet</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
+                        <a href="chat-btp-sps.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-cyan-600" id="chat-projet-sps-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="chat-projet-sps-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="chat-projet-sps-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="chat-projet-sps-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="chat-projet-sps-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="chat-projet-sps-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="chat-projet-sps-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="chat-projet-sps-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Expert Technique (BTP Consultants SPS / SPS) -->
-                        <a href="expert-btp-sps.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Expert technique</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
+                        <a href="expert-btp-sps.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-cyan-600" id="expert-tech-sps-count">0</span>
-                                <span class="text-sm text-gray-400 ml-2">sessions</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="expert-tech-sps-count">0</span>
+                                <span class="text-sm text-graphite">sessions</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="expert-tech-sps-users">0</strong> utilisateurs uniques</p>
-                                <p><strong id="expert-tech-sps-messages">0</strong> messages</p>
-                                <p>Coût: <strong id="expert-tech-sps-cost">0 $</strong></p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="expert-tech-sps-users">0</strong> utilisateurs uniques</p>
+                                <p><strong class="text-ink font-medium" id="expert-tech-sps-messages">0</strong> messages</p>
+                                <p>Coût: <strong class="text-ink font-medium" id="expert-tech-sps-cost">0 $</strong></p>
                             </div>
                         </a>
 
                         <!-- Auto Contacts (BTP Consultants SPS / SPS) -->
-                        <a href="autocontact-sps.html" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer block">
-                            <div class="flex items-start justify-between mb-3">
-                                <h3 class="text-base font-semibold text-gray-700">Auto Contacts</h3>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
+                        <a href="autocontact-sps.html" class="bg-white at-card p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Auto Contacts</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
                             </div>
-                            <div class="flex items-baseline space-x-2 mb-3">
-                                <span class="text-4xl font-bold text-cyan-600" id="autocontact-sps-ops">0</span>
-                                <span class="text-sm text-gray-400 ml-2">utilisations</span>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="autocontact-sps-ops">0</span>
+                                <span class="text-sm text-graphite">utilisations</span>
                             </div>
-                            <div class="space-y-1 text-xs text-gray-600">
-                                <p>Avec <strong id="autocontact-sps-ai-contacts">0</strong> contacts générés par IA</p>
-                                <p>Sur un total de <strong id="autocontact-sps-total-contacts">0</strong> contacts</p>
-                                <p>Avec <strong id="autocontact-sps-users">0</strong> utilisateurs uniques</p>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Avec <strong class="text-ink font-medium" id="autocontact-sps-ai-contacts">0</strong> contacts générés par IA</p>
+                                <p>Sur un total de <strong class="text-ink font-medium" id="autocontact-sps-total-contacts">0</strong> contacts</p>
+                                <p>Avec <strong class="text-ink font-medium" id="autocontact-sps-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
                     </div>
@@ -653,30 +655,30 @@
 
     <!-- Gain Evolution Modal -->
     <!-- ===== USERS LIST MODAL ===== -->
-    <div id="users-list-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-        <div class="relative bg-white w-full max-w-5xl rounded-xl shadow-2xl flex flex-col" style="max-height: 90vh;">
+    <div id="users-list-modal" class="hidden fixed inset-0 bg-ink bg-opacity-70 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative bg-paper w-full max-w-5xl rounded-lg border border-stone flex flex-col" style="max-height: 90vh;">
             <!-- Modal Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+            <div class="flex items-center justify-between gap-4 px-6 py-5 border-b border-stone flex-shrink-0">
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900">Utilisateurs</h3>
-                    <p class="text-sm text-gray-500 mt-0.5" id="users-list-subtitle">Données de population et d'activité</p>
+                    <h3 class="at-title text-2xl text-ink">Utilisateurs</h3>
+                    <p class="text-sm text-graphite mt-1" id="users-list-subtitle">Données de population et d'activité</p>
                 </div>
                 <div class="flex items-center gap-2">
-                <button id="export-adoption-xlsx" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors" title="Synthèse, utilisateurs actifs et adoption par agence — période du filtre de dates">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                <button id="export-adoption-xlsx" type="button" class="at-btn at-btn-sm" title="Synthèse, utilisateurs actifs et adoption par agence — période du filtre de dates">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                     <span id="export-adoption-xlsx-label">Exporter Excel</span>
                 </button>
-                <button id="close-users-list-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <button id="close-users-list-modal" class="at-btn at-btn-ghost at-btn-sm" aria-label="Fermer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
                 </div>
             </div>
             <!-- Tabs -->
-            <div class="flex border-b border-gray-200 px-6 flex-shrink-0">
+            <div class="flex overflow-x-auto border-b border-stone px-6 flex-shrink-0">
                 <button id="tab-population" class="px-4 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600 transition-colors">
-                    Population cible <span class="ml-1.5 px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full" id="tab-population-count">—</span>
+                    Population cible <span class="ml-1.5 px-2 py-0.5 text-xs bg-compliant text-ink rounded-full" id="tab-population-count">—</span>
                 </button>
                 <button id="tab-synthesis" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors ml-2">
                     Synthèse adoption
@@ -693,27 +695,29 @@
 
                 <!-- Population cible tab -->
                 <div id="panel-population">
-                    <div class="flex items-center justify-between mb-4">
-                        <p class="text-sm text-gray-600">Collaborateurs BTP Consultants pris en compte dans le calcul des taux d'adoption.</p>
-                        <span class="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-md px-2 py-1">Total: <strong id="pop-total-effectif">—</strong></span>
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <p class="text-sm text-graphite">Collaborateurs BTP Consultants pris en compte dans le calcul des taux d'adoption.</p>
+                        <span class="text-xs text-graphite bg-off border border-stone rounded-md px-2 py-1">Total: <strong class="text-ink" id="pop-total-effectif">—</strong></span>
                     </div>
+                    <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="bg-gray-50 text-left">
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 rounded-tl-lg">Direction Régionale</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600">Code Agence</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg">Effectif</th>
+                            <tr class="border-b border-stone text-left">
+                                <th class="px-4 py-2.5 font-medium text-graphite">Direction Régionale</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite">Code Agence</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right">Effectif</th>
                             </tr>
                         </thead>
                         <tbody id="population-table-body" class="divide-y divide-gray-100"></tbody>
                     </table>
+                    </div>
                 </div>
 
                 <!-- Synthèse adoption tab -->
                 <div id="panel-synthesis" class="hidden">
                     <div class="flex items-center justify-between gap-3 mb-4">
-                        <p class="text-sm text-gray-600">Répartition des utilisateurs actifs par profil d'adoption, sur la période du filtre de dates.</p>
-                        <select id="synthesis-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <p class="text-sm text-graphite">Répartition des utilisateurs actifs par profil d'adoption, sur la période du filtre de dates.</p>
+                        <select id="synthesis-filiale" aria-label="Filiale" class="at-field" style="width:auto">
                             <option value="">Toutes les filiales</option>
                             <option value="BTP Consultants">BTP Consultants</option>
                             <option value="BTP Consultants SPS">BTP Consultants SPS</option>
@@ -723,23 +727,23 @@
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5" id="synthesis-tiles"></div>
                     <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-                        <div class="lg:col-span-2 border border-gray-200 rounded-xl p-4">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Profils d'adoption</h4>
+                        <div class="lg:col-span-2 border border-stone rounded-lg p-4">
+                            <h4 class="text-sm font-medium text-ink mb-3">Profils d'adoption</h4>
                             <div class="relative mx-auto" style="max-width: 260px;">
                                 <canvas id="synthesis-pie" role="img" aria-label="Répartition des utilisateurs par profil d'adoption"></canvas>
                             </div>
                             <ul id="synthesis-legend" class="mt-4 space-y-1.5 text-sm"></ul>
                         </div>
-                        <div class="lg:col-span-3 border border-gray-200 rounded-xl p-4">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Par filiale</h4>
+                        <div class="lg:col-span-3 border border-stone rounded-lg p-4 overflow-x-auto">
+                            <h4 class="text-sm font-medium text-ink mb-3">Par filiale</h4>
                             <table class="w-full text-sm">
                                 <thead>
-                                    <tr class="text-left text-gray-500 text-xs">
-                                        <th class="pb-2 font-semibold">Filiale</th>
-                                        <th class="pb-2 font-semibold text-right">Utilisateurs</th>
-                                        <th class="pb-2 font-semibold text-right">Médiane</th>
-                                        <th class="pb-2 font-semibold pl-4">Répartition</th>
-                                        <th class="pb-2 font-semibold text-right">Régulier +</th>
+                                    <tr class="text-left text-graphite text-xs">
+                                        <th class="pb-2 font-medium">Filiale</th>
+                                        <th class="pb-2 font-medium text-right">Utilisateurs</th>
+                                        <th class="pb-2 font-medium text-right">Médiane</th>
+                                        <th class="pb-2 font-medium pl-4">Répartition</th>
+                                        <th class="pb-2 font-medium text-right">Régulier +</th>
                                     </tr>
                                 </thead>
                                 <tbody id="synthesis-filiales" class="divide-y divide-gray-100"></tbody>
@@ -750,50 +754,52 @@
 
                 <!-- Utilisateurs actifs tab -->
                 <div id="panel-active-users" class="hidden">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="relative flex-1">
-                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <div class="flex flex-wrap items-center gap-3 mb-4">
+                        <div class="relative flex-1 min-w-[220px]">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-graphite" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
-                            <input id="users-list-search" type="text" placeholder="Rechercher par email ou agence…" class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <input id="users-list-search" type="text" aria-label="Rechercher par email ou agence" placeholder="Rechercher par email ou agence…" class="at-field" style="padding-left:36px" />
                         </div>
-                        <select id="users-list-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <select id="users-list-filiale" aria-label="Filiale" class="at-field" style="width:auto">
                             <option value="">Toutes les filiales</option>
                             <option value="BTP Consultants">BTP Consultants</option>
                             <option value="Citae">Citae</option>
                             <option value="BTP Diagnostics">BTP Diagnostics</option>
                             <option value="BTP Consultants SPS">BTP Consultants SPS</option>
                         </select>
-                        <select id="users-list-niveau" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <select id="users-list-niveau" aria-label="Niveau d'adoption" class="at-field" style="width:auto">
                             <option value="">Tous les niveaux</option>
                         </select>
                     </div>
+                    <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="bg-gray-50 text-left">
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 rounded-tl-lg">Email</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600">Filiale</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600">Fonctionnalités</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Sessions</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Dernière activité</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg whitespace-nowrap">
-                                    <button id="users-sort-adoption" type="button" class="font-semibold hover:text-indigo-600" title="Trier par note d'adoption">Adoption <span id="users-sort-adoption-arrow" class="text-gray-400">↕</span></button>
-                                    <span id="adoption-method-info" class="inline-flex align-middle ml-1 cursor-help text-gray-400 hover:text-indigo-600" aria-label="Méthode de calcul de la note d'adoption">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <tr class="border-b border-stone text-left">
+                                <th class="px-4 py-2.5 font-medium text-graphite">Email</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite">Filiale</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite">Fonctionnalités</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right">Sessions</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right">Dernière activité</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right whitespace-nowrap">
+                                    <button id="users-sort-adoption" type="button" class="font-medium hover:text-ink" title="Trier par note d'adoption">Adoption <span id="users-sort-adoption-arrow" class="text-graphite">↕</span></button>
+                                    <span id="adoption-method-info" class="inline-flex align-middle ml-1 cursor-help text-graphite hover:text-ink" aria-label="Méthode de calcul de la note d'adoption">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                     </span>
                                 </th>
                             </tr>
                         </thead>
                         <tbody id="active-users-table-body" class="divide-y divide-gray-100"></tbody>
                     </table>
-                    <p class="text-xs text-gray-400 text-center mt-4" id="active-users-count-label"></p>
+                    </div>
+                    <p class="text-xs text-graphite text-center mt-4" id="active-users-count-label"></p>
                 </div>
 
                 <!-- Adoption par agence tab -->
                 <div id="panel-agencies" class="hidden">
                     <div class="flex items-center justify-between gap-3 mb-4">
-                        <p class="text-sm text-gray-600">Note médiane des utilisateurs actifs rattachés à l'agence.</p>
-                        <select id="agencies-list-filiale" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <p class="text-sm text-graphite">Note médiane des utilisateurs actifs rattachés à l'agence.</p>
+                        <select id="agencies-list-filiale" aria-label="Filiale" class="at-field" style="width:auto">
                             <option value="">Toutes les filiales</option>
                             <option value="BTP Consultants">BTP Consultants</option>
                             <option value="BTP Consultants SPS">BTP Consultants SPS</option>
@@ -801,40 +807,42 @@
                             <option value="BTP Diagnostics">BTP Diagnostics</option>
                         </select>
                     </div>
+                    <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="bg-gray-50 text-left">
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 rounded-tl-lg">Agence</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600">Filiale</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right">Utilisateurs actifs</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right" title="Utilisateurs actifs ÷ effectif de la population cible">Couverture</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600">Répartition par niveau</th>
-                                <th class="px-4 py-2.5 font-semibold text-gray-600 text-right rounded-tr-lg whitespace-nowrap">
+                            <tr class="border-b border-stone text-left">
+                                <th class="px-4 py-2.5 font-medium text-graphite">Agence</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite">Filiale</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right">Utilisateurs actifs</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right" title="Utilisateurs actifs ÷ effectif de la population cible">Couverture</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite">Répartition par niveau</th>
+                                <th class="px-4 py-2.5 font-medium text-graphite text-right whitespace-nowrap">
                                     Note médiane
-                                    <span id="agency-method-info" class="inline-flex align-middle ml-1 cursor-help text-gray-400 hover:text-indigo-600" aria-label="Méthode de calcul de la note par agence">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    <span id="agency-method-info" class="inline-flex align-middle ml-1 cursor-help text-graphite hover:text-ink" aria-label="Méthode de calcul de la note par agence">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                     </span>
                                 </th>
                             </tr>
                         </thead>
                         <tbody id="agencies-table-body" class="divide-y divide-gray-100"></tbody>
                     </table>
-                    <p class="text-xs text-gray-400 text-center mt-4" id="agencies-count-label"></p>
+                    </div>
+                    <p class="text-xs text-graphite text-center mt-4" id="agencies-count-label"></p>
                 </div>
             </div>
             <!-- Infobulle partagée par les deux onglets (méthode + détail des notes), positionnée en fixed -->
-            <div id="adoption-tooltip" class="hidden fixed z-[60] max-w-sm bg-gray-900 text-white text-xs leading-relaxed rounded-lg shadow-xl px-4 py-3 pointer-events-none"></div>
+            <div id="adoption-tooltip" class="hidden fixed z-[60] max-w-sm bg-ink text-off text-xs leading-relaxed rounded-lg px-4 py-3 pointer-events-none"></div>
         </div>
     </div>
 
     <!-- ===== USERS EVOLUTION MODAL ===== -->
-    <div id="users-evolution-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-        <div class="relative bg-white w-full max-w-4xl rounded-xl shadow-2xl">
+    <div id="users-evolution-modal" class="hidden fixed inset-0 bg-ink bg-opacity-70 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative bg-paper w-full max-w-4xl rounded-lg border border-stone">
             <!-- Modal Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <div class="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-stone">
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900">Évolution temporelle des utilisateurs</h3>
-                    <p class="text-sm text-gray-500 mt-0.5">Utilisateurs uniques sur toutes les fonctionnalités — historique complet</p>
+                    <h3 class="at-title text-2xl text-ink">Évolution temporelle des utilisateurs</h3>
+                    <p class="text-sm text-graphite mt-1">Utilisateurs uniques sur toutes les fonctionnalités — historique complet</p>
                 </div>
                 <div class="flex items-center gap-3">
                     <!-- Toggle mensuel / cumulé -->
@@ -843,9 +851,9 @@
                         <span data-view="cumul"   class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
                         <span data-view="filiale" class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Par filiale</span>
                     </div>
-                    <button id="close-users-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    <button id="close-users-modal" class="at-btn at-btn-ghost at-btn-sm" aria-label="Fermer">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
@@ -853,21 +861,21 @@
             <!-- Modal Body -->
             <div class="p-6">
                 <!-- Summary KPIs -->
-                <div class="grid grid-cols-3 gap-4 mb-6">
-                    <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
-                        <p class="text-xs font-medium text-indigo-700 mb-1">Total utilisateurs uniques</p>
-                        <p class="text-2xl font-bold text-indigo-900" id="users-modal-total">—</p>
-                        <p class="text-xs text-indigo-600 mt-1">toutes périodes</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-ink rounded-lg p-4">
+                        <p class="text-xs text-stone mb-2">Total utilisateurs uniques</p>
+                        <p class="at-num text-3xl text-compliant" id="users-modal-total">—</p>
+                        <p class="text-xs text-off mt-2">toutes périodes</p>
                     </div>
-                    <div class="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
-                        <p class="text-xs font-medium text-emerald-700 mb-1">Nouveaux utilisateurs</p>
-                        <p class="text-2xl font-bold text-emerald-900" id="users-modal-new-last">—</p>
-                        <p class="text-xs text-emerald-600 mt-1" id="users-modal-new-label">dernier mois</p>
+                    <div class="bg-off rounded-lg p-4 border border-stone">
+                        <p class="text-xs text-graphite mb-2">Nouveaux utilisateurs</p>
+                        <p class="at-num text-3xl text-ink" id="users-modal-new-last">—</p>
+                        <p class="text-xs text-graphite mt-2" id="users-modal-new-label">dernier mois</p>
                     </div>
-                    <div class="bg-amber-50 rounded-lg p-4 border border-amber-100">
-                        <p class="text-xs font-medium text-amber-700 mb-1">Pic d'activité</p>
-                        <p class="text-2xl font-bold text-amber-900" id="users-modal-peak">—</p>
-                        <p class="text-xs text-amber-600 mt-1" id="users-modal-peak-label">utilisateurs actifs</p>
+                    <div class="bg-off rounded-lg p-4 border border-stone">
+                        <p class="text-xs text-graphite mb-2">Pic d'activité</p>
+                        <p class="at-num text-3xl text-ink" id="users-modal-peak">—</p>
+                        <p class="text-xs text-graphite mt-2" id="users-modal-peak-label">utilisateurs actifs</p>
                     </div>
                 </div>
                 <!-- Chart -->
@@ -878,13 +886,13 @@
         </div>
     </div>
 
-    <div id="gain-evolution-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-        <div class="relative bg-white w-full max-w-4xl rounded-xl shadow-2xl">
+    <div id="gain-evolution-modal" class="hidden fixed inset-0 bg-ink bg-opacity-70 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+        <div class="relative bg-paper w-full max-w-4xl rounded-lg border border-stone">
             <!-- Modal Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <div class="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-stone">
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900">Évolution temporelle des gains</h3>
-                    <p class="text-sm text-gray-500 mt-0.5">Gains sur toutes les fonctionnalités — historique complet</p>
+                    <h3 class="at-title text-2xl text-ink">Évolution temporelle des gains</h3>
+                    <p class="text-sm text-graphite mt-1">Gains sur toutes les fonctionnalités — historique complet</p>
                 </div>
                 <div class="flex items-center gap-3">
                     <!-- Toggle mensuel / cumulé -->
@@ -892,9 +900,9 @@
                         <span data-view="monthly" class="px-3 py-1 rounded-md text-sm font-medium bg-white text-blue-700 shadow-sm transition-all">Mensuel</span>
                         <span data-view="cumul"   class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
                     </div>
-                    <button id="close-gain-modal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    <button id="close-gain-modal" class="at-btn at-btn-ghost at-btn-sm" aria-label="Fermer">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
@@ -902,16 +910,16 @@
             <!-- Modal Body -->
             <div class="p-6">
                 <!-- Summary KPIs -->
-                <div id="gain-modal-kpis" class="grid grid-cols-2 gap-4 mb-6">
-                    <div class="bg-blue-50 rounded-lg p-4 border border-blue-100">
-                        <p class="text-xs font-medium text-blue-700 mb-1">Gain total (toutes périodes)</p>
-                        <p class="text-2xl font-bold text-blue-900" id="gain-modal-total-heures">—</p>
-                        <p class="text-xs text-blue-600 mt-1">heures économisées</p>
+                <div id="gain-modal-kpis" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-ink rounded-lg p-4">
+                        <p class="text-xs text-stone mb-2">Gain total (toutes périodes)</p>
+                        <p class="at-num text-3xl text-compliant" id="gain-modal-total-heures">—</p>
+                        <p class="text-xs text-off mt-2">heures économisées</p>
                     </div>
-                    <div class="bg-purple-50 rounded-lg p-4 border border-purple-100">
-                        <p class="text-xs font-medium text-purple-700 mb-1">Gain total en euros</p>
-                        <p class="text-2xl font-bold text-purple-900" id="gain-modal-total-euros">—</p>
-                        <p class="text-xs text-purple-600 mt-1">économisés</p>
+                    <div class="bg-off rounded-lg p-4 border border-stone">
+                        <p class="text-xs text-graphite mb-2">Gain total en euros</p>
+                        <p class="at-num text-3xl text-ink" id="gain-modal-total-euros">—</p>
+                        <p class="text-xs text-graphite mt-2">économisés</p>
                     </div>
                 </div>
                 <!-- Chart -->

@@ -4,33 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analyse CCTP vs Référentiel - AnalyzTech</title>
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind, thème des graphiques.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js ; chart.js → analyztech-theme.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="shared/analyztech-tailwind.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: #f8fafc;
-        }
-    </style>
+    <script src="shared/analyztech-theme.js"></script>
 </head>
 <body>
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-off">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <!-- Header -->
             <div class="mb-10">
-                <div class="flex items-center justify-between mb-4">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+                    <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo">
+                    <a href="index.html" class="at-back">← Retour au tableau de bord</a>
+                </div>
+                <div class="flex flex-wrap items-end justify-between gap-6 pb-6 border-b border-stone">
                     <div>
-                        <a href="index.html" class="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">← Retour au tableau de bord</a>
-                        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                        <h1 class="at-title text-4xl sm:text-5xl text-ink mb-3">
                             Analyse CCTP vs Référentiel - Analyse détaillée
                         </h1>
-                        <p class="text-gray-500 text-sm">Confrontation automatique du CCTP au référentiel réglementaire, par mission de contrôle technique (axe qualité)</p>
-                        <p class="text-gray-400 text-xs mt-1" id="first-date-text">-</p>
+                        <p class="text-graphite text-sm">Confrontation automatique du CCTP au référentiel réglementaire, par mission de contrôle technique (axe qualité)</p>
+                        <p class="text-graphite text-xs mt-1" id="first-date-text">-</p>
                     </div>
-                    <div class="px-3 py-1.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 self-start">
+                    <div class="px-3 py-1.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 self-start">
                         BTP Consultants
                     </div>
                 </div>
@@ -39,20 +41,20 @@
             <!-- Loading State -->
             <div id="loading" class="flex items-center justify-center py-20">
                 <div class="text-center">
-                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                    <p class="mt-4 text-gray-600">Chargement des données...</p>
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-2 border-stone" style="border-top-color:#1A1A1A"></div>
+                    <p class="mt-4 text-graphite">Chargement des données...</p>
                 </div>
             </div>
 
             <!-- Error State -->
-            <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-6">
+            <div id="error" class="hidden bg-paper border border-ink rounded-lg p-6">
                 <div class="flex items-start">
-                    <svg class="w-6 h-6 text-red-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg class="w-6 h-6 text-ink mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div>
-                        <h3 class="text-red-800 font-medium mb-1">Erreur de chargement</h3>
-                        <p class="text-red-700 text-sm" id="error-message">Impossible de charger les données. Veuillez réessayer.</p>
+                        <h3 class="text-ink font-medium mb-1">Erreur de chargement</h3>
+                        <p class="text-graphite text-sm" id="error-message">Impossible de charger les données. Veuillez réessayer.</p>
                     </div>
                 </div>
             </div>
@@ -60,12 +62,12 @@
             <!-- Main Content -->
             <div id="main-content" class="hidden">
                 <!-- Banner: focus qualité, pas de productivité -->
-                <div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div class="mb-6 bg-paper border border-ink rounded-lg p-4">
                     <div class="flex items-start">
-                        <svg class="w-5 h-5 text-amber-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <svg class="w-5 h-5 text-ink mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <p class="text-sm text-amber-900">
+                        <p class="text-sm text-ink">
                             Cette brique apporte d'abord un gain en <strong>qualité</strong> (avis motivés par mission, confrontés au référentiel).
                             Le <strong>gain de temps</strong> est estimé uniquement sur les avis repris dans S+ (hypothèse modifiable, voir « Gain de temps »).
                             Une analyse est dite <strong>exploitée</strong> quand ses remarques ont été reprises dans S+ (rapport créé, avis statués ou notices injectées).
@@ -78,56 +80,58 @@
                 <div class="mb-8">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
                         <!-- Date Range Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                        <div class="at-card p-5">
                             <div class="flex items-center justify-between mb-4">
-                                <label class="block text-sm font-medium text-gray-700">
+                                <label class="block text-sm font-medium text-ink">
                                     Filtrer par période
                                 </label>
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs text-gray-600">Plage</span>
+                                    <span class="text-xs text-graphite">Plage</span>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="cumul-toggle" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-9 h-5 bg-stone peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-compliant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-ink after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-paper after:border-stone after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-ink"></div>
                                     </label>
-                                    <span class="text-xs text-gray-600">Depuis le début</span>
+                                    <span class="text-xs text-graphite">Depuis le début</span>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <input
                                     type="date"
                                     id="start-date-filter"
-                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    aria-label="Date de début"
+                                    class="at-field flex-1 min-w-0"
                                 />
-                                <span class="text-gray-400 text-xs font-medium">→</span>
+                                <span class="text-graphite text-xs font-medium">→</span>
                                 <input
                                     type="date"
                                     id="end-date-filter"
-                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    aria-label="Date de fin"
+                                    class="at-field flex-1 min-w-0"
                                 />
                             </div>
                         </div>
 
                         <!-- Regional Direction Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                        <div class="at-card p-5">
+                            <label for="dr-filter" class="block text-sm font-medium text-ink mb-4">
                                 Filtrer par direction régionale
                             </label>
                             <select
                                 id="dr-filter"
-                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="at-field"
                             >
                                 <option value="all">Toutes les directions</option>
                             </select>
                         </div>
 
                         <!-- Agency Filter -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                            <label class="block text-sm font-medium text-gray-700 mb-4">
+                        <div class="at-card p-5">
+                            <label for="agency-filter" class="block text-sm font-medium text-ink mb-4">
                                 Filtrer par agence
                             </label>
                             <select
                                 id="agency-filter"
-                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="at-field"
                             >
                                 <option value="all">Toutes les agences</option>
                             </select>
@@ -135,7 +139,7 @@
                     </div>
                     <button
                         id="reset-filters"
-                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                        class="at-btn at-btn-sm"
                     >
                         Réinitialiser les filtres
                     </button>
@@ -143,54 +147,54 @@
 
                 <!-- KPIs usage -->
                 <div class="mb-8">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Utilisation</h2>
+                    <h2 class="at-title text-2xl text-ink mb-5">Utilisation</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Analyses réalisées</p>
-                            <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="total-operations" title="Livrables CCTP_VS_REFERENTIEL terminés (dédupliqués par DeliverableId). Les lancements en erreur sont comptés à part.">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="total-errors">0 lancement en erreur</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Analyses réalisées</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-operations" title="Livrables CCTP_VS_REFERENTIEL terminés (dédupliqués par DeliverableId). Les lancements en erreur sont comptés à part.">0</p>
+                            <p class="text-xs text-graphite mt-1" id="total-errors">0 lancement en erreur</p>
                         </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Affaires uniques</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-contracts" title="Affaires distinctes (ContractNumber) dont le CCTP a été analysé">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="total-contracts-sub">ContractNumber distincts</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Affaires uniques</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-contracts" title="Affaires distinctes (ContractNumber) dont le CCTP a été analysé">0</p>
+                            <p class="text-xs text-graphite mt-1" id="total-contracts-sub">ContractNumber distincts</p>
                         </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Agences actives</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-agencies" title="Agences distinctes (agence principale du chargé d'affaires)">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="total-agencies-sub">Agences distinctes</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Agences actives</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-agencies" title="Agences distinctes (agence principale du chargé d'affaires)">0</p>
+                            <p class="text-xs text-graphite mt-1" id="total-agencies-sub">Agences distinctes</p>
                         </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Utilisateurs uniques</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-users" title="Chargés d'affaires distincts des affaires analysées">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="total-users-sub">Chargés d'affaires distincts</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Utilisateurs uniques</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-users" title="Chargés d'affaires distincts des affaires analysées">0</p>
+                            <p class="text-xs text-graphite mt-1" id="total-users-sub">Chargés d'affaires distincts</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- KPIs qualité -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Avis produits par l'IA</h2>
+                    <h2 class="at-title text-2xl text-ink mb-5">Avis produits par l'IA</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Avis émis</p>
-                            <p class="text-3xl font-bold text-blue-600 mb-1 cursor-help" id="total-avis" title="Avis motivés produits par l'IA, toutes missions confondues">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="avis-per-analysis">- par analyse</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Avis émis</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-avis" title="Avis motivés produits par l'IA, toutes missions confondues">0</p>
+                            <p class="text-xs text-graphite mt-1" id="avis-per-analysis">- par analyse</p>
                         </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Avis défavorables ou suspendus</p>
-                            <p class="text-3xl font-bold text-gray-900 mb-1 cursor-help" id="total-non-favorable" title="Avis Défavorable + Suspendu : points où le CCTP est jugé non conforme ou incomplet au regard du référentiel">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="non-favorable-rate">-</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Avis défavorables ou suspendus</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-non-favorable" title="Avis Défavorable + Suspendu : points où le CCTP est jugé non conforme ou incomplet au regard du référentiel">0</p>
+                            <p class="text-xs text-graphite mt-1" id="non-favorable-rate">-</p>
                         </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Avis repris dans S+</p>
-                            <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="total-avis-repris" title="Avis de l'IA effectivement repris dans un rapport S+ : notices injectées (events Create Notice From AI CCTP) ou avis statués à l'injection (metadata.assignedStatusByCctpAvisId), le plus grand des deux par analyse">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="avis-repris-rate">-</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Avis repris dans S+</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-avis-repris" title="Avis de l'IA effectivement repris dans un rapport S+ : notices injectées (events Create Notice From AI CCTP) ou avis statués à l'injection (metadata.assignedStatusByCctpAvisId), le plus grand des deux par analyse">0</p>
+                            <p class="text-xs text-graphite mt-1" id="avis-repris-rate">-</p>
                         </div>
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                            <p class="text-sm font-medium text-gray-500 mb-2">Analyses exploitées dans S+</p>
-                            <p class="text-3xl font-bold text-emerald-600 mb-1 cursor-help" id="total-exploitees" title="Analyses dont les remarques ont été reprises dans S+ : rapport créé depuis l'analyse, avis statués (metadata.assignedStatusByCctpAvisId) ou notices injectées (events Create Notice From AI CCTP)">0</p>
-                            <p class="text-xs text-gray-400 mt-1" id="exploitees-sub">-</p>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Analyses exploitées dans S+</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-exploitees" title="Analyses dont les remarques ont été reprises dans S+ : rapport créé depuis l'analyse, avis statués (metadata.assignedStatusByCctpAvisId) ou notices injectées (events Create Notice From AI CCTP)">0</p>
+                            <p class="text-xs text-graphite mt-1" id="exploitees-sub">-</p>
                         </div>
                     </div>
                 </div>
@@ -198,33 +202,33 @@
                 <!-- Gain de temps -->
                 <div class="mb-10">
                     <div class="flex items-center justify-between mb-5">
-                        <h2 class="text-xl font-semibold text-gray-700">Gain de temps</h2>
+                        <h2 class="at-title text-2xl text-ink">Gain de temps</h2>
                         <button
                             id="settings-btn"
-                            class="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            class="at-btn at-btn-sm"
                         >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             Paramètres
                         </button>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <!-- Gain en temps -->
-                        <div class="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-6">
-                            <p class="text-sm font-medium text-blue-900 mb-2">Gain en temps</p>
-                            <p class="text-3xl font-bold text-blue-900 mb-1 cursor-help" id="gain-time" title="Temps gagné sur la période et le périmètre sélectionnés : avis repris dans S+ × minutes par avis ÷ 60">0 min</p>
-                            <p class="text-xs text-blue-700 mt-1" id="gain-time-formula">-</p>
-                            <p class="text-xs text-blue-500 mt-2" id="gain-time-per-analysis">-</p>
+                        <!-- Gain en temps : chiffre-étendard, vert sur noir (combinaison charte n° 05) -->
+                        <div class="at-hero p-6">
+                            <p class="text-sm text-off mb-3">Gain en temps</p>
+                            <p class="at-num text-6xl mb-3 cursor-help" id="gain-time" title="Temps gagné sur la période et le périmètre sélectionnés : avis repris dans S+ × minutes par avis ÷ 60">0 min</p>
+                            <p class="text-xs text-off mt-1" id="gain-time-formula">-</p>
+                            <p class="text-xs text-off mt-2" id="gain-time-per-analysis">-</p>
                         </div>
 
                         <!-- Origine de l'hypothèse -->
-                        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <p class="text-sm font-medium text-gray-700 mb-3">
+                        <div class="lg:col-span-2 at-card p-6">
+                            <p class="text-sm font-medium text-ink mb-3">
                                 D'où viennent les <strong id="hyp-minutes">3,86</strong> min par avis ?
                             </p>
-                            <ol class="list-decimal list-inside space-y-2 text-sm text-gray-600">
+                            <ol class="list-decimal list-inside space-y-2 text-sm text-graphite">
                                 <li>
                                     <strong>Calibrage :</strong> <strong id="hyp-min-affaire">90</strong> min par affaire
                                     ÷ <strong id="hyp-avis-calibrage">23,3</strong> avis moyens par affaire
@@ -233,7 +237,7 @@
                                 </li>
                                 <li>
                                     <strong>Aujourd'hui :</strong> <strong id="hyp-avis-affaire">-</strong>
-                                    <span class="text-gray-400" id="hyp-avis-detail"></span><span id="hyp-drift"></span>
+                                    <span class="text-graphite" id="hyp-avis-detail"></span><span id="hyp-drift"></span>
                                 </li>
                                 <li>
                                     <strong>Hypothèse :</strong> chaque avis <em>repris dans S+</em> fait gagner <strong id="hyp-minutes-2">3,86</strong> min.
@@ -243,82 +247,82 @@
                                     <strong>Calcul :</strong> avis repris dans S+ × minutes par avis ÷ 60 = heures gagnées.
                                 </li>
                             </ol>
-                            <p class="text-xs text-amber-700 mt-3 hidden" id="hyp-custom-note"></p>
+                            <p class="text-xs text-ink mt-3 hidden" id="hyp-custom-note"></p>
                         </div>
                     </div>
                 </div>
 
                 <!-- Répartition -->
                 <div class="mb-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-4">Répartition des avis par verdict</h2>
+                    <div class="at-card p-6">
+                        <h2 class="text-lg font-medium text-ink mb-4">Répartition des avis par verdict</h2>
                         <div style="height: 300px;"><canvas id="verdictChart"></canvas></div>
                     </div>
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-4">Avis par mission de contrôle</h2>
+                    <div class="at-card p-6">
+                        <h2 class="text-lg font-medium text-ink mb-4">Avis par mission de contrôle</h2>
                         <div style="height: 300px;"><canvas id="missionChart"></canvas></div>
                     </div>
                 </div>
 
                 <!-- Agency Stats Table -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Utilisation par agence</h2>
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 class="at-title text-2xl text-ink mb-5">Utilisation par agence</h2>
+                    <div class="at-card overflow-hidden">
                         <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
+                            <table class="min-w-full divide-y divide-stone">
+                                <thead class="bg-off">
                                     <tr>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('dr')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('dr')">
                                             <div class="flex items-center">
                                                 Direction Régionale
-                                                <span id="sort-icon-dr" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-dr" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('agency')">
                                             <div class="flex items-center">
                                                 Agence
-                                                <span id="sort-icon-agency" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-agency" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('operations')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('operations')">
                                             <div class="flex items-center">
                                                 Analyses
-                                                <span id="sort-icon-operations" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-operations" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('contracts')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('contracts')">
                                             <div class="flex items-center">
                                                 Affaires uniques
-                                                <span id="sort-icon-contracts" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-contracts" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('users')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('users')">
                                             <div class="flex items-center">
                                                 Utilisateurs
-                                                <span id="sort-icon-users" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-users" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('avis')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('avis')">
                                             <div class="flex items-center">
                                                 Avis émis
-                                                <span id="sort-icon-avis" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-avis" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('exploitees')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('exploitees')">
                                             <div class="flex items-center">
                                                 Exploitées S+
-                                                <span id="sort-icon-exploitees" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-exploitees" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('rate')">
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('rate')">
                                             <div class="flex items-center">
                                                 Taux d'adoption
-                                                <span id="sort-icon-rate" class="ml-1 text-gray-400">↕</span>
+                                                <span id="sort-icon-rate" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody id="agency-table-body" class="bg-white divide-y divide-gray-200">
+                                <tbody id="agency-table-body" class="bg-paper divide-y divide-stone">
                                     <!-- Rows will be inserted here by JavaScript -->
                                 </tbody>
                             </table>
@@ -328,8 +332,8 @@
 
                 <!-- Chart -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Évolution hebdomadaire</h2>
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 class="at-title text-2xl text-ink mb-5">Évolution hebdomadaire</h2>
+                    <div class="at-card p-6">
                         <div style="height: 400px;">
                             <canvas id="dateChart"></canvas>
                         </div>
@@ -338,24 +342,24 @@
 
                 <!-- Dernières analyses -->
                 <div class="mb-10">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-5">Dernières analyses</h2>
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 class="at-title text-2xl text-ink mb-5">Dernières analyses</h2>
+                    <div class="at-card overflow-hidden">
                         <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
+                            <table class="min-w-full divide-y divide-stone">
+                                <thead class="bg-off">
                                     <tr>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agence</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Affaire</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Missions</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avis</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Favorable</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Suspendu</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Défavorable</th>
-                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exploitée S+</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Date</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Agence</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Affaire</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Missions</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Avis</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Favorable</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Suspendu</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Défavorable</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Exploitée S+</th>
                                     </tr>
                                 </thead>
-                                <tbody id="recent-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                                <tbody id="recent-table-body" class="bg-paper divide-y divide-stone"></tbody>
                             </table>
                         </div>
                     </div>
@@ -365,17 +369,17 @@
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+    <div id="settings-modal" class="hidden fixed inset-0 bg-ink bg-opacity-70 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-6 border border-stone w-full max-w-md rounded-lg bg-paper">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Paramètres de calcul</h3>
-                <button id="close-modal" class="text-gray-400 hover:text-gray-600" aria-label="Fermer">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <h3 class="at-title text-2xl text-ink">Paramètres de calcul</h3>
+                <button id="close-modal" class="at-btn at-btn-ghost at-btn-sm" aria-label="Fermer">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
             </div>
-            <label for="input-minutes-avis" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="input-minutes-avis" class="block text-sm font-medium text-ink mb-2">
                 Minutes gagnées par avis repris dans S+
             </label>
             <input
@@ -383,18 +387,18 @@
                 id="input-minutes-avis"
                 min="0"
                 step="0.01"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="at-field"
             />
-            <p class="text-xs text-gray-500 mt-2" id="input-minutes-help">
+            <p class="text-xs text-graphite mt-2" id="input-minutes-help">
                 Valeur par défaut : 3,86 min = 90 min par affaire ÷ ~23,3 avis moyens par affaire (depuis le 12/10/2026).
                 Le réglage est enregistré dans ce navigateur uniquement : le gain total du tableau de bord
                 utilise toujours la valeur par défaut.
             </p>
             <div class="flex items-center justify-between gap-3 mt-6">
-                <button id="reset-settings" class="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 underline">Revenir à la valeur par défaut</button>
+                <button id="reset-settings" class="at-btn at-btn-ghost at-btn-sm underline">Revenir à la valeur par défaut</button>
                 <div class="flex gap-2">
-                    <button id="cancel-settings" class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Annuler</button>
-                    <button id="save-settings" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">Enregistrer</button>
+                    <button id="cancel-settings" class="at-btn at-btn-sm">Annuler</button>
+                    <button id="save-settings" class="at-btn at-btn-primary at-btn-sm">Enregistrer</button>
                 </div>
             </div>
         </div>

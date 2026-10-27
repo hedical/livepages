@@ -556,7 +556,7 @@ function updateBudgetGauge(ratio, realise, budget) {
     if (ratio === null) {
         if (arcEl) {
             arcEl.setAttribute('d', 'M 20 100');
-            arcEl.setAttribute('stroke', '#e5e7eb');
+            arcEl.setAttribute('stroke', '#EDEAE0');
         }
         setText('budget-value', '—');
         setText('budget-sub', 'budget annuel non défini');
@@ -568,10 +568,11 @@ function updateBudgetGauge(ratio, realise, budget) {
     }
 
     const capped = Math.min(Math.max(ratio, 0), 1);
-    const color = ratio >= 1 ? '#ef4444'
-        : ratio >= 0.85 ? '#f97316'
-            : ratio >= 0.5 ? '#3b82f6'
-                : '#94a3b8';
+    // Rampe de gris charte : l'arc fonce à mesure que le budget se consomme.
+    const color = ratio >= 1 ? '#1A1A1A'
+        : ratio >= 0.85 ? '#1A1A1A'
+            : ratio >= 0.5 ? '#595959'
+                : '#B6B9AD';
 
     const cx = 100, cy = 100, r = 80;
     let arcPath = 'M ' + (cx - r) + ' ' + cy;

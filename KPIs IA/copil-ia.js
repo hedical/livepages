@@ -32,11 +32,12 @@ const METIER_COLORS = { CT: '#4a3aa7', SPS: '#e87ba4', DIAG: '#008300', PPI: '#e
 const METIER_TABS = { CT: 'CT', SPS: 'SPS', DIAG: 'Diag', PPI: 'PPI' };
 const INK = { secondary: '#52514e', muted: '#898781', grid: '#e5e7eb', target: '#52514e' };
 
-// Divergent bleu (hausse) ↔ rouge (baisse), milieu gris neutre.
+// Divergent charte AnalyzTech : Compliant Green (hausse, posé en transparence
+// sur l'Off White) ↔ Stone Grey (baisse), milieu Off White neutre.
 const HEAT = {
-    neutral: '#f0efec',
-    up: ['#cde2fb', '#9ec5f4', '#6da7ec'],
-    down: ['#fbdcdb', '#f5adac', '#ee8180'],
+    neutral: '#F8F5EB',
+    up: ['#E9F4CA', '#D3F39B', '#BAF266'],
+    down: ['#EDEAE0', '#DADACF', '#B6B9AD'],
 };
 
 // Graphe d'adoption : modules masqués par défaut (clic sur la légende pour les
@@ -312,7 +313,7 @@ function renderAdoption() {
 // ==================== 3. CARTE DES HAUSSES ET BAISSES ====================
 
 function heatColor(metric, prev, curr) {
-    if (prev === null || curr === null) return '#ffffff';
+    if (prev === null || curr === null) return '#FFFDF6';
     const isRate = metric === 'adoption' || metric === 'sys';
     const d = isRate ? (curr - prev) : KPICopil.change(prev, curr);
     if (d === null) return HEAT.up[0];
@@ -368,7 +369,7 @@ function renderHeat() {
             const v = started ? metricValue(heatMetric, rowAt(item, k) || zeroRow(k), item) : null;
             const pk = KPICopil.previousMonth(k);
             const pv = started && item.startMonth <= pk ? metricValue(heatMetric, rowAt(item, pk) || zeroRow(pk), item) : null;
-            const bg = v === null ? '#ffffff' : heatColor(heatMetric, pv, v);
+            const bg = v === null ? '#FFFDF6' : heatColor(heatMetric, pv, v);
             const delta = v === null ? '' : heatDelta(heatMetric, pv, v);
             return `<td class="cell px-3 py-2 text-right num ${k === selectedMonth ? 'font-semibold' : ''}" style="background:${bg}">
                 <div class="text-gray-900">${metricFormat(heatMetric, v)}</div>

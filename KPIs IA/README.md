@@ -67,10 +67,44 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 - `tools/csv-to-autocontact-sps.js` : Convertit un export CSV du backoffice BTP Force en `autocontact_sps.json` (fichier Supabase de la brique SPS)
 - `shared/utils.js` : Module partagé (parsing CSV/JSON, dates, prédicats métier, constantes)
 - `shared/costs.js` : Module de calcul économique (registre, relevés OpenRouter, KPIs, projection)
+- `shared/analyztech-tailwind.js`, `shared/analyztech-theme.css`, `shared/analyztech-theme.js`, `shared/analyztech-wordmark*.svg` : Habillage charte AnalyzTech (voir « Charte AnalyzTech »)
 - `tests/utils.test.js`, `tests/costs.test.js` : Tests des modules partagés
 - `README.md` : Documentation du projet
 
 ## Développement
+
+### Charte AnalyzTech (habillage de toutes les pages)
+
+Toutes les pages suivent la guideline AnalyzTech V1.0 : six couleurs (Digital White
+`#FFFDF6`, Off White `#F8F5EB`, Stone Grey `#B6B9AD`, Graphite `#595959`, Black `#1A1A1A`,
+Compliant Green `#BAF266`), sans ombre ni dégradé, police Inter Tight (substitut web de
+KMR Apparat), logo `shared/analyztech-wordmark.svg` en en-tête.
+
+L'habillage ne touche pas aux calculs : il tient dans quatre fichiers partagés.
+
+| Fichier | Rôle |
+|---|---|
+| `shared/analyztech-tailwind.js` | redirige **toutes** les palettes Tailwind vers la charte — y compris les classes que les scripts écrivent dans le HTML généré. Nuances 50–300 claires, 500–950 foncées : un `bg-x-50 text-x-700` reste lisible |
+| `shared/analyztech-theme.css` | composants (`at-btn`, `at-card`, `at-field`, `at-hero`, `at-title`, `at-num`, `at-back`, `at-logo`), badges `bg-x-100 text-x-800`, jauges, couleurs inline des profils d'adoption |
+| `shared/analyztech-theme.js` | recolore les graphiques Chart.js à leur construction (sous-classe de `Chart`) : couleurs de la charte pour les graphes à peu de séries (≤ 2 courbes, ≤ 4 séries de barres) ; au-delà, **palette catégorielle de 8 teintes** validée daltonisme (exception assumée à la charte, pour la lisibilité), puis texture au-delà de 8. Un graphe déjà dessiné avec cette palette (COPIL IA) est laissé tel quel ; courbes de référence en graphite pointillé ; camemberts colorés par entité |
+| `shared/analyztech-wordmark*.svg` | logo officiel (noir ; blanc cassé pour fond noir) |
+
+**Ordre de chargement obligatoire** dans le `<head>` :
+
+```html
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="shared/analyztech-theme.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="shared/analyztech-tailwind.js"></script>           <!-- juste après Tailwind -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="shared/analyztech-theme.js"></script>              <!-- juste après chart.js -->
+```
+
+Une nouvelle page peut donc garder ses classes Tailwind habituelles : elles sortent aux
+couleurs de la charte. Pour les surfaces, préférer les jetons `paper`, `off`, `stone`,
+`graphite`, `ink`, `compliant` et les composants `at-*`. Combinaisons autorisées par la
+charte : noir sur Off White, noir sur Stone Grey, Off White sur Graphite, Off White sur noir,
+vert sur noir, noir sur vert — jamais de vert en texte sur fond clair.
 
 ### Module partagé (`shared/utils.js`)
 

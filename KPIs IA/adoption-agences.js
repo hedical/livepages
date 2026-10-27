@@ -41,7 +41,7 @@ const PROFILES = [
     { key: 'Régulier',    label: 'Régulier',    short: 'régulier(s)',    color: '#6366f1', range: '60-79' },
     { key: 'Occasionnel', label: 'Occasionnel', short: 'occasionnel(s)', color: '#f59e0b', range: '40-59' },
     { key: 'Découverte',  label: 'Découverte',  short: 'découverte',     color: '#9ca3af', range: '0-39' },
-    { key: 'sansUsage',   label: 'Sans usage',  short: 'sans usage',     color: '#e5e7eb', range: '' },
+    { key: 'sansUsage',   label: 'Sans usage',  short: 'sans usage',     color: '#EDEAE0', range: '' },
 ];
 const LEVEL_BADGE = {
     'Adopté':      'bg-emerald-100 text-emerald-800',

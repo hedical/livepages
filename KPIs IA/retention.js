@@ -567,10 +567,10 @@ function renderActivationChart(perMonth) {
 let __segBuckets = null;
 
 const SEGMENT_META = [
-    { key: 'champions', label: 'Champions  (≥10 events, actif <14j)',     color: '#10b981', short: 'Champions' },
-    { key: 'engages',   label: 'Engagés  (1-9 events, actif <14j)',       color: '#8b5cf6', short: 'Engagés' },
-    { key: 'aRisque',   label: 'À risque  (dernier event 14j-60j)',       color: '#f59e0b', short: 'À risque' },
-    { key: 'fantomes',  label: 'Fantômes  (dernier event >60j)',          color: '#ef4444', short: 'Fantômes' }
+    { key: 'champions', label: 'Champions  (≥10 events, actif <14j)',     color: '#BAF266', short: 'Champions' },
+    { key: 'engages',   label: 'Engagés  (1-9 events, actif <14j)',       color: '#1A1A1A', short: 'Engagés' },
+    { key: 'aRisque',   label: 'À risque  (dernier event 14j-60j)',       color: '#595959', short: 'À risque' },
+    { key: 'fantomes',  label: 'Fantômes  (dernier event >60j)',          color: '#B6B9AD', short: 'Fantômes' }
 ];
 
 function renderSegmentationChart(seg) {
