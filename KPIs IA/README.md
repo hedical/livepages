@@ -471,11 +471,14 @@ heures gagnées = avis repris dans S+ × minutes par avis ÷ 60
 
 - **Seuls les avis repris dans S+ comptent**, pas les avis émis : un avis que personne ne reprend
   n'a remplacé aucun travail. Le gain suit donc les filtres de période, DR et agence.
-- **Minutes par avis** : 3,86 par défaut (`KPI.CCTP_GAIN.minutesParAvis`). Valeur calibrée sur le
-  nombre moyen d'avis par affaire depuis le lancement officiel du 12/10/2026
-  (`KPI.CCTP_GAIN.dateLancement`). La page affiche cette référence **recalculée en direct**
-  (`KPI.cctpAvisParAffaire`, toutes données confondues, filtres ignorés) dans l'encadré
-  « D'où viennent les … min par avis ? ».
+- **Minutes par avis** : 3,86 par défaut (`KPI.CCTP_GAIN.minutesParAvis`) =
+  **90 min par affaire** (`minutesParAffaire`) ÷ **~23,3 avis moyens par affaire**, moyenne relevée
+  depuis le lancement officiel du 12/10/2026 (`dateLancement`). Les 23,3 avis ne sont pas stockés :
+  `KPI.cctpAvisParAffaireCalibrage()` les déduit des deux constantes, qui restent ainsi cohérentes.
+- L'encadré « D'où viennent les … min par avis ? » affiche ce calibrage, puis la moyenne
+  **recalculée en direct** (`KPI.cctpAvisParAffaire`, toutes données depuis le 12/10, filtres
+  ignorés) et les minutes par avis qu'elle donnerait à 90 min par affaire : si l'écart se creuse,
+  c'est le signal pour recalibrer.
 - **Modifiable** via le bouton « Paramètres » de la section. Le réglage est stocké dans
   `localStorage['cctp_parameters']`, donc **propre à chaque navigateur**, comme celui du descriptif.
   Une valeur personnalisée est signalée sous l'encadré. Revenir au défaut efface la clé.

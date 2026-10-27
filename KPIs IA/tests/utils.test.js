@@ -393,6 +393,13 @@ test('cctpGainHeures — avis repris × minutes ÷ 60', () => {
     assert.equal(KPI.cctpGainHeures(0, 3.86), 0);
 });
 
+test('CCTP_GAIN — 90 min par affaire ÷ ~23,3 avis = 3,86 min par avis', () => {
+    assert.equal(KPI.CCTP_GAIN.minutesParAffaire, 90);
+    const avis = KPI.cctpAvisParAffaireCalibrage();
+    assert.ok(Math.abs(avis - 23.32) < 0.01);
+    assert.ok(Math.abs(KPI.CCTP_GAIN.minutesParAffaire / avis - KPI.CCTP_GAIN.minutesParAvis) < 1e-9);
+});
+
 test('cctpGainHeures — valeurs invalides → 0 (pas de NaN affiché)', () => {
     assert.equal(KPI.cctpGainHeures(10, NaN), 0);
     assert.equal(KPI.cctpGainHeures(10, -1), 0);

@@ -226,9 +226,14 @@
                             </p>
                             <ol class="list-decimal list-inside space-y-2 text-sm text-gray-600">
                                 <li>
-                                    <strong>Référence :</strong> nombre moyen d'avis produits par affaire depuis le lancement officiel du module
-                                    (<span id="hyp-date">12/10/2026</span>). Aujourd'hui : <strong id="hyp-avis-affaire">-</strong>
-                                    <span class="text-gray-400" id="hyp-avis-detail"></span>.
+                                    <strong>Calibrage :</strong> <strong id="hyp-min-affaire">90</strong> min par affaire
+                                    ÷ <strong id="hyp-avis-calibrage">23,3</strong> avis moyens par affaire
+                                    (relevés depuis le lancement officiel du module, le <span id="hyp-date">12/10/2026</span>)
+                                    = <strong id="hyp-minutes-calc">3,86</strong> min par avis.
+                                </li>
+                                <li>
+                                    <strong>Aujourd'hui :</strong> <strong id="hyp-avis-affaire">-</strong>
+                                    <span class="text-gray-400" id="hyp-avis-detail"></span><span id="hyp-drift"></span>
                                 </li>
                                 <li>
                                     <strong>Hypothèse :</strong> chaque avis <em>repris dans S+</em> fait gagner <strong id="hyp-minutes-2">3,86</strong> min.
@@ -381,7 +386,7 @@
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p class="text-xs text-gray-500 mt-2" id="input-minutes-help">
-                Valeur par défaut : 3,86 min, calibrée sur le nombre moyen d'avis par affaire depuis le 12/10/2026.
+                Valeur par défaut : 3,86 min = 90 min par affaire ÷ ~23,3 avis moyens par affaire (depuis le 12/10/2026).
                 Le réglage est enregistré dans ce navigateur uniquement : le gain total du tableau de bord
                 utilise toujours la valeur par défaut.
             </p>

@@ -465,12 +465,19 @@ const KPI = (function () {
 
     // Gain de temps CCTP : seuls les avis REPRIS dans S+ font gagner du temps.
     // Hypothèse par défaut (modifiable sur la page, stockée par navigateur) :
-    // 3,86 min par avis, calibrée sur le nombre moyen d'avis par affaire depuis
-    // le lancement officiel du module (12/10/2026).
+    // 3,86 min par avis = 90 min par affaire ÷ ~23,3 avis moyens par affaire,
+    // moyenne relevée depuis le lancement officiel du module (12/10/2026).
     const CCTP_GAIN = {
         minutesParAvis: 3.86,
+        minutesParAffaire: 90,
         dateLancement: '2026-10-12',
     };
+
+    // Avis par affaire implicite du calibrage (90 ÷ 3,86 ≈ 23,3) : on le déduit
+    // des deux constantes plutôt que de le stocker, pour qu'ils restent cohérents.
+    function cctpAvisParAffaireCalibrage() {
+        return CCTP_GAIN.minutesParAffaire / CCTP_GAIN.minutesParAvis;
+    }
 
     // Heures gagnées = avis repris × minutes par avis ÷ 60. Valeur invalide → 0.
     function cctpGainHeures(avisRepris, minutesParAvis) {
@@ -704,6 +711,7 @@ const KPI = (function () {
         CCTP_GAIN,
         cctpGainHeures,
         cctpAvisParAffaire,
+        cctpAvisParAffaireCalibrage,
         // note d'adoption
         ADOPTION,
         weekIndex,

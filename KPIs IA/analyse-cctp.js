@@ -551,20 +551,27 @@ function updateGain(s) {
         ? `Soit ${formatDuree(hours / s.analysesExploitees)} par analyse exploitée (${s.analysesExploitees})`
         : 'Aucune analyse exploitée dans S+ sur ce périmètre';
 
-    // Origine de l'hypothèse : référence calculée sur TOUTES les données depuis
-    // le lancement officiel, indépendamment des filtres (c'est une constante
-    // de calibrage, pas un indicateur de la période).
+    // Origine de l'hypothèse. Le calibrage (90 min ÷ ~23,3 avis) est figé ; la
+    // moyenne « aujourd'hui » est recalculée sur TOUTES les données depuis le
+    // lancement, filtres ignorés, pour voir si l'hypothèse dérive.
+    const G = KPI.CCTP_GAIN;
     $('hyp-minutes').textContent = formatDecimal(minutes);
     $('hyp-minutes-2').textContent = formatDecimal(minutes);
-    const [y, mo, d] = KPI.CCTP_GAIN.dateLancement.split('-');
+    $('hyp-min-affaire').textContent = formatDecimal(G.minutesParAffaire);
+    $('hyp-avis-calibrage').textContent = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(KPI.cctpAvisParAffaireCalibrage());
+    $('hyp-minutes-calc').textContent = formatDecimal(G.minutesParAvis);
+    const [y, mo, d] = G.dateLancement.split('-');
     $('hyp-date').textContent = `${d}/${mo}/${y}`;
-    const ref = KPI.cctpAvisParAffaire(allData, KPI.CCTP_GAIN.dateLancement);
+    const ref = KPI.cctpAvisParAffaire(allData, G.dateLancement);
     $('hyp-avis-affaire').textContent = ref.moyenne === null
         ? 'pas encore de donnée'
         : `${formatDecimal(ref.moyenne)} avis par affaire`;
     $('hyp-avis-detail').textContent = ref.moyenne === null
         ? ''
-        : `(${formatNumber(ref.avis)} avis sur ${plural(ref.affaires, 'affaire')}, ${plural(ref.analyses, 'analyse')})`;
+        : ` (${formatNumber(ref.avis)} avis sur ${plural(ref.affaires, 'affaire')}, ${plural(ref.analyses, 'analyse')})`;
+    $('hyp-drift').textContent = ref.moyenne
+        ? `, soit ${formatDecimal(G.minutesParAffaire / ref.moyenne)} min par avis à ${formatDecimal(G.minutesParAffaire)} min par affaire.`
+        : '.';
 
     const custom = minutes !== KPI.CCTP_GAIN.minutesParAvis;
     const note = $('hyp-custom-note');
