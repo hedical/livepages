@@ -425,6 +425,12 @@ const KPI = (function () {
             totalAvis: 0, favorable: 0, suspendu: 0, defavorable: 0, autre: 0,
             critique: 0, eleve: 0, horsMission: 0,
             analysesExploitees: 0, avisInjectes: 0, noticesCreees: 0, avisRepris: 0,
+            // Déchet : avis générés par les analyses EXPLOITÉES mais non repris
+            // dans S+. Les analyses jamais exploitées sont comptées à part
+            // (analysesNonExploitees) : leurs avis n'ont pas été triés.
+            avisAnalysesExploitees: 0, avisReprisExploitees: 0, avisNonRepris: 0,
+            tauxDechet: null, analysesNonExploitees: 0,
+            emails: [],
             byMission,
         };
         (items || []).forEach(it => {
@@ -444,7 +450,11 @@ const KPI = (function () {
             s.critique += it.avisCritique;
             s.eleve += it.avisEleve;
             s.horsMission += it.avisHorsMission;
-            if (it.exploitee) s.analysesExploitees++;
+            if (it.exploitee) {
+                s.analysesExploitees++;
+                s.avisAnalysesExploitees += it.totalAvis;
+                s.avisReprisExploitees += Math.min(it.avisRepris || 0, it.totalAvis);
+            }
             s.avisInjectes += it.avisInjectes;
             s.noticesCreees += it.noticesCreees;
             s.avisRepris += it.avisRepris || 0;
@@ -460,7 +470,40 @@ const KPI = (function () {
         s.uniqueContracts = contracts.size;
         s.uniqueUsers = users.size;
         s.uniqueAgencies = agencies.size;
+        s.emails = Array.from(users);
+        s.analysesNonExploitees = s.totalOperations - s.analysesExploitees;
+        s.avisNonRepris = s.avisAnalysesExploitees - s.avisReprisExploitees;
+        s.tauxDechet = s.avisAnalysesExploitees ? s.avisNonRepris / s.avisAnalysesExploitees : null;
         return s;
+    }
+
+    // ===================== AMBASSADEURS IA =====================
+
+    // Liste des ambassadeurs (fichier ambassadeurs.json du bucket, URL signée
+    // AMBASSADEURS_URL) → Map email (minuscules) → { nom, agence, dr }.
+    // Accepte un tableau JSON [{email, nom, agence, dr}] ou un CSV avec une
+    // colonne email. Lignes sans email ignorées.
+    function parseAmbassadeurs(text) {
+        const map = new Map();
+        if (!text || typeof text !== 'string') return map;
+        const add = (email, nom, agence, dr) => {
+            const e = _str(email).toLowerCase();
+            if (e && e.includes('@')) map.set(e, { nom: _str(nom), agence: _str(agence), dr: _str(dr) });
+        };
+        let json = null;
+        try { json = JSON.parse(text); } catch (_) { /* CSV */ }
+        if (Array.isArray(json)) {
+            json.forEach(r => r && add(r.email || r.Email, r.nom || r.Nom, r.agence || r.Agence, r.dr || r.DR));
+            return map;
+        }
+        const firstLine = text.split('\n')[0];
+        const rows = parseFullCSV(text, firstLine.includes(';') ? ';' : ',');
+        if (rows.length < 2) return map;
+        const h = rows[0].map(x => x.toLowerCase());
+        const iE = h.findIndex(x => x.includes('mail')), iN = h.findIndex(x => x.includes('nom') || x.includes('ambassadeur'));
+        const iA = h.findIndex(x => x.includes('agence')), iD = h.findIndex(x => x === 'dr' || x.includes('direction'));
+        rows.slice(1).forEach(c => add(c[iE], c[iN], c[iA], c[iD]));
+        return map;
     }
 
     // Gain de temps CCTP : seuls les avis REPRIS dans S+ font gagner du temps.
@@ -708,6 +751,7 @@ const KPI = (function () {
         parseCctpRows,
         parseCctpPayload,
         aggregateCctp,
+        parseAmbassadeurs,
         CCTP_GAIN,
         cctpGainHeures,
         cctpAvisParAffaire,
