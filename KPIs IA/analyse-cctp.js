@@ -9,6 +9,10 @@ let POPULATION_CSV_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/ob
 
 // Data URL fetched from the webhook after authentication (n8n must expose ANALYSE_CCTP_URL).
 let DATA_URL = '';
+// RICT diffusés (card 161, ANALYSE_CCTP_RICT_URL) : optionnel, la section
+// « Adoption dans les RICT » affiche un message si la source manque.
+let rictData = [];
+let rictLoaded = false;
 
 // State
 let allData = [];
@@ -20,6 +24,13 @@ let dateChart = null;
 let verdictChart = null;
 let missionChart = null;
 let tableSortState = { column: 'operations', ascending: false };
+let dechetChart = null;
+// Évolution : 'day' (suivi au jour le jour demandé en COPIL) ou 'week'.
+let granularity = 'day';
+// Ambassadeurs IA : email (minuscules) → {nom, agence, dr}. Fichier
+// ambassadeurs.json du bucket (URL signée AMBASSADEURS_URL), absent = vide.
+let ambassadeurs = new Map();
+const isAmbassadeur = email => !!email && ambassadeurs.has(String(email).toLowerCase().trim());
 // Brique lancée mi-septembre 2026 : on ouvre sur « Depuis le début », sinon le
 // mois en cours n'en montre qu'une fraction.
 let isCumulativeMode = true;
@@ -254,6 +265,10 @@ function updateCards(s) {
     $('total-contracts').textContent = formatNumber(s.uniqueContracts);
     $('total-agencies').textContent = formatNumber(s.uniqueAgencies);
     $('total-users').textContent = formatNumber(s.uniqueUsers);
+    if (ambassadeurs.size) {
+        const amb = s.emails.filter(isAmbassadeur).length;
+        $('total-users-sub').textContent = `dont ${plural(amb, 'ambassadeur')} · ${formatNumber(s.uniqueUsers - amb)} autres`;
+    }
 
     $('total-avis').textContent = formatNumber(s.totalAvis);
     // La criticité « critique » n'a plus sa carte : elle passe en sous-titre.
@@ -271,6 +286,20 @@ function updateCards(s) {
     $('exploitees-sub').textContent = s.totalOperations
         ? `${pct(s.analysesExploitees, s.totalOperations)} des analyses (≥ 1 avis repris ou rapport créé)`
         : '—';
+
+    // Déchet : sur les analyses exploitées uniquement (cf. KPI.aggregateCctp).
+    $('dechet-rate').textContent = s.tauxDechet === null ? '—' : pct(s.avisNonRepris, s.avisAnalysesExploitees);
+    $('dechet-rate-sub').textContent = s.avisAnalysesExploitees
+        ? `sur ${formatNumber(s.analysesExploitees)} ${s.analysesExploitees > 1 ? 'analyses exploitées' : 'analyse exploitée'}`
+        : 'Aucune analyse exploitée sur la période';
+    $('dechet-count').textContent = formatNumber(s.avisNonRepris);
+    $('dechet-count-sub').textContent = s.avisAnalysesExploitees
+        ? `sur ${formatNumber(s.avisAnalysesExploitees)} avis générés · ${formatNumber(s.avisReprisExploitees)} repris`
+        : '—';
+    $('non-exploitees').textContent = formatNumber(s.analysesNonExploitees);
+    $('non-exploitees-sub').textContent = s.totalOperations
+        ? `${pct(s.analysesNonExploitees, s.totalOperations)} des analyses · ${formatNumber(s.totalAvis - s.avisAnalysesExploitees)} avis non triés`
+        : '—';
 }
 
 // ==================== TABLES ====================
@@ -287,7 +316,7 @@ function sortTable(column) {
 window.sortTable = sortTable;
 
 function updateSortIcons() {
-    ['dr', 'agency', 'operations', 'contracts', 'users', 'avis', 'exploitees', 'rate'].forEach(col => {
+    ['dr', 'agency', 'operations', 'contracts', 'users', 'avis', 'exploitees', 'dechet', 'rate'].forEach(col => {
         const icon = document.getElementById(`sort-icon-${col}`);
         if (!icon) return;
         if (tableSortState.column === col) {
@@ -322,6 +351,8 @@ function updateAgencyTable(data) {
             agency, direction: g.direction || '-', effectif,
             operations: s.totalOperations, contracts: s.uniqueContracts, users: s.uniqueUsers,
             avis: s.totalAvis, exploitees: s.analysesExploitees,
+            dechet: s.tauxDechet, avisExploitees: s.avisAnalysesExploitees,
+            ambassadeurs: s.emails.filter(isAmbassadeur).length,
             rate: effectif > 0 ? s.uniqueUsers / effectif : 0,
         };
     });
@@ -331,13 +362,14 @@ function updateAgencyTable(data) {
         let cmp;
         if (col === 'dr') cmp = a.direction.localeCompare(b.direction);
         else if (col === 'agency') cmp = a.agency.localeCompare(b.agency);
+        else if (col === 'dechet') cmp = (a.dechet === null ? -1 : a.dechet) - (b.dechet === null ? -1 : b.dechet);
         else cmp = (a[col] || 0) - (b[col] || 0);
         return tableSortState.ascending ? cmp : -cmp;
     });
 
     agencyTableBodyEl.innerHTML = '';
     if (rows.length === 0) {
-        agencyTableBodyEl.innerHTML = `<tr><td colspan="8" class="px-6 py-4 text-center text-gray-500">Aucune donnée disponible pour cette période</td></tr>`;
+        agencyTableBodyEl.innerHTML = `<tr><td colspan="9" class="px-6 py-4 text-center text-gray-500">Aucune donnée disponible pour cette période</td></tr>`;
         return;
     }
     rows.forEach((r, index) => {
@@ -348,9 +380,11 @@ function updateAgencyTable(data) {
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${KPI.escapeHtml(r.agency)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-semibold">${r.operations}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${r.contracts}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${r.users}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${r.users}${r.ambassadeurs
+                ? ` <span class="text-xs text-graphite" title="Ambassadeurs IA parmi les utilisateurs">(dont ${r.ambassadeurs} amb.)</span>` : ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${formatNumber(r.avis)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-emerald-700">${r.exploitees}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" title="${r.dechet === null ? 'Aucune analyse exploitée' : `Avis non repris sur ${formatNumber(r.avisExploitees)} avis des analyses exploitées`}">${r.dechet === null ? '<span class="text-gray-400">—</span>' : `${Math.round(r.dechet * 100)} %`}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm ${r.effectif > 0 ? 'text-blue-600 font-semibold' : 'text-gray-500'}">
                 ${r.effectif > 0 ? `${(r.rate * 100).toFixed(1)}%` : '-'}
             </td>
@@ -367,7 +401,7 @@ function updateRecentTable(data) {
         .slice(0, 15);
     recentTableBodyEl.innerHTML = '';
     if (recent.length === 0) {
-        recentTableBodyEl.innerHTML = `<tr><td colspan="9" class="px-4 py-4 text-center text-gray-500">Aucune analyse sur cette période</td></tr>`;
+        recentTableBodyEl.innerHTML = `<tr><td colspan="10" class="px-4 py-4 text-center text-gray-500">Aucune analyse sur cette période</td></tr>`;
         return;
     }
     recent.forEach((it, index) => {
@@ -385,6 +419,9 @@ function updateRecentTable(data) {
             <td class="px-4 py-3 whitespace-nowrap text-sm text-red-700">${it.avisDefavorable}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${it.exploitee
                 ? '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">Oui</span>'
+                : '<span class="text-gray-400">—</span>'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${isAmbassadeur(it.email)
+                ? '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800" title="Chargé d\'affaires ambassadeur IA">Ambassadeur</span>'
                 : '<span class="text-gray-400">—</span>'}</td>
         `;
         recentTableBodyEl.appendChild(tr);
@@ -469,31 +506,48 @@ function updateMissionChart(s) {
     });
 }
 
-// Lundi de la semaine (heure locale), clé YYYY-MM-DD.
-function weekKey(date) {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const day = (d.getDay() + 6) % 7;
-    d.setDate(d.getDate() - day);
+// Clé de période (heure locale) : le jour, ou le lundi de la semaine.
+function isoDay(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+function periodKey(date) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    if (granularity === 'week') d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    return isoDay(d);
+}
 
-function updateChart(data) {
-    const weeks = {};
+// Périodes de la première à la dernière analyse, sans trou : un jour sans
+// analyse reste visible (à 0) dans le suivi au jour le jour.
+function periodBuckets(data) {
+    const buckets = {};
+    let first = null, last = null;
     data.forEach(item => {
         if (item.status === 'ERROR') return;
         const date = parseDate(item.createdAt);
         if (!date) return;
-        const key = weekKey(date);
-        if (!weeks[key]) weeks[key] = { ops: new Set(), exploitees: new Set() };
-        weeks[key].ops.add(item.deliverableId);
-        if (item.exploitee) weeks[key].exploitees.add(item.deliverableId);
+        if (!first || date < first) first = date;
+        if (!last || date > last) last = date;
+        const key = periodKey(date);
+        (buckets[key] = buckets[key] || []).push(item);
     });
-    const keys = Object.keys(weeks).sort();
+    const keys = [];
+    if (first) {
+        const cur = new Date(periodKey(first) + 'T00:00:00');
+        const end = new Date(periodKey(last) + 'T00:00:00');
+        while (cur <= end) {
+            keys.push(isoDay(cur));
+            cur.setDate(cur.getDate() + (granularity === 'week' ? 7 : 1));
+        }
+    }
     const labels = keys.map(k => {
-        const [y, m, d] = k.split('-');
-        return `Sem. du ${d}/${m}`;
+        const [, m, d] = k.split('-');
+        return granularity === 'week' ? `Sem. du ${d}/${m}` : `${d}/${m}`;
     });
+    return { keys, labels, stats: keys.map(k => KPI.aggregateCctp(buckets[k] || [])) };
+}
 
+function updateChart(data) {
+    const { labels, stats } = periodBuckets(data);
     const canvas = document.getElementById('dateChart');
     if (!canvas) return;
     if (dateChart) dateChart.destroy();
@@ -504,19 +558,15 @@ function updateChart(data) {
             datasets: [
                 {
                     label: 'Analyses réalisées',
-                    data: keys.map(k => weeks[k].ops.size),
+                    data: stats.map(s => s.totalOperations),
                     backgroundColor: 'rgba(59, 130, 246, 0.85)',
-                    borderColor: 'rgba(37, 99, 235, 1)',
-                    borderWidth: 2,
-                    borderRadius: 6,
+                    borderRadius: 4,
                 },
                 {
                     label: 'Dont exploitées dans S+',
-                    data: keys.map(k => weeks[k].exploitees.size),
+                    data: stats.map(s => s.analysesExploitees),
                     backgroundColor: 'rgba(16, 185, 129, 0.75)',
-                    borderColor: 'rgba(5, 150, 105, 1)',
-                    borderWidth: 2,
-                    borderRadius: 6,
+                    borderRadius: 4,
                 },
             ],
         },
@@ -525,17 +575,76 @@ function updateChart(data) {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: {
-                    display: true, position: 'top',
-                    labels: { font: { size: 13, weight: '500' }, color: '#1F2937', padding: 15, usePointStyle: true, pointStyle: 'rectRounded' },
-                },
+                legend: { position: 'top', labels: { font: { size: 12 }, color: '#1F2937', usePointStyle: true, pointStyle: 'rectRounded' } },
                 tooltip: { ...TOOLTIP, callbacks: { label: ctx => `${ctx.dataset.label} : ${formatNumber(ctx.parsed.y)}` } },
             },
             scales: {
-                x: { grid: { display: false } },
-                y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Analyses', font: { size: 14, weight: 'bold' }, color: '#374151' } },
+                x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+                y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Analyses', color: '#374151' } },
             },
         },
+    });
+}
+
+// Avis des analyses exploitées : repris (vert) + non repris (gris) = avis
+// générés. Le survol donne le taux de déchet de la période.
+function updateDechetChart(data) {
+    const { labels, stats } = periodBuckets(data);
+    const canvas = document.getElementById('dechetChart');
+    if (!canvas) return;
+    if (dechetChart) dechetChart.destroy();
+    dechetChart = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Avis repris dans S+',
+                    data: stats.map(s => s.avisReprisExploitees),
+                    backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                    borderRadius: 2,
+                },
+                {
+                    label: 'Avis non repris (déchet)',
+                    data: stats.map(s => s.avisNonRepris),
+                    backgroundColor: 'rgba(156, 163, 175, 0.75)',
+                    borderRadius: 2,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { font: { size: 12 }, color: '#1F2937', usePointStyle: true, pointStyle: 'rectRounded' } },
+                tooltip: {
+                    ...TOOLTIP,
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label} : ${formatNumber(ctx.parsed.y)}`,
+                        footer: items => {
+                            const s = stats[items[0].dataIndex];
+                            return s.avisAnalysesExploitees ? `Taux de déchet : ${pct(s.avisNonRepris, s.avisAnalysesExploitees)}` : 'Aucune analyse exploitée';
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Avis', color: '#374151' } },
+            },
+        },
+    });
+}
+
+function syncGranularityButtons() {
+    [['gran-day', 'day'], ['gran-week', 'week']].forEach(([id, value]) => {
+        const btn = $(id);
+        if (!btn) return;
+        const on = granularity === value;
+        btn.classList.toggle('bg-ink', on);
+        btn.classList.toggle('text-paper', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
 }
 
@@ -583,11 +692,70 @@ function updateGain(s) {
 
 // ==================== ORCHESTRATION ====================
 
+// ==================== ADOPTION DANS LES RICT ====================
+
+// Mêmes filtres que la page (période sur la date de DIFFUSION, DR, agence du
+// chargé d'affaires), appliqués aux RICT de la card 161.
+function getFilteredRict() {
+    let list = rictData;
+    if (!isCumulativeMode) list = filterByDateRange(list, filters.startDate, filters.endDate);
+    list = filterByDR(list, filters.dr);
+    return filterByAgence(list, filters.agence);
+}
+
+function updateRict() {
+    const missing = $('rict-missing');
+    missing.classList.toggle('hidden', rictLoaded);
+    missing.textContent = rictLoaded ? '' : "Source des RICT indisponible (ANALYSE_CCTP_RICT_URL absente du webhook) : section non calculée.";
+    const r = KPICctpRict.aggregate(getFilteredRict());
+    const pctOrDash = v => (v === null ? '—' : `${(v * 100).toFixed(1).replace('.', ',')} %`);
+
+    $('rict-recours').textContent = pctOrDash(r.tauxRecours);
+    $('rict-recours-sub').textContent = r.rict
+        ? `${formatNumber(r.rictAvecIa)} sur ${plural(r.rict, 'RICT diffusé')}`
+        : 'Aucun RICT diffusé sur ce périmètre';
+    $('rict-part-ia').textContent = pctOrDash(r.partIa);
+    $('rict-part-ia-sub').textContent = r.rictAvecIa
+        ? `${formatNumber(r.avisRapportIa)} avis IA sur ${formatNumber(r.avisRapportAvecIa)} avis de ces RICT`
+        : '—';
+    $('rict-utilisation').textContent = pctOrDash(r.tauxUtilisation);
+    $('rict-utilisation-sub').textContent = r.avisIaEmis
+        ? `${formatNumber(r.avisRapportIa)} retenus sur ${formatNumber(r.avisIaEmis)} avis IA émis`
+        : '—';
+    $('rict-avec-avis-ia').textContent = r.rictAvecIa ? formatNumber(r.rictAvecAvisIa) : '—';
+    $('rict-avec-avis-ia-sub').textContent = r.rictAvecIa
+        ? `sur ${formatNumber(r.rictAvecIa)} RICT avec IA (${pct(r.rictAvecAvisIa, r.rictAvecIa)})`
+        : '—';
+
+    $('rict-dechet-intro').textContent = r.avisIaEmis
+        ? `Déchet dans les RICT : ${formatNumber(r.avisNonRetenus)} avis sur ${formatNumber(r.avisIaEmis)} (${pctOrDash(r.tauxDechet)}), `
+          + `dont ${formatNumber(r.supprimes)} injectés puis supprimés et ${formatNumber(r.jamaisInjectes)} jamais injectés.`
+        : 'Aucun avis IA émis avant diffusion sur ce périmètre.';
+    const body = $('rict-mission-body');
+    const rows = Object.keys(r.byMission)
+        .map(code => Object.assign({ code }, r.byMission[code]))
+        .filter(m => m.emis > 0)
+        .sort((a, b) => (b.tauxDechet - a.tauxDechet) || (b.emis - a.emis));
+    body.innerHTML = rows.length ? '' : '<tr><td colspan="5" class="px-4 py-4 text-center text-graphite">Aucune donnée sur ce périmètre</td></tr>';
+    rows.forEach((m, i) => {
+        const tr = document.createElement('tr');
+        tr.className = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        tr.innerHTML = `
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-ink">${KPI.escapeHtml(MISSION_LABELS[m.code] || m.code)}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-right">${formatNumber(m.emis)}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-right">${formatNumber(m.repris)}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-right">${formatNumber(m.dechet)}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold">${pctOrDash(m.tauxDechet)}</td>`;
+        body.appendChild(tr);
+    });
+}
+
 function updateKPIs() {
     const filtered = getFilteredData(isCumulativeMode);
     const stats = KPI.aggregateCctp(filtered);
 
     updateCards(stats);
+    updateRict();
     updateGain(stats);
     const firstDate = getFirstDate(allData);
     if (firstDate) firstDateTextEl.textContent = formatFirstDate(firstDate);
@@ -598,7 +766,10 @@ function updateKPIs() {
     updateVerdictChart(stats);
     updateMissionChart(stats);
     // L'évolution ignore la période (comme les autres briques) : on veut voir la tendance.
-    updateChart(getFilteredData(true));
+    const trend = getFilteredData(true);
+    updateChart(trend);
+    updateDechetChart(trend);
+    syncGranularityButtons();
 }
 
 function applyInitialFilters() {
@@ -645,6 +816,13 @@ resetFiltersBtn.addEventListener('click', () => {
 cumulToggleEl.addEventListener('change', e => {
     isCumulativeMode = e.target.checked;
     updateKPIs();
+});
+[['gran-day', 'day'], ['gran-week', 'week']].forEach(([id, value]) => {
+    $(id).addEventListener('click', () => {
+        if (granularity === value) return;
+        granularity = value;
+        updateKPIs();
+    });
 });
 
 // Modale « Paramètres de calcul »
@@ -696,6 +874,13 @@ async function init() {
         if (urls.POPULATION_CIBLE_URL) POPULATION_CSV_URL = urls.POPULATION_CIBLE_URL;
 
         const populationPromise = loadAgencyPopulation();
+        const rictPromise = urls.ANALYSE_CCTP_RICT_URL
+            ? fetch(urls.ANALYSE_CCTP_RICT_URL).then(r => (r.ok ? r.text() : null)).catch(() => null)
+            : Promise.resolve(null);
+        // Ambassadeurs : optionnel, la page fonctionne sans (aucun tag).
+        const ambassadeursPromise = urls.AMBASSADEURS_URL
+            ? fetch(urls.AMBASSADEURS_URL).then(r => (r.ok ? r.text() : '')).catch(() => '')
+            : Promise.resolve('');
 
         if (!DATA_URL) {
             const populationResult = await populationPromise;
@@ -719,10 +904,16 @@ async function init() {
         }
 
         allData = KPI.parseCctpPayload(await dataResponse.text());
+        ambassadeurs = KPI.parseAmbassadeurs(await ambassadeursPromise);
+        const rictText = await rictPromise;
+        rictLoaded = rictText !== null;
+        rictData = rictLoaded ? KPICctpRict.parsePayload(rictText) : [];
         console.log('Loaded', allData.length, 'CCTP deliverables');
 
-        availableAgencies = getAvailableAgencies(allData);
-        availableDRs = getAvailableDRs(allData);
+        // Listes construites sur les DEUX sources : une agence qui diffuse des
+        // RICT sans jamais lancer d'analyse (recours 0 %) doit rester sélectionnable.
+        availableAgencies = getAvailableAgencies(allData.concat(rictData));
+        availableDRs = getAvailableDRs(allData.concat(rictData));
         populateSelect(agencyFilterEl, 'Toutes les agences', availableAgencies);
         populateSelect(drFilterEl, 'Toutes les directions', availableDRs);
 

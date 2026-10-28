@@ -33,6 +33,9 @@ let urls = null;
 let data = null;        // items parsés par source
 let population = [];    // [{dr, agencyCode, effectif}]
 let state = { months: 6, dr: '', search: '', sort: { key: 'taux', asc: false } };
+let rictItems = null;   // RICT diffusés (card 161, KPICctpRict) ; null = source absente
+let cctpSort = { key: 'tauxRecours', asc: false };
+const MIN_RICT = 5;     // en dessous, un RICT fait basculer les taux de 20 points ou plus
 
 // Profils dans l'ordre de lecture, mêmes couleurs que la popup Utilisateurs
 // (index) ; « Sans usage » = effectif sans aucune session sur la période.
@@ -130,7 +133,7 @@ async function load() {
     errorEl.classList.add('hidden');
     mainEl.classList.add('hidden');
     try {
-        const [pop, desc, auto, comp, geo, acou, cctp, expert, chat] = await Promise.all([
+        const [pop, desc, auto, comp, geo, acou, cctp, expert, chat, rict] = await Promise.all([
             fetchText(urls.POPULATION_CIBLE_URL, true),
             fetchText(urls.DESCRIPTIF_URL, true),
             fetchText(urls.AUTOCONTACT_URL, true),
@@ -140,7 +143,9 @@ async function load() {
             fetchText(urls.ANALYSE_CCTP_URL, false),
             fetchText(urls.EXPERT_BTP_URL, false),
             fetchText(urls.CHAT_BTP_URL, false),
+            fetchText(urls.ANALYSE_CCTP_RICT_URL, false),
         ]);
+        rictItems = rict ? KPICctpRict.parsePayload(rict) : null;
         population = parsePopulationRows(pop);
         const json = text => { try { return JSON.parse(text); } catch (_) { return []; } };
         data = {
@@ -257,7 +262,95 @@ function render() {
         `Effectif : population cible du tableau de bord, par agence, sans distinction de poste. `
         + `Chaque utilisateur est rattaché à l'agence où il a le plus de sessions. `
         + (h.utilisateurs ? `${h.utilisateurs} utilisateur(s) rattaché(s) à un code absent de la population cible ne comptent dans aucune agence.` : '');
+
+    renderCctp();
 }
+
+// ==================== ANALYSE CCTP DANS LES RICT ====================
+
+// Une ligne par agence de la population cible ; chaque RICT est rattaché à
+// l'agence de son rédacteur (KPICctpRict, item.authorAgency).
+function renderCctp() {
+    const missing = document.getElementById('cctp-missing');
+    if (!rictItems) {
+        missing.textContent = 'Source des RICT indisponible (ANALYSE_CCTP_RICT_URL absente du webhook) : section non calculée.';
+        missing.classList.remove('hidden');
+        document.getElementById('cctp-tiles').innerHTML = '';
+        document.getElementById('cctp-body').innerHTML = '';
+        return;
+    }
+    missing.classList.add('hidden');
+
+    const byAgency = new Map(KPICctpRict.groupBy(rictItems, i => (i.authorAgency || '').toUpperCase()).map(g => [g.key, g]));
+    const known = new Set(population.map(p => p.agencyCode));
+    const rows = population.map(p => Object.assign(
+        { key: p.agencyCode, dr: p.dr },
+        byAgency.get(p.agencyCode) || KPICctpRict.aggregate([])));
+    const recours = rows.filter(x => x.rict >= MIN_RICT && x.tauxRecours !== null).map(x => x.tauxRecours);
+    const medianRecours = KPI.median(recours);
+
+    // Ensemble des RICT CT (agences de la population), pas de filtre DR : la vue réseau.
+    const total = KPICctpRict.aggregate(rictItems.filter(i => known.has((i.authorAgency || '').toUpperCase())));
+    const tile = (label, value, sub) => `<div class="at-card px-5 py-4">
+        <p class="text-xs text-graphite">${label}</p>
+        <p class="at-num text-3xl text-ink mt-1 tabular">${value}</p>
+        <p class="text-xs text-graphite mt-1">${sub}</p></div>`;
+    document.getElementById('cctp-tiles').innerHTML =
+        tile('Recours à l\'IA', pct(total.tauxRecours), `${total.rictAvecIa} RICT précédés d'une analyse sur ${total.rict} diffusés`)
+        + tile('Part IA des avis', pct(total.partIa), `${total.avisRapportIa} avis IA sur ${total.avisRapportAvecIa} dans les RICT avec analyse`)
+        + tile('Avis IA utilisés', pct(total.tauxUtilisation), `${total.avisRapportIa} sur ${total.avisIaEmis} émis · ${total.supprimes} supprimés après injection`);
+
+    const search = state.search.trim().toUpperCase();
+    const list = rows
+        .filter(x => (!state.dr || x.dr === state.dr) && (!search || x.key.includes(search)))
+        .sort((a, b) => {
+            const k = cctpSort.key, dir = cctpSort.asc ? 1 : -1;
+            // Sur un taux, les agences à moins de MIN_RICT RICT passent en fin de liste.
+            if (k !== 'key' && k !== 'dr') {
+                const fewA = a.rict < MIN_RICT, fewB = b.rict < MIN_RICT;
+                if (fewA !== fewB) return fewA ? 1 : -1;
+            }
+            const va = a[k], vb = b[k];
+            if (va === null || va === undefined) return 1;
+            if (vb === null || vb === undefined) return -1;
+            const cmp = typeof va === 'string' ? va.localeCompare(vb, 'fr') : va - vb;
+            return cmp * dir || b.rict - a.rict;
+        });
+
+    document.getElementById('cctp-body').innerHTML = list.map(x => {
+        const few = x.rict < MIN_RICT;
+        const above = !few && x.tauxRecours !== null && medianRecours !== null && x.tauxRecours > medianRecours;
+        const pill = x.tauxRecours === null ? '<span class="text-graphite">—</span>'
+            : `<span class="inline-flex items-center px-3 py-1 rounded-full text-base font-bold tabular ${above ? 'bg-ink text-off' : 'bg-off border border-stone text-ink'}${few ? ' opacity-60' : ''}"
+                     title="${few ? 'Moins de ' + MIN_RICT + ' RICT : peu représentatif' : (above ? 'Au-dessus' : 'À la médiane ou en dessous') + ' de la médiane des agences (' + pct(medianRecours) + ')'}">${pct(x.tauxRecours)}</span>`;
+        return `<tr class="hover:bg-off">
+            <td class="px-4 py-3 font-mono font-medium text-ink">${esc(x.key)}</td>
+            <td class="px-4 py-3 text-graphite">${esc(x.dr)}</td>
+            <td class="px-4 py-3 whitespace-nowrap"><div class="flex items-center gap-3">${pill}
+                <span class="tabular text-xs text-graphite">${x.rictAvecIa} sur ${x.rict} RICT${few && x.rict ? '<br>moins de ' + MIN_RICT + ' RICT' : ''}</span></div></td>
+            <td class="px-4 py-3 tabular">${pct(x.partIa)}${x.avisRapportAvecIa ? ` <span class="text-xs text-graphite">(${x.avisRapportIa}/${x.avisRapportAvecIa})</span>` : ''}</td>
+            <td class="px-4 py-3 tabular">${pct(x.tauxUtilisation)}${x.avisIaEmis ? ` <span class="text-xs text-graphite">(${x.avisRapportIa}/${x.avisIaEmis})</span>` : ''}</td>
+            <td class="px-4 py-3 text-right tabular">${x.rictAvecIa ? x.supprimes : '—'}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-graphite">Aucune agence ne correspond.</td></tr>';
+
+    document.querySelectorAll('th[data-csort]').forEach(th => {
+        th.textContent = th.textContent.replace(/ [↑↓]$/, '');
+        if (th.dataset.csort === cctpSort.key) th.textContent += cctpSort.asc ? ' ↑' : ' ↓';
+    });
+
+    const outside = rictItems.filter(i => !known.has((i.authorAgency || '').toUpperCase())).length;
+    document.getElementById('cctp-note').textContent =
+        `Source : RICT diffusés depuis le 12/10/2026, hors dossiers de test (card Metabase 161). `
+        + `Avis comparés : Favorable, Suspendu, Défavorable. Un avis IA réécrit à la main compte comme humain : part IA et utilisation sont des minimums. `
+        + (outside ? `${outside} RICT rédigés hors des agences de la population cible ne sont pas affichés.` : '');
+}
+
+document.querySelectorAll('th[data-csort]').forEach(th => th.addEventListener('click', () => {
+    const key = th.dataset.csort;
+    cctpSort = { key, asc: cctpSort.key === key ? !cctpSort.asc : (key === 'key' || key === 'dr') };
+    renderCctp();
+}));
 
 document.getElementById('dr-filter').addEventListener('change', e => { state.dr = e.target.value; render(); });
 document.getElementById('period-select').addEventListener('change', e => { state.months = parseInt(e.target.value, 10); render(); });

@@ -33,6 +33,7 @@
 | **139** | KPIs IA - Analyse Géotechnique (SQL) | ~24 lignes, <50 KB | dashboards index + `analyse-geotechnique.html` (brique qualité — pas de gain heures/€) |
 | **158** | KPIs IA - Analyse Acoustique (SQL) | 0 ligne au lancement (module neuf) | dashboards index + `analyse-acoustique.html` (clone card 139, filtre `ILIKE '%acousti%'`) |
 | **160** | KPIs IA - Analyse CCTP vs Référentiel (SQL) | 1 ligne / analyse, ~26 lignes au 02/10/2026, <10 KB | dashboards index + `analyse-cctp.html` (AIDeliverable `CCTP_VS_REFERENTIEL`, avis agrégés en SQL) |
+| **161** | KPIs IA - CCTP : adoption dans les RICT (SQL) | 1 ligne / RICT diffusé depuis le 12/10/2026, ~480 lignes, ~45 s | `analyse-cctp.html` (adoption dans les RICT, déchet par mission) + page Adoption, via `shared/cctp-rict.js` |
 | **n/a — Salesforce REST** | API XPL Funnel | ~5 000 marchés / ~250 leads, ~800 KB | dashboards index + `analyse-ao.html` (funnel IA AO — n'utilise PAS Metabase, voir section dédiée) |
 
 > ⚠️ **134 vs 138** : 134 garde le HTML brut des descriptions (utile pour comparer texte source vs sortie IA), 138 strip le HTML et précalcule `descriptionWordCount` + `hasAi`. Pour les dashboards qui ne font que compter, prends **138** (20× plus léger).
@@ -709,6 +710,144 @@ ORDER BY aid."createdAt" DESC
 - Nœud `Build signed response` : mapping `ANALYSE_CCTP_URL`.
 
 Le front tolère l'absence de `ANALYSE_CCTP_URL` : tuile à 0 + message clair sur la page détail.
+
+---
+
+## Card 161 — CCTP : adoption dans les RICT
+
+**URL :** `https://metabase.btp-force.cloud/question/161`
+**Collection :** KPI IA (id 17)
+**Format :** 1 ligne = 1 RICT diffusé depuis le 12/10/2026 (lancement officiel CCTP), hors YIELD. ~480 lignes au 28/10/2026, <100 KB.
+**Durée :** ~45 s (parcourt les notices des RICT et les events d'injection) — le nœud n8n a un timeout de 3 min.
+**Consommé par :** `analyse-cctp.html` (section « Adoption dans les RICT », déchet par mission) et la page Adoption (taux d'usage par personne / agence), via `shared/cctp-rict.js` (`KPICctpRict`).
+**Webhook :** `ANALYSE_CCTP_RICT_URL` (fichier `analyse_cctp_rict.json`).
+
+### Ce que la card permet de mesurer
+
+| Mesure | Calcul (`KPICctpRict.aggregate`) | Au 28/10/2026 |
+|---|---|---|
+| Taux de recours | RICT avec analyse CCTP **avant** diffusion ÷ RICT diffusés | 97 / 482 = 20 % |
+| Part IA du rapport | avis d'origine IA ÷ avis du RICT, sur les RICT avec IA | 159 / 3 706 = 4,3 % |
+| Taux d'utilisation | avis d'origine IA ÷ avis émis par l'IA, sur les RICT avec IA | 159 / 2 486 = 6,4 % |
+| Déchet | 1 − taux d'utilisation, décomposé en « injectés puis supprimés » et « jamais injectés » | 461 injectés, dont 302 supprimés |
+
+### Comment on sait qu'un avis du RICT vient de l'IA
+
+`Notice` n'a **aucun marqueur IA**. L'origine vient des events `AnalyticEvent`
+`Create Notice From AI CCTP` : `properties.notices[].id` donne l'id exact de chaque notice créée
+par l'injection. Une notice du RICT dont l'id figure dans ces events est « d'origine IA ».
+
+- `Notice.deletedAt` n'est jamais renseigné : une notice supprimée disparaît physiquement. Une
+  notice injectée (id présent dans les events) et absente de `Notice` = **injectée puis supprimée**.
+- Un avis IA réécrit à la main dans une notice neuve compte comme humain : la part IA et le taux
+  d'utilisation sont des **minimums**.
+
+### Règles de calcul
+
+- **Comparables uniquement** : avis `Favorable` / `Suspended` / `Unfavorable` côté S+,
+  `favorable` / `suspendu` / `defavorable` côté IA. « Hors mission », « Sans objet » et
+  « à vérifier » sont exclus des deux côtés.
+- **Analyse avant diffusion** : `AIDeliverable.createdAt < Report.diffusedAt`, même `SubAffair`.
+- **Relances** : une affaire peut être analysée plusieurs fois (29 affaires au 28/10). Pour chaque
+  (RICT, mission), seule la **dernière** analyse terminée avant la diffusion qui couvre la mission
+  compte (`DISTINCT ON`), sinon les avis d'une relance seraient comptés deux fois.
+- **Missions** : l'IA produit L, P1, S, F, PV. Dans S+, un avis S est classé SEI, SH ou STI, et un
+  avis L parfois LE : regroupés en familles (SEI/SH/STI → S, LE → L). Les autres missions S+
+  (HAND, AV, PH, PS…) tombent dans « Autre » et ne sont pas ventilées.
+- **Personnes** : `UserEmail/DR/Agence` = chargé d'affaires (`SubAffair.userId`, convention de
+  la card 160) ; `AuthorEmail/AuthorDR/AuthorAgence` = rédacteur du RICT (`Report.createdById`).
+  Ils diffèrent dans 38 RICT sur 482 (8 %).
+
+### SQL
+
+```sql
+WITH ai_ev AS (
+    SELECT DISTINCT n->>'id' AS nid, e."properties"->'report'->>'id' AS rid
+    FROM "AnalyticEvent" e
+    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(e."properties"->'notices', '[]'::jsonb)) n
+    WHERE e."name" = 'Create Notice From AI CCTP'
+),
+ai AS (SELECT DISTINCT nid FROM ai_ev),
+rict AS (
+    SELECT r."id", r."subAffairId", r."diffusedAt", sad."contractNumber", sa."userId", r."createdById"
+    FROM "Report" r
+    JOIN "SubAffair" sa ON sa."id" = r."subAffairId"
+    JOIN "SubAffairDetail" sad ON sad."id" = sa."subAffairDetailId"
+    WHERE r."reportType"::text = 'RICT'
+      AND r."diffusedAt" >= '2026-10-12'
+      AND COALESCE(sad."contractNumber", '') NOT LIKE '%YIELD%'
+),
+ana AS (
+    SELECT DISTINCT ON (rict."id", m) rict."id" AS rid, m AS mission, d."id" AS did
+    FROM rict
+    JOIN "AIProject" ap ON ap."subAffairId" = rict."subAffairId"
+    JOIN "AIDeliverable" d ON d."aiProjectId" = ap."id"
+    CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(d."longResult"->'cctp'->'missions', '[]'::jsonb)) m
+    WHERE d."type"::text = 'CCTP_VS_REFERENTIEL'
+      AND d."status"::text = 'COMPLETED'
+      AND d."createdAt" < rict."diffusedAt"
+    ORDER BY rict."id", m, d."createdAt" DESC
+),
+emis AS (
+    SELECT ana.rid, ana.mission, count(*) AS n
+    FROM ana
+    JOIN "AIDeliverable" d ON d."id" = ana.did
+    CROSS JOIN LATERAL jsonb_array_elements(d."longResult"->'cctp'->'avis') a
+    WHERE a->>'missionCode' = ana.mission
+      AND a->>'statut' IN ('favorable', 'suspendu', 'defavorable')
+    GROUP BY 1, 2
+),
+nt AS (
+    SELECT n."reportId" AS rid, (ai.nid IS NOT NULL) AS ia,
+           (SELECT min(CASE WHEN nm."mission" IN ('SEI', 'SH', 'STI', 'S') THEN 'S'
+                            WHEN nm."mission" IN ('L', 'LE') THEN 'L'
+                            WHEN nm."mission" IN ('P1', 'F', 'PV') THEN nm."mission" END)
+            FROM "NoticeMission" nm WHERE nm."noticeId" = n."id") AS mission,
+           n."id" AS nid
+    FROM "Notice" n
+    JOIN rict ON rict."id" = n."reportId"
+    LEFT JOIN ai ON ai.nid = n."id"
+    WHERE n."deletedAt" IS NULL
+      AND n."status"::text IN ('Favorable', 'Suspended', 'Unfavorable')
+)
+SELECT
+    rict."id"                                         AS "ReportId",
+    rict."diffusedAt"                                 AS "DiffusedAt",
+    rict."contractNumber"                             AS "ContractNumber",
+    u."email"                                         AS "UserEmail",
+    au."email"                                        AS "AuthorEmail",
+    aag."management"                                  AS "AuthorDR",
+    aag."productionService"                           AS "AuthorAgence",
+    ag."management"                                   AS "DR",
+    ag."productionService"                            AS "Agence",
+    (SELECT count(DISTINCT did) FROM ana WHERE ana.rid = rict."id")                        AS "AnalysesAvant",
+    COALESCE((SELECT sum(n) FROM emis WHERE emis.rid = rict."id"), 0)                      AS "AvisIaEmis",
+    (SELECT string_agg(mission || ':' || n, ';' ORDER BY mission) FROM emis WHERE emis.rid = rict."id") AS "AvisIaEmisParMission",
+    (SELECT count(*) FROM nt WHERE nt.rid = rict."id")                                     AS "AvisRapport",
+    (SELECT count(*) FROM nt WHERE nt.rid = rict."id" AND nt.ia)                           AS "AvisRapportIa",
+    (SELECT string_agg(mission || ':' || c, ';' ORDER BY mission) FROM (
+        SELECT COALESCE(mission, 'Autre') AS mission, count(*) AS c FROM nt
+        WHERE nt.rid = rict."id" AND nt.ia GROUP BY 1) x)                                  AS "AvisRapportIaParMission",
+    (SELECT count(*) FROM ai_ev WHERE ai_ev.rid = rict."id")                               AS "AvisIaInjectes",
+    (SELECT count(*) FROM ai_ev WHERE ai_ev.rid = rict."id"
+        AND NOT EXISTS (SELECT 1 FROM "Notice" n WHERE n."id" = ai_ev.nid AND n."deletedAt" IS NULL)) AS "AvisIaSupprimes"
+FROM rict
+LEFT JOIN "User" u ON u."id" = rict."userId"
+LEFT JOIN "User" au ON au."id" = rict."createdById"
+LEFT JOIN "AgencyToUser" aatu ON aatu."userId" = au."id" AND aatu."isMain" = true
+LEFT JOIN "Agency" aag ON aag."id" = aatu."agencyId"
+LEFT JOIN "AgencyToUser" atu ON atu."userId" = u."id" AND atu."isMain" = true
+LEFT JOIN "Agency" ag ON ag."id" = atu."agencyId"
+ORDER BY rict."diffusedAt" DESC
+```
+
+### Câblage n8n (workflow « ROI Global ») — ✅ publié le 28/10/2026
+
+- Chaîne `CCTP RICT` (card 161 `/query/csv`, timeout 180 s) → `Convert to File CCTP RICT`
+  → `POST CCTP RICT` (upsert `analyse_cctp_rict.json`), branchée sur le webhook `refresh-kpis`
+  (donc aussi sur le refresh quotidien de 6 h, qui appelle ce webhook).
+- En-têtes lus par expression sur `Acoustique` / `POST Acoustique`, comme la chaîne CCTP.
+- `Sign URLs` + `Build signed response` : `analyse_cctp_rict.json` → `ANALYSE_CCTP_RICT_URL`.
 
 ---
 

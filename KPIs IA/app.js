@@ -7,12 +7,15 @@ let AUTOCONTACT_URL = '';
 // Autocontact SPS : autocontact_sps.json, deposé à la main dans le bucket tant que
 // l'accès API au backoffice BTP Force n'est pas ouvert (cf. README).
 let AUTOCONTACT_SPS_URL = '';
+let AMBASSADEURS_URL = ''; // ambassadeurs.json déposé à la main dans le bucket (tag ambassadeurs)
 let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
 let AO_URL = ''; // exposée par le webhook passwordROI sous le nom ANALYSE_AO_URL ; pas de fallback hardcodé
 let ACOUSTIQUE_URL = ''; // exposée par le webhook sous le nom ANALYSE_ACOUSTIQUE_URL ; pas de fallback hardcodé
 let CCTP_URL = ''; // exposée par le webhook sous le nom ANALYSE_CCTP_URL (card 160) ; pas de fallback hardcodé
+let CCTP_RICT_URL = ''; // RICT diffusés (card 161), ANALYSE_CCTP_RICT_URL — onglet « CCTP par rédacteur »
+let rictItems = null;   // KPICctpRict.parsePayload ; null = source absente
 // URLs chat/expert/population : remplacées par les URLs SIGNÉES du webhook
 // après auth (fallback public conservé le temps de la transition bucket privé).
 let EXPERT_BTP_URL = 'https://qzgtxehqogkgsujclijk.supabase.co/storage/v1/object/public/DataFromMetabase/expert_btpconsultants_ct.json';
@@ -71,6 +74,7 @@ let chatBTPDiagData = [];
 let expertBtpSpsData = []; // BTP Consultants SPS — BU distincte, emails @btp-consultants.fr
 let chatBtpSpsData = [];
 let autocontactSpsData = []; // Autocontact SPS — source = backoffice BTP Force (app des SPS)
+let ambassadeursMap = new Map(); // email → {nom, agence, dr} (cf. KPI.parseAmbassadeurs)
 let nfHabitatData = [];
 let geotechData = [];
 let acoustiqueData = [];
@@ -1703,6 +1707,10 @@ async function authenticateWithPassword(password) {
             if (cctpMatch) CCTP_URL = cctpMatch[1];
             const autocontactSpsMatch = urlRegex('AUTOCONTACT_SPS_URL');
             if (autocontactSpsMatch) AUTOCONTACT_SPS_URL = autocontactSpsMatch[1];
+            const ambassadeursMatch = urlRegex('AMBASSADEURS_URL');
+            if (ambassadeursMatch) AMBASSADEURS_URL = ambassadeursMatch[1];
+            const cctpRictMatch = urlRegex('ANALYSE_CCTP_RICT_URL');
+            if (cctpRictMatch) CCTP_RICT_URL = cctpRictMatch[1];
 
             // URLs signées chat/expert/population (remplacent les fallbacks publics)
             const expertBtpMatch     = urlRegex('EXPERT_BTP_URL');
@@ -2342,6 +2350,26 @@ async function loadData() {
             console.warn('AUTOCONTACT_SPS_URL not set — skipping Autocontact SPS data');
         }
 
+        // RICT diffusés (card 161) : onglet « CCTP par rédacteur » — optionnel.
+        if (CCTP_RICT_URL) {
+            try {
+                const r = await fetch(CCTP_RICT_URL);
+                if (r.ok) rictItems = KPICctpRict.parsePayload(await r.text());
+            } catch (e) {
+                console.warn('Error loading CCTP RICT data:', e);
+            }
+        }
+
+        // Ambassadeurs IA (tag de la popup Utilisateurs) — optionnel.
+        if (AMBASSADEURS_URL) {
+            try {
+                const r = await fetch(AMBASSADEURS_URL);
+                if (r.ok) ambassadeursMap = KPI.parseAmbassadeurs(await r.text());
+            } catch (e) {
+                console.warn('Error loading ambassadeurs:', e);
+            }
+        }
+
         // Load NF Habitat data
         if (NF_HABITAT_URL) {
             console.log('Loading NF Habitat data...');
@@ -2723,7 +2751,8 @@ function renderActiveUsersTab() {
         const lastDate = u.lastActivity ? fmt.format(u.lastActivity) : '—';
         const idx = all.indexOf(u);
         return `<tr class="hover:bg-indigo-50/30 transition-colors">
-            <td class="px-4 py-2.5 font-medium text-gray-800">${esc(u.email)}${u.agency ? `<span class="block text-xs font-normal font-mono text-gray-400">${esc(u.agency)}</span>` : ''}</td>
+            <td class="px-4 py-2.5 font-medium text-gray-800">${esc(u.email)}${ambassadeursMap.has(u.email)
+                ? ' <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-100 text-indigo-800" title="Ambassadeur IA">Ambassadeur</span>' : ''}${u.agency ? `<span class="block text-xs font-normal font-mono text-gray-400">${esc(u.agency)}</span>` : ''}</td>
             <td class="px-4 py-2.5">
                 <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${esc(u.filiale)}</span>
             </td>
@@ -3038,6 +3067,7 @@ function switchUsersListTab(tab) {
         synthesis:  { btn: 'tab-synthesis', panel: 'panel-synthesis', subtitle: "Répartition des profils d'adoption" },
         active:     { btn: 'tab-active-users', panel: 'panel-active-users', subtitle: 'Tous les utilisateurs ayant utilisé au moins une fonctionnalité' },
         agencies:   { btn: 'tab-agencies', panel: 'panel-agencies', subtitle: "Note d'adoption médiane par agence" },
+        cctpAuthors: { btn: 'tab-cctp-authors', panel: 'panel-cctp-authors', subtitle: 'Analyse CCTP : recours par rédacteur de RICT' },
     };
     hideAdoptionTooltip();
     Object.keys(tabs).forEach((key, i) => {
@@ -3051,6 +3081,81 @@ function switchUsersListTab(tab) {
     if (tab === 'active') renderActiveUsersTab();
     if (tab === 'agencies') renderAgenciesTab();
     if (tab === 'synthesis') renderSynthesisTab();
+    if (tab === 'cctpAuthors') renderCctpAuthorsTab();
+}
+
+// ==================== CCTP PAR RÉDACTEUR ====================
+// Rédacteur = auteur du RICT (KPICctpRict, item.author). Popup réservée à la
+// direction (mot de passe du tableau de bord) : les rédacteurs sont nommés
+// (email, et nom pour les ambassadeurs). La page Adoption, diffusée, n'affiche
+// que des agrégats par agence.
+
+const CCTP_AUTHORS_MIN_RICT = 5;
+
+function cctpAuthorGroups() {
+    return KPICctpRict.groupBy(rictItems || [], i => i.author).map(g => {
+        const sample = (rictItems || []).find(i => i.author === g.key) || {};
+        const amb = ambassadeursMap.get(g.key);
+        return Object.assign(g, {
+            agency: sample.authorAgency || '', dr: sample.authorDirection || '',
+            nom: amb ? amb.nom : '', ambassadeur: !!amb,
+        });
+    });
+}
+
+function renderCctpAuthorsTab() {
+    const tbody = document.getElementById('cctp-authors-body');
+    const missing = document.getElementById('cctp-authors-missing');
+    document.getElementById('cctp-authors-min').textContent = CCTP_AUTHORS_MIN_RICT;
+    if (!rictItems) {
+        missing.textContent = 'Source des RICT indisponible (ANALYSE_CCTP_RICT_URL absente du webhook).';
+        missing.classList.remove('hidden');
+        tbody.innerHTML = '';
+        return;
+    }
+    missing.classList.add('hidden');
+    const pctOf = v => v === null || v === undefined ? '—' : Math.round(v * 100) + ' %';
+    const esc = KPI.escapeHtml;
+    const groups = cctpAuthorGroups();
+    tbody.innerHTML = groups.map(g => {
+        const few = g.rict < CCTP_AUTHORS_MIN_RICT;
+        return `<tr class="hover:bg-off">
+            <td class="px-4 py-2.5 text-ink">${g.nom ? `<span class="font-medium">${esc(g.nom)}</span><span class="block text-xs text-graphite">${esc(g.key)}</span>` : `<span class="font-medium">${esc(g.key)}</span>`}${g.ambassadeur
+                ? ' <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-100 text-indigo-800">Ambassadeur</span>' : ''}</td>
+            <td class="px-4 py-2.5 text-graphite"><span class="font-mono text-ink">${esc(g.agency || '—')}</span>${g.dr ? `<span class="block text-xs">${esc(g.dr)}</span>` : ''}</td>
+            <td class="px-4 py-2.5 text-right tabular">${g.rict}</td>
+            <td class="px-4 py-2.5 text-right tabular">${g.rictAvecIa}</td>
+            <td class="px-4 py-2.5 tabular">${few ? '<span class="text-xs text-graphite">moins de ' + CCTP_AUTHORS_MIN_RICT + ' RICT</span>'
+                : `<span class="inline-flex px-2.5 py-0.5 rounded-full text-sm font-semibold ${g.tauxRecours > 0 ? 'bg-ink text-off' : 'bg-off border border-stone text-ink'}">${pctOf(g.tauxRecours)}</span>`}</td>
+            <td class="px-4 py-2.5 text-right tabular">${few ? '—' : pctOf(g.partIa)}</td>
+            <td class="px-4 py-2.5 text-right tabular">${few ? '—' : pctOf(g.tauxUtilisation)}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-graphite">Aucun RICT diffusé sur la période.</td></tr>';
+    const shown = groups.filter(g => g.rict >= CCTP_AUTHORS_MIN_RICT).length;
+    document.getElementById('cctp-authors-label').textContent =
+        `${groups.length} rédacteur(s), dont ${shown} avec au moins ${CCTP_AUTHORS_MIN_RICT} RICT. Source : card Metabase 161.`;
+}
+
+async function exportCctpAuthorsXlsx() {
+    const lib = await loadXlsxLib();
+    const groups = cctpAuthorGroups();
+    const rows = [['Rédacteur', 'Email', 'Ambassadeur', 'Agence', 'Direction régionale', 'RICT diffusés', 'RICT avec analyse',
+        'Recours à l\'IA', 'Part IA des avis', 'Avis IA utilisés', 'Avis IA émis', 'Avis IA supprimés']];
+    groups.forEach(g => {
+        rows.push([g.nom, g.key, g.ambassadeur ? 'oui' : '', g.agency, g.dr, g.rict, g.rictAvecIa,
+            g.tauxRecours === null ? '' : g.tauxRecours, g.partIa === null ? '' : g.partIa,
+            g.tauxUtilisation === null ? '' : g.tauxUtilisation, g.avisIaEmis, g.supprimes]);
+    });
+    const wb = lib.utils.book_new();
+    lib.utils.book_append_sheet(wb, adoptionSheet(lib, rows, [24, 34, 11, 10, 20, 10, 12, 12, 12, 12, 10, 12], { 7: '0%', 8: '0%', 9: '0%' }), 'CCTP par rédacteur');
+    const note = lib.utils.aoa_to_sheet([
+        ['Source : RICT diffusés depuis le 12/10/2026 (card Metabase 161), rédacteur = auteur du RICT.'],
+        ['Recours = RICT précédés d\'une analyse CCTP ÷ RICT diffusés. Part IA et avis utilisés : dans les RICT avec analyse.'],
+        ['Généré le', new Date()],
+    ], { cellDates: true });
+    note['!cols'] = [{ wch: 110 }, { wch: 18 }];
+    lib.utils.book_append_sheet(wb, note, 'Lisez-moi');
+    lib.writeFile(wb, `cctp-redacteurs_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function openUsersListModal() {
@@ -3115,7 +3220,7 @@ function buildAdoptionWorkbook(lib) {
         'Semaines actives', 'Semaines observées', 'Modules utilisés', 'Modules accessibles (pondérés)',
         'Première activité', 'Dernière activité', 'Jours depuis le dernier usage',
         `Récurrence /${W.recurrence}`, `Volume /${W.volume}`, `Diversité /${W.diversity}`, `Fraîcheur /${W.freshness}`,
-        'Note /100', 'Niveau', 'Commentaire',
+        'Note /100', 'Niveau', 'Commentaire', 'Ambassadeur',
     ]];
     users.slice().sort((a, b) => b.adoption.score - a.adoption.score || a.email.localeCompare(b.email)).forEach(u => {
         const a = u.adoption, d = a.details;
@@ -3125,7 +3230,7 @@ function buildAdoptionWorkbook(lib) {
             d.activeWeeks, d.weeksObserved, d.modulesUsed, r1(d.exposure),
             day(u.firstActivity), day(u.lastActivity), d.daysSince === Infinity ? '' : d.daysSince,
             r1(a.parts.recurrence), r1(a.parts.volume), r1(a.parts.diversity), r1(a.parts.freshness),
-            a.score, a.level, adoptionDetailText(u),
+            a.score, a.level, adoptionDetailText(u), ambassadeursMap.has(u.email) ? 'oui' : '',
         ]);
     });
 
@@ -3189,7 +3294,7 @@ function buildAdoptionWorkbook(lib) {
     lib.utils.book_append_sheet(wb, adoptionSheet(lib, synthRows,
         [22, 10, 10, ...asc.map(() => 11), ...asc.map(() => 13), 14], pctCols), 'Synthèse');
     lib.utils.book_append_sheet(wb, adoptionSheet(lib, usersRows,
-        [34, 20, 10, 18, 40, 9, 9, 9, 9, 11, 12, 12, 10, 10, 9, 9, 9, 9, 12, 110],
+        [34, 20, 10, 18, 40, 9, 9, 9, 9, 11, 12, 12, 10, 10, 9, 9, 9, 9, 12, 110, 12],
         { 10: 'dd/mm/yyyy', 11: 'dd/mm/yyyy' }), 'Utilisateurs actifs');
     lib.utils.book_append_sheet(wb, adoptionSheet(lib, agencyRows,
         [24, 20, 20, 10, 12, 11, 10, 12, 9, 9, 9, 9, 11, 11, 12, 70],
@@ -3241,6 +3346,14 @@ async function exportAdoptionXlsx() {
     if (tabActive) tabActive.addEventListener('click', () => switchUsersListTab('active'));
     const exportBtn = document.getElementById('export-adoption-xlsx');
     if (exportBtn) exportBtn.addEventListener('click', exportAdoptionXlsx);
+    const tabCctpAuthors = document.getElementById('tab-cctp-authors');
+    if (tabCctpAuthors) tabCctpAuthors.addEventListener('click', () => switchUsersListTab('cctpAuthors'));
+    const exportAuthors = document.getElementById('cctp-authors-export');
+    if (exportAuthors) exportAuthors.addEventListener('click', async () => {
+        exportAuthors.disabled = true;
+        try { await exportCctpAuthorsXlsx(); } catch (e) { console.error('Export CCTP par rédacteur :', e); }
+        exportAuthors.disabled = false;
+    });
     const tabSynthesis = document.getElementById('tab-synthesis');
     if (tabSynthesis) tabSynthesis.addEventListener('click', () => switchUsersListTab('synthesis'));
     const synthesisFiliale = document.getElementById('synthesis-filiale');

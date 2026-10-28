@@ -199,6 +199,83 @@
                     </div>
                 </div>
 
+                <!-- Adoption dans les RICT (card 161, shared/cctp-rict.js) -->
+                <div class="mb-10">
+                    <h2 class="at-title text-2xl text-ink mb-1">Adoption dans les RICT</h2>
+                    <p class="text-sm text-graphite mb-5">
+                        RICT diffusés depuis le lancement officiel (12/10/2026), filtrés sur leur date de diffusion.
+                        On compare ce que l'IA a produit à ce que le chargé d'affaires a réellement mis dans son rapport.
+                        Seuls les avis Favorable, Suspendu et Défavorable sont comparés (ceux que l'IA sait produire).
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Taux de recours à l'IA</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="rict-recours" title="RICT pour lesquels une analyse CCTP a été lancée AVANT la diffusion ÷ RICT diffusés. Mesure si l'IA est utilisée en premier, avant la rédaction.">-</p>
+                            <p class="text-xs text-graphite mt-1" id="rict-recours-sub">-</p>
+                        </div>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Part IA du rapport</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="rict-part-ia" title="Avis d'origine IA présents dans le RICT diffusé ÷ tous les avis du RICT (Favorable, Suspendu, Défavorable), sur les seuls RICT où l'IA a été utilisée. C'est l'adoption rapportée au maximum accessible : le maximum = l'ensemble des avis que le chargé d'affaires a jugés nécessaires. Minimum : un avis IA réécrit à la main compte comme humain.">-</p>
+                            <p class="text-xs text-graphite mt-1" id="rict-part-ia-sub">-</p>
+                        </div>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Taux d'utilisation des avis IA</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="rict-utilisation" title="Avis d'origine IA présents dans le RICT diffusé ÷ avis émis par l'IA pour ce RICT (dernière analyse avant diffusion, par mission : les relances ne sont pas comptées deux fois). Le complément est le déchet dans les RICT.">-</p>
+                            <p class="text-xs text-graphite mt-1" id="rict-utilisation-sub">-</p>
+                        </div>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">RICT avec au moins un avis IA</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="rict-avec-avis-ia" title="Parmi les RICT où l'IA a été lancée avant la diffusion, ceux qui contiennent au moins un avis d'origine IA. Les autres : l'analyse a tourné mais rien n'a été conservé.">-</p>
+                            <p class="text-xs text-graphite mt-1" id="rict-avec-avis-ia-sub">-</p>
+                        </div>
+                    </div>
+                    <p class="text-xs text-amber-700 mt-3 hidden" id="rict-missing"></p>
+                </div>
+
+                <!-- Déchet -->
+                <div class="mb-10">
+                    <h2 class="at-title text-2xl text-ink mb-1">Déchet</h2>
+                    <p class="text-sm text-graphite mb-5">Avis générés par l'IA et non repris dans S+. Ils signalent les éléments à reprendre dans le module.
+                        Les trois cartes partent des <strong>analyses</strong> exploitées (toutes dates) ; le tableau par mission part des <strong>RICT diffusés</strong>.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Taux de déchet des analyses exploitées</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="dechet-rate" title="Avis non repris ÷ avis générés, sur les analyses exploitées dans S+ (au moins un avis repris ou un rapport créé). Les analyses jamais exploitées sont comptées à part.">-</p>
+                            <p class="text-xs text-graphite mt-1" id="dechet-rate-sub">-</p>
+                        </div>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Avis non repris</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="dechet-count" title="Avis générés par les analyses exploitées et non repris dans un rapport S+">-</p>
+                            <p class="text-xs text-graphite mt-1" id="dechet-count-sub">-</p>
+                        </div>
+                        <div class="at-card p-6">
+                            <p class="text-sm text-graphite mb-2">Analyses non exploitées</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="non-exploitees" title="Analyses sans aucun avis repris ni rapport créé : leurs avis n'ont pas été triés, ils ne comptent pas dans le taux de déchet">-</p>
+                            <p class="text-xs text-graphite mt-1" id="non-exploitees-sub">-</p>
+                        </div>
+                    </div>
+
+                    <!-- Déchet dans les RICT, par mission (card 161) -->
+                    <div class="at-card p-6 mt-6">
+                        <h3 class="text-sm font-medium text-ink mb-1">Déchet dans les RICT, par mission</h3>
+                        <p class="text-xs text-graphite mb-4 cursor-help" id="rict-dechet-intro" title="Avis émis par l'IA (dernière analyse avant diffusion) − avis d'origine IA retrouvés dans le RICT diffusé. Les avis injectés puis supprimés sont le rejet le plus net ; les avis jamais injectés n'ont pas été retenus à la lecture.">-</p>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Mission</th>
+                                        <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-graphite uppercase tracking-wider" title="Avis Favorable / Suspendu / Défavorable produits par l'IA pour la mission">Avis IA émis</th>
+                                        <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-graphite uppercase tracking-wider" title="Avis d'origine IA présents dans le RICT diffusé (missions S+ SEI/SH/STI rangées en S, LE en L)">Retenus dans le RICT</th>
+                                        <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-graphite uppercase tracking-wider">Déchet</th>
+                                        <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-graphite uppercase tracking-wider" title="Déchet ÷ avis IA émis pour la mission : plus il est haut, plus la mission est à reprendre dans le module">Taux de déchet</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rict-mission-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Gain de temps -->
                 <div class="mb-10">
                     <div class="flex items-center justify-between mb-5">
@@ -314,6 +391,12 @@
                                                 <span id="sort-icon-exploitees" class="ml-1 text-graphite">↕</span>
                                             </div>
                                         </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('dechet')">
+                                            <div class="flex items-center">
+                                                Déchet
+                                                <span id="sort-icon-dechet" class="ml-1 text-graphite">↕</span>
+                                            </div>
+                                        </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none" onclick="sortTable('rate')">
                                             <div class="flex items-center">
                                                 Taux d'adoption
@@ -332,10 +415,22 @@
 
                 <!-- Chart -->
                 <div class="mb-10">
-                    <h2 class="at-title text-2xl text-ink mb-5">Évolution hebdomadaire</h2>
-                    <div class="at-card p-6">
-                        <div style="height: 400px;">
-                            <canvas id="dateChart"></canvas>
+                    <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
+                        <h2 class="at-title text-2xl text-ink">Évolution</h2>
+                        <div class="inline-flex rounded-lg border border-stone overflow-hidden text-sm" role="group" aria-label="Granularité">
+                            <button type="button" id="gran-day" class="px-3 py-1.5">Par jour</button>
+                            <button type="button" id="gran-week" class="px-3 py-1.5 border-l border-stone">Par semaine</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-6">
+                        <div class="at-card p-6">
+                            <h3 class="text-sm font-medium text-ink mb-3">Analyses réalisées et exploitées</h3>
+                            <div style="height: 320px;"><canvas id="dateChart"></canvas></div>
+                        </div>
+                        <div class="at-card p-6">
+                            <h3 class="text-sm font-medium text-ink mb-1">Avis repris et non repris</h3>
+                            <p class="text-xs text-graphite mb-3">Avis des analyses exploitées, par date d'analyse. Le survol donne le taux de déchet de la période.</p>
+                            <div style="height: 320px;"><canvas id="dechetChart"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -357,6 +452,7 @@
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Suspendu</th>
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Défavorable</th>
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Exploitée S+</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Ambassadeur</th>
                                     </tr>
                                 </thead>
                                 <tbody id="recent-table-body" class="bg-paper divide-y divide-stone"></tbody>
@@ -405,6 +501,7 @@
     </div>
 
     <script src="shared/utils.js"></script>
+    <script src="shared/cctp-rict.js"></script>
     <script src="analyse-cctp.js"></script>
 </body>
 </html>

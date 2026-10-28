@@ -112,6 +112,38 @@
                     </div>
                     <p id="table-note" class="px-4 py-3 text-xs text-graphite border-t border-stone"></p>
                 </div>
+
+                <!-- Analyse CCTP dans les RICT (card 161, shared/cctp-rict.js) -->
+                <section id="cctp-section" class="space-y-4 pt-4">
+                    <div>
+                        <h2 class="at-title text-3xl text-ink mb-2">Analyse CCTP dans les RICT</h2>
+                        <p class="text-graphite text-sm max-w-3xl">
+                            Ce que chaque agence fait de l'IA par rapport à ce qu'elle produit dans S+ : la part de ses RICT diffusés précédés d'une analyse CCTP,
+                            et dans ces RICT, la part des avis venant de l'IA. Période : RICT diffusés depuis l'ouverture du module, le 12/10/2026.
+                            Agence du rédacteur du RICT.
+                        </p>
+                    </div>
+                    <p id="cctp-missing" class="hidden text-sm text-ink bg-compliant rounded-md px-3 py-2"></p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="cctp-tiles"></div>
+                    <div class="at-card">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="bg-off text-left text-graphite">
+                                        <th class="px-4 py-3 font-medium" data-csort="key">Agence</th>
+                                        <th class="px-4 py-3 font-medium" data-csort="dr">Direction régionale</th>
+                                        <th class="px-4 py-3 font-medium" data-csort="tauxRecours" title="RICT précédés d'au moins une analyse CCTP ÷ RICT diffusés">Recours à l'IA</th>
+                                        <th class="px-4 py-3 font-medium" data-csort="partIa" title="Dans les RICT avec analyse : avis d'origine IA ÷ avis du rapport (Favorable, Suspendu, Défavorable)">Part IA des avis</th>
+                                        <th class="px-4 py-3 font-medium" data-csort="tauxUtilisation" title="Dans les RICT avec analyse : avis d'origine IA retrouvés dans le rapport ÷ avis émis par l'IA">Avis IA utilisés</th>
+                                        <th class="px-4 py-3 font-medium text-right" data-csort="supprimes" title="Avis IA injectés dans le rapport puis supprimés">Avis IA supprimés</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cctp-body" class="divide-y divide-stone"></tbody>
+                            </table>
+                        </div>
+                        <p id="cctp-note" class="px-4 py-3 text-xs text-graphite border-t border-stone"></p>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
@@ -119,6 +151,7 @@
     <script src="shared/utils.js"></script>
     <script src="shared/sources.js"></script>
     <script src="shared/adoption.js"></script>
+    <script src="shared/cctp-rict.js"></script>
     <script src="adoption-agences.js"></script>
 </body>
 </html>

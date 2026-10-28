@@ -524,6 +524,20 @@ heures gagnées = avis repris dans S+ × minutes par avis ÷ 60
   le total ferait afficher deux gains différents à deux postes. Pour changer l'hypothèse pour tout le
   monde, modifier `KPI.CCTP_GAIN.minutesParAvis`.
 
+**Adoption dans les RICT** (card 161, `shared/cctp-rict.js`, namespace `KPICctpRict`) : on
+compare, RICT par RICT, ce que l'IA a produit avec ce que le chargé d'affaires a mis dans son
+rapport. Taux de recours (analyse lancée avant diffusion), part IA du rapport (adoption rapportée
+au maximum accessible), taux d'utilisation des avis IA et déchet par mission. Les définitions, les
+limites (un avis IA réécrit à la main compte comme humain) et le SQL sont dans
+`metabase-queries.md`, card 161. Le module est partagé avec la page Adoption :
+`KPICctpRict.groupBy(items, i => i.author)` donne le taux d'usage par rédacteur,
+`i => i.authorAgency` par agence.
+
+Deux déchets coexistent sur la page, chacun nommé : celui des **analyses exploitées** (card 160,
+toutes dates : avis non repris ÷ avis générés) et celui **dans les RICT** (card 161 : avis IA émis
+avant diffusion et absents du RICT diffusé, décomposé en « injectés puis supprimés » et
+« jamais injectés », ventilé par mission).
+
 ### COPIL IA (`copil-ia.html`)
 
 Page de décision du COPIL IA, accessible par le bouton « COPIL IA » de l'en-tête (même
