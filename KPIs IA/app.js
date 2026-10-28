@@ -2599,12 +2599,13 @@ function collectActiveUsers() {
     return KPIAdoption.collect(adoptionModules(), KPIAdoption.periodFromFilter(dateFilter));
 }
 
+// Couleurs des filiales : classes .at-fil-* de shared/analyztech-theme.css.
 const FILIALE_BADGE = {
-    'BTP Consultants':    'bg-blue-100 text-blue-800',
-    'Citae':              'bg-green-100 text-green-800',
-    'BTP Diagnostics':    'bg-orange-100 text-orange-800',
-    'BTP Consultants SPS': 'bg-cyan-100 text-cyan-800',
-    'Autre':              'bg-gray-100 text-gray-600',
+    'BTP Consultants':     'at-fil at-fil-ct',
+    'Citae':               'at-fil at-fil-citae',
+    'BTP Diagnostics':     'at-fil at-fil-diag',
+    'BTP Consultants SPS': 'at-fil at-fil-sps',
+    'Autre':               'at-fil at-fil-autre',
 };
 
 let activeUsersCache = null;
@@ -4725,65 +4726,6 @@ function updateGainToggleUI() {
     }
 
 })();
-
-// ==================== REFRESH DATA BUTTON ====================
-
-const refreshBtn = document.getElementById('refresh-data-btn');
-const refreshIcon = document.getElementById('refresh-icon');
-const refreshText = document.getElementById('refresh-text');
-
-async function refreshData() {
-    try {
-        // Disable button
-        refreshBtn.disabled = true;
-        
-        // Update UI to show loading state
-        refreshText.textContent = 'Rafraîchissement en cours...';
-        refreshIcon.classList.add('animate-spin');
-        
-        // Send refresh request
-        const response = await fetch('https://databuildr.app.n8n.cloud/webhook/refresh-kpis', {
-            method: 'GET'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Erreur lors du rafraîchissement: ${response.status}`);
-        }
-        
-        // Wait a moment for the data to be updated on the server
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Reload the data
-        await loadData();
-        
-        // Update UI to show success
-        refreshText.textContent = 'Données rafraîchies !';
-        refreshIcon.classList.remove('animate-spin');
-        
-        // Reset button text after 2 seconds
-        setTimeout(() => {
-            refreshText.textContent = 'Rafraîchir les données';
-        }, 2000);
-        
-    } catch (error) {
-        console.error('Error refreshing data:', error);
-        
-        // Show error state
-        refreshText.textContent = 'Erreur de rafraîchissement';
-        refreshIcon.classList.remove('animate-spin');
-        
-        // Reset button text after 3 seconds
-        setTimeout(() => {
-            refreshText.textContent = 'Rafraîchir les données';
-        }, 3000);
-    } finally {
-        // Re-enable button
-        refreshBtn.disabled = false;
-    }
-}
-
-// Add event listener to refresh button
-refreshBtn.addEventListener('click', refreshData);
 
 // Add event listener to logout button
 const logoutBtn = document.getElementById('logout-btn');

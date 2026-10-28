@@ -57,15 +57,19 @@
                             </svg>
                             COPIL IA
                         </a>
-                        <button
-                            id="refresh-data-btn"
+                        <!-- Les données sont rafraîchies par le cron n8n quotidien :
+                             plus de bouton de rafraîchissement manuel. -->
+                        <a
+                            href="adoption-agences.html"
+                            id="adoption-link"
                             class="at-btn at-btn-primary"
+                            title="Note d'adoption et taux d'appropriation de l'IA par agence"
                         >
-                            <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            <span id="refresh-text">Rafraîchir les données</span>
-                        </button>
+                            Données d'adoption
+                        </a>
                         <button
                             id="logout-btn"
                             class="at-btn at-btn-ghost"
@@ -353,16 +357,16 @@
                 <!-- Feature-specific KPIs
                      Chaque tuile garde la classe bg-white : initializeFeatureCards (app.js)
                      remonte du compteur jusqu'à elle pour appliquer le filtre filiale.
-                     Badges filiale : BTP Consultants noir/vert · Citae vert/noir ·
-                     BTP Diagnostics blanc cassé/graphite · SPS noir/Stone Grey. -->
+                     Couleur filiale : at-fil-ct|citae|diag|sps sur la tuile colore son
+                     liseré (at-brick) et son badge (at-fil), cf. analyztech-theme.css. -->
                 <div>
                     <h2 class="at-title text-2xl text-ink mb-5">Indicateurs par fonctionnalité</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- Descriptif Sommaire -->
-                        <a href="descriptif.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="descriptif.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Descriptif sommaire des travaux</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="descriptif-count">0</span>
@@ -376,10 +380,10 @@
                         </a>
 
                         <!-- Auto Contacts -->
-                        <a href="autocontact.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="autocontact.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Auto Contacts</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="autocontact-ops">0</span>
@@ -393,10 +397,10 @@
                         </a>
 
                         <!-- Comparateur Indices -->
-                        <a href="comparateur.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="comparateur.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Comparateur d'indices</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="comparateur-count">0</span>
@@ -410,10 +414,10 @@
                         </a>
 
                         <!-- Chat Projet (BTP Consultants) -->
-                        <a href="chat-btpconsultants.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="chat-btpconsultants.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="chat-projet-btp-count">0</span>
@@ -427,10 +431,10 @@
                         </a>
 
                         <!-- Expert Technique (BTP Consultants) -->
-                        <a href="expert-btpconsultants.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="expert-btpconsultants.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="expert-tech-btp-count">0</span>
@@ -444,10 +448,10 @@
                         </a>
 
                         <!-- Analyse Géotechnique (BTP Consultants) -->
-                        <a href="analyse-geotechnique.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="analyse-geotechnique.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Analyse géotechnique</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="analyse-geo-count">0</span>
@@ -461,10 +465,10 @@
                         </a>
 
                         <!-- Analyse Acoustique (BTP Consultants) -->
-                        <a href="analyse-acoustique.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="analyse-acoustique.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Analyse acoustique</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="analyse-acou-count">0</span>
@@ -478,10 +482,10 @@
                         </a>
 
                         <!-- Analyse CCTP vs Référentiel (BTP Consultants) -->
-                        <a href="analyse-cctp.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="analyse-cctp.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Analyse CCTP vs Référentiel</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="analyse-cctp-count">0</span>
@@ -495,10 +499,10 @@
                         </a>
 
                         <!-- Analyse AO (BTP Consultants) -->
-                        <a href="analyse-ao.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="analyse-ao.html" class="bg-white at-card at-brick at-fil-ct p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Analyse AO</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">BTP Consultants</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="analyse-ao-captes">0</span>
@@ -512,10 +516,10 @@
                         </a>
 
                         <!-- Chat Projet (Citae) -->
-                        <a href="chat-citae.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="chat-citae.html" class="bg-white at-card at-brick at-fil-citae p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Citae</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">Citae</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="chat-projet-citae-count">0</span>
@@ -529,10 +533,10 @@
                         </a>
 
                         <!-- Expert Technique (Citae) -->
-                        <a href="expert-citae.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="expert-citae.html" class="bg-white at-card at-brick at-fil-citae p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Citae</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">Citae</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="expert-tech-citae-count">0</span>
@@ -546,10 +550,10 @@
                         </a>
 
                         <!-- NF Habitat (Citae) -->
-                        <a href="nfhabitat.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="nfhabitat.html" class="bg-white at-card at-brick at-fil-citae p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">NF Habitat</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">Citae</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">Citae</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="nf-habitat-count">0</span>
@@ -563,10 +567,10 @@
                         </a>
 
                         <!-- Chat Projet (BTP Diagnostics) -->
-                        <a href="chat-btpdiagnostics.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="chat-btpdiagnostics.html" class="bg-white at-card at-brick at-fil-diag p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800">BTP Diagnostics</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Diagnostics</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="chat-projet-btpdiag-count">0</span>
@@ -580,10 +584,10 @@
                         </a>
 
                         <!-- Expert Technique (BTP Diagnostics) -->
-                        <a href="expert-btpdiagnostics.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="expert-btpdiagnostics.html" class="bg-white at-card at-brick at-fil-diag p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800">BTP Diagnostics</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Diagnostics</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="expert-tech-btpdiag-count">0</span>
@@ -597,10 +601,10 @@
                         </a>
 
                         <!-- Chat Projet (BTP Consultants SPS / SPS) -->
-                        <a href="chat-btp-sps.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="chat-btp-sps.html" class="bg-white at-card at-brick at-fil-sps p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Chat projet</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants SPS</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="chat-projet-sps-count">0</span>
@@ -614,10 +618,10 @@
                         </a>
 
                         <!-- Expert Technique (BTP Consultants SPS / SPS) -->
-                        <a href="expert-btp-sps.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="expert-btp-sps.html" class="bg-white at-card at-brick at-fil-sps p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Expert technique</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants SPS</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="expert-tech-sps-count">0</span>
@@ -631,10 +635,10 @@
                         </a>
 
                         <!-- Auto Contacts (BTP Consultants SPS / SPS) -->
-                        <a href="autocontact-sps.html" class="bg-white at-card p-6 cursor-pointer block">
+                        <a href="autocontact-sps.html" class="bg-white at-card at-brick at-fil-sps p-6 cursor-pointer block">
                             <div class="flex items-start justify-between gap-3 mb-4">
                                 <h3 class="text-lg font-medium text-ink leading-tight">Auto Contacts</h3>
-                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-800">BTP Consultants SPS</span>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">BTP Consultants SPS</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="at-num text-5xl text-ink" id="autocontact-sps-ops">0</span>
