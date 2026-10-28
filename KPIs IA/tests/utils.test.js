@@ -530,3 +530,28 @@ test('adoptionSummary — effectif, médiane, niveaux à zéro inclus, part Rég
     assert.equal(vide.regularShare, null);
     assert.equal(vide.levels['Adopté'], 0);
 });
+
+test('aggregateCctp — déchet calculé sur les analyses exploitées uniquement', () => {
+    const base = { status: 'COMPLETED', missions: [], avisParMission: {}, avisFavorable: 0, avisSuspendu: 0, avisDefavorable: 0, avisAutre: 0, avisCritique: 0, avisEleve: 0, avisHorsMission: 0, avisInjectes: 0, noticesCreees: 0 };
+    const s = KPI.aggregateCctp([
+        Object.assign({}, base, { deliverableId: 'a', email: 'x@btp-consultants.fr', totalAvis: 20, avisRepris: 5, exploitee: true }),
+        Object.assign({}, base, { deliverableId: 'b', email: 'y@btp-consultants.fr', totalAvis: 10, avisRepris: 0, exploitee: true }), // rapport créé, rien repris
+        Object.assign({}, base, { deliverableId: 'c', email: 'x@btp-consultants.fr', totalAvis: 30, avisRepris: 0, exploitee: false }),
+    ]);
+    assert.equal(s.avisAnalysesExploitees, 30);
+    assert.equal(s.avisNonRepris, 25);
+    assert.equal(s.tauxDechet, 25 / 30);
+    assert.equal(s.analysesNonExploitees, 1);
+    assert.deepEqual(s.emails.sort(), ['x@btp-consultants.fr', 'y@btp-consultants.fr']);
+    assert.equal(KPI.aggregateCctp([]).tauxDechet, null);
+});
+
+test('parseAmbassadeurs — JSON et CSV, emails en minuscules, lignes sans email ignorées', () => {
+    const j = KPI.parseAmbassadeurs(JSON.stringify([{ email: 'A.B@btp-consultants.fr', nom: 'A B', agence: 'Lyon CT', dr: 'Centre Est' }, { email: '', nom: 'Sans mail' }]));
+    assert.equal(j.size, 1);
+    assert.deepEqual(j.get('a.b@btp-consultants.fr'), { nom: 'A B', agence: 'Lyon CT', dr: 'Centre Est' });
+    const c = KPI.parseAmbassadeurs('DR;Agence;Ambassadeur;Email\nNormandie;Rouen;H L;h.l@btp-consultants.fr\nNormandie;Caen;J N;');
+    assert.equal(c.size, 1);
+    assert.equal(c.get('h.l@btp-consultants.fr').agence, 'Rouen');
+    assert.equal(KPI.parseAmbassadeurs('').size, 0);
+});
