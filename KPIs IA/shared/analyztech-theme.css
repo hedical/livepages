@@ -64,6 +64,19 @@ a.at-card:hover, .at-card.at-click:hover { border-color: var(--at-ink); }
 
 .at-logo { height: 28px; width: auto; display: block; }
 
+/* Couleurs des filiales, relevées dans le logo de chaque site (octobre 2026) :
+   BTP Consultants #62B5E5 (logo-btp-consultants.svg), Citae #78BE20 (logo_citae.svg).
+   BTP Diagnostics a le même bleu (#65B8E3) : on le pose sur le bleu nuit #01021D
+   de son site pour le distinguer de BTP Consultants. SPS reprend le bleu du groupe.
+   .at-fil-x fixe --fil / --fil-ink ; .at-fil (badge) et .at-brick (tuile) les lisent,
+   le badge d'une tuile hérite donc de la couleur posée sur la tuile. */
+.at-fil-ct, .at-fil-sps { --fil: #62B5E5; --fil-ink: var(--at-ink); }
+.at-fil-citae           { --fil: #78BE20; --fil-ink: var(--at-ink); }
+.at-fil-diag            { --fil: #01021D; --fil-ink: #65B8E3; }
+.at-fil-autre           { --fil: var(--at-stone45); --fil-ink: var(--at-ink); }
+.at-fil { background: var(--fil, var(--at-stone45)); color: var(--fil-ink, var(--at-ink)); }
+html .at-brick, html a.at-brick:hover { border-top: 4px solid var(--fil); }
+
 /* Badges « bg-x-100 text-x-700/800 » générés par les scripts : chaque famille
    garde une identité distincte, dans les combinaisons autorisées par la charte. */
 html .bg-blue-100.text-blue-800, html .bg-blue-100.text-blue-700,
