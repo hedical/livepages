@@ -484,8 +484,12 @@ parseur passe par `KPI.parseFullCSV`, pas par le split naïf des briques Analyti
 KPIs affichés :
 
 - **Analyses** : livrables `COMPLETED`. Les `ERROR` sont affichés à part (« lancements en erreur ») ;
-- **Affaires, agences, utilisateurs** : l'utilisateur est le chargé d'affaires de l'affaire
-  (`SubAffair.userId`), comme pour les cards 137 et 158, car `AIDeliverable` ne porte pas l'auteur ;
+- **Affaires, agences, utilisateurs** : l'utilisateur est l'**utilisateur réel** (arbitrage du
+  30/10/2026) : la personne qui a injecté les avis dans S+ (event `Create Notice From AI CCTP`,
+  colonne `Injecteurs` de la card 160), même sur l'affaire d'un collègue ; sans injection, le
+  chargé d'affaires (`SubAffair.userId`), car `AIDeliverable` ne porte pas l'auteur du lancement.
+  La règle vit dans `KPI.cctpUsageEvents`, partagée par la page, le total du dashboard, la note
+  d'adoption (`shared/adoption.js`) et le COPIL (une requête par analyse) ;
 - **Avis** : total (avec le nombre de « critiques » en sous-titre), part défavorable + suspendu, répartition par mission ;
 - **Avis repris dans S+** (unité = l'avis) : par analyse, le plus grand entre les notices injectées
   (events `Create Notice From AI CCTP`, tracés depuis le 25/09/2026) et les avis statués à
@@ -532,6 +536,12 @@ limites (un avis IA réécrit à la main compte comme humain) et le SQL sont dan
 `metabase-queries.md`, card 161. Le module est partagé avec la page Adoption :
 `KPICctpRict.groupBy(items, i => i.author)` donne le taux d'usage par rédacteur,
 `i => i.authorAgency` par agence.
+
+**RICT en cours** (card 161, `Statut = EN_COURS`) : RICT non diffusés, créés ou modifiés depuis le
+12/10, ou contenant des avis IA. Les tableaux par agence (page Adoption) et par rédacteur (popup
+Utilisateurs) affichent **RICT diffusés / RICT en cours / Total**, avec une ligne de total ; les
+taux (recours, part IA, utilisation) restent calculés sur les seuls RICT diffusés. Un rédacteur
+qui injecte des avis IA dans un brouillon n'est donc plus invisible.
 
 Deux déchets coexistent sur la page, chacun nommé : celui des **analyses exploitées** (card 160,
 toutes dates : avis non repris ÷ avis générés) et celui **dans les RICT** (card 161 : avis IA émis

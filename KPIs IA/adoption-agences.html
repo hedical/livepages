@@ -121,11 +121,11 @@
                         <p class="text-graphite text-sm max-w-3xl">
                             Ce que chaque agence fait de l'IA par rapport à ce qu'elle produit dans S+ : la part de ses RICT diffusés précédés d'une analyse CCTP,
                             et dans ces RICT, la part des avis venant de l'IA. Période : RICT diffusés depuis l'ouverture du module, le 12/10/2026.
-                            Agence du rédacteur du RICT.
+                            Agence du rédacteur du RICT. Les RICT en cours (non diffusés, actifs depuis le 12/10) sont comptés à part : ils donnent le volume d'activité, mais les taux ne portent que sur les RICT diffusés.
                         </p>
                     </div>
                     <p id="cctp-missing" class="hidden text-sm text-ink bg-compliant rounded-md px-3 py-2"></p>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="cctp-tiles"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="cctp-tiles"></div>
                     <div class="at-card">
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm">
@@ -133,13 +133,18 @@
                                     <tr class="bg-off text-left text-graphite">
                                         <th class="px-4 py-3 font-medium" data-csort="key">Agence</th>
                                         <th class="px-4 py-3 font-medium" data-csort="dr">Direction régionale</th>
+                                        <th class="px-4 py-3 font-medium text-right" data-csort="rict" title="RICT diffusés depuis le 12/10/2026">RICT diffusés</th>
+                                        <th class="px-4 py-3 font-medium text-right" data-csort="enCours" title="RICT non diffusés, créés ou modifiés depuis le 12/10 (ou contenant des avis IA) : hors taux tant qu'ils ne sont pas diffusés">RICT en cours</th>
+                                        <th class="px-4 py-3 font-medium text-right" data-csort="rictTotal" title="RICT diffusés + RICT en cours">Total RICT</th>
                                         <th class="px-4 py-3 font-medium" data-csort="tauxRecours" title="RICT précédés d'au moins une analyse CCTP ÷ RICT diffusés">Recours à l'IA</th>
                                         <th class="px-4 py-3 font-medium" data-csort="partIa" title="Dans les RICT avec analyse : avis d'origine IA ÷ avis du rapport (Favorable, Suspendu, Défavorable)">Part IA des avis</th>
                                         <th class="px-4 py-3 font-medium" data-csort="tauxUtilisation" title="Dans les RICT avec analyse : avis d'origine IA retrouvés dans le rapport ÷ avis émis par l'IA">Avis IA utilisés</th>
                                         <th class="px-4 py-3 font-medium text-right" data-csort="supprimes" title="Avis IA injectés dans le rapport puis supprimés">Avis IA supprimés</th>
+                                        <th class="px-4 py-3 font-medium text-right" data-csort="enCoursAvecAvisIa" title="RICT en cours qui contiennent déjà des avis IA">En cours avec avis IA</th>
                                     </tr>
                                 </thead>
                                 <tbody id="cctp-body" class="divide-y divide-stone"></tbody>
+                                <tfoot id="cctp-total" class="border-t-2 border-ink"></tfoot>
                             </table>
                         </div>
                         <p id="cctp-note" class="px-4 py-3 text-xs text-graphite border-t border-stone"></p>

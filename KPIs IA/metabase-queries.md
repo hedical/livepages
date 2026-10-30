@@ -647,7 +647,8 @@ SELECT
     av."parMission"                                  AS "AvisParMission",
     aid."metadata"->>'reportId'                      AS "ReportId",
     (SELECT count(*) FROM jsonb_object_keys(COALESCE(aid."metadata"->'assignedStatusByCctpAvisId', '{}'::jsonb))) AS "AvisInjectes",
-    COALESCE(ev."notices", 0)                        AS "NoticesCreees"
+    COALESCE(ev."notices", 0)                        AS "NoticesCreees",
+    ev."injecteurs"                                  AS "Injecteurs"
 FROM "AIDeliverable" aid
 LEFT JOIN "AIProject" ap ON ap."id" = aid."aiProjectId"
 LEFT JOIN "SubAffair" sa ON sa."id" = ap."subAffairId"
@@ -670,7 +671,10 @@ LEFT JOIN LATERAL (
     FROM jsonb_array_elements(COALESCE(aid."longResult"->'cctp'->'avis', '[]'::jsonb)) x
 ) av ON true
 LEFT JOIN LATERAL (
-    SELECT sum(jsonb_array_length(COALESCE(e."properties"->'notices', '[]'::jsonb))) AS "notices"
+    SELECT sum(jsonb_array_length(COALESCE(e."properties"->'notices', '[]'::jsonb))) AS "notices",
+           string_agg(DISTINCT lower(e."context"->'user'->>'email')
+                      || '|' || COALESCE(e."context"->'mainAgency'->>'productionService', '')
+                      || '|' || COALESCE(e."context"->'mainAgency'->>'management', ''), ';') AS "injecteurs"
     FROM "AnalyticEvent" e
     WHERE e."name" = 'Create Notice From AI CCTP'
       AND e."properties"->'deliverable'->>'id' = aid."id"
@@ -693,9 +697,13 @@ ORDER BY aid."createdAt" DESC
 - 7 analyses exploitées dans S+ (rapport créé et/ou remarques injectées), 19 notices injectées.
 - Ouverture de la brique à tous les utilisateurs S+ prévue le **12/10/2026**.
 
-> **Utilisateur compté = `SubAffair.userId`** (chargé d'affaires de l'affaire), comme les cards 137 et 158 :
-> `AIDeliverable` ne porte pas l'auteur du lancement. Si un collègue lance l'analyse sur
-> l'affaire d'un autre, c'est le chargé d'affaires qui est compté.
+> **Utilisateur réel = injecteur, sinon chargé d'affaires** (arbitrage du 30/10/2026).
+> `AIDeliverable` ne porte pas l'auteur du lancement : seul l'event `Create Notice From AI CCTP`
+> dit qui s'est servi de l'analyse (`context.user`, avec son agence `context.mainAgency`). La
+> colonne `Injecteurs` (`email|agence|DR`, séparés par `;`) alimente `KPI.cctpUsageEvents` :
+> une analyse injectée par un collègue est attribuée à ce collègue, pas au chargé d'affaires.
+> Sans injection, l'analyse reste au chargé d'affaires (`SubAffair.userId`). Au 30/10/2026,
+> 99 analyses ont un injecteur, et dans 18 injections l'injecteur n'est pas le chargé d'affaires.
 
 ### Câblage n8n / Supabase (workflow « ROI Global »)
 
@@ -717,7 +725,7 @@ Le front tolère l'absence de `ANALYSE_CCTP_URL` : tuile à 0 + message clair su
 
 **URL :** `https://metabase.btp-force.cloud/question/161`
 **Collection :** KPI IA (id 17)
-**Format :** 1 ligne = 1 RICT diffusé depuis le 12/10/2026 (lancement officiel CCTP), hors YIELD. ~480 lignes au 28/10/2026, <100 KB.
+**Format :** 1 ligne = 1 RICT diffusé depuis le 12/10/2026 (lancement officiel CCTP), hors YIELD, **plus les RICT en cours** touchés par l'IA (`Statut = EN_COURS`, ajouté le 30/10/2026). 548 diffusés + 269 en cours au 30/10/2026, ~100 KB. Requête ~60 s (timeout n8n 3 min).
 **Durée :** ~45 s (parcourt les notices des RICT et les events d'injection) — le nœud n8n a un timeout de 3 min.
 **Consommé par :** `analyse-cctp.html` (section « Adoption dans les RICT », déchet par mission) et la page Adoption (taux d'usage par personne / agence), via `shared/cctp-rict.js` (`KPICctpRict`).
 **Webhook :** `ANALYSE_CCTP_RICT_URL` (fichier `analyse_cctp_rict.json`).
@@ -730,6 +738,29 @@ Le front tolère l'absence de `ANALYSE_CCTP_URL` : tuile à 0 + message clair su
 | Part IA du rapport | avis d'origine IA ÷ avis du RICT, sur les RICT avec IA | 159 / 3 706 = 4,3 % |
 | Taux d'utilisation | avis d'origine IA ÷ avis émis par l'IA, sur les RICT avec IA | 159 / 2 486 = 6,4 % |
 | Déchet | 1 − taux d'utilisation, décomposé en « injectés puis supprimés » et « jamais injectés » | 461 injectés, dont 302 supprimés |
+
+### RICT en cours (depuis le 30/10/2026)
+
+Deux besoins : ne pas rendre invisible un rédacteur qui injecte des avis IA dans un RICT pas
+encore diffusé, et montrer le **volume d'activité** RICT par agence et par rédacteur (diffusés,
+en cours, total). Sont inclus les RICT **non diffusés et non supprimés** qui sont :
+- **actifs depuis le lancement** : créés ou modifiés (`Report.updatedAt`) depuis le 12/10
+  (arbitrage du 30/10/2026 : les ~1 600 vieux brouillons dormants sont exclus) ;
+- **ou touchés par l'IA** : analyse CCTP terminée sur l'affaire depuis le 12/10, ou avis IA
+  déjà présents dans le rapport.
+
+Au 30/10/2026 : 269 RICT en cours, dont 24 avec analyse IA et 13 contenant des avis IA.
+
+- `Statut` = `DIFFUSE` ou `EN_COURS` ; `DerniereActiviteIa` = dernière analyse ou injection ;
+  `DerniereModification` = `Report.updatedAt`. La plus récente des deux sert de date aux filtres
+  de période pour un RICT en cours.
+- Pour un RICT en cours, « avant diffusion » devient « jusqu'à maintenant » (`LOCALTIMESTAMP`).
+- Côté front (`KPICctpRict.aggregate`), ils ne comptent **dans aucun taux** (recours, part IA,
+  utilisation, déchet) : arbitrage du 30/10/2026, les taux restent sur les RICT diffusés. Ils sont
+  exposés à part (`enCours`, `enCoursAvecIa`, `enCoursAvecAvisIa`, `enCoursAvisIa`) et
+  `rictTotal` = diffusés + en cours (colonnes « RICT diffusés / RICT en cours / Total »).
+- Le filtre `Report.deletedAt IS NULL` a été ajouté en même temps (sans effet au 30/10 : aucun
+  RICT supprimé dans le périmètre).
 
 ### Comment on sait qu'un avis du RICT vient de l'IA
 
@@ -769,13 +800,30 @@ WITH ai_ev AS (
 ),
 ai AS (SELECT DISTINCT nid FROM ai_ev),
 rict AS (
-    SELECT r."id", r."subAffairId", r."diffusedAt", sad."contractNumber", sa."userId", r."createdById"
+    SELECT r."id", r."subAffairId", r."diffusedAt", r."updatedAt", sad."contractNumber", sa."userId", r."createdById",
+           (r."diffusedAt" IS NOT NULL) AS diffuse
     FROM "Report" r
     JOIN "SubAffair" sa ON sa."id" = r."subAffairId"
     JOIN "SubAffairDetail" sad ON sad."id" = sa."subAffairDetailId"
     WHERE r."reportType"::text = 'RICT'
-      AND r."diffusedAt" >= '2026-10-12'
+      AND r."deletedAt" IS NULL
       AND COALESCE(sad."contractNumber", '') NOT LIKE '%YIELD%'
+      AND (
+        r."diffusedAt" >= '2026-10-12'
+        -- RICT en cours : non diffusés et actifs depuis le lancement (créés ou
+        -- modifiés depuis le 12/10), ou touchés par l'IA (analyse terminée sur
+        -- l'affaire depuis le 12/10, avis IA déjà présents dans le rapport).
+        OR (r."diffusedAt" IS NULL AND (
+            r."createdAt" >= '2026-10-12' OR r."updatedAt" >= '2026-10-12'
+            OR EXISTS (SELECT 1 FROM "AIProject" ap2
+                    JOIN "AIDeliverable" d2 ON d2."aiProjectId" = ap2."id"
+                    WHERE ap2."subAffairId" = r."subAffairId"
+                      AND d2."type"::text = 'CCTP_VS_REFERENTIEL'
+                      AND d2."status"::text = 'COMPLETED'
+                      AND d2."createdAt" >= '2026-10-12')
+            OR EXISTS (SELECT 1 FROM "Notice" n2 JOIN ai ON ai.nid = n2."id"
+                       WHERE n2."reportId" = r."id" AND n2."deletedAt" IS NULL)))
+      )
 ),
 ana AS (
     SELECT DISTINCT ON (rict."id", m) rict."id" AS rid, m AS mission, d."id" AS did
@@ -785,7 +833,7 @@ ana AS (
     CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(d."longResult"->'cctp'->'missions', '[]'::jsonb)) m
     WHERE d."type"::text = 'CCTP_VS_REFERENTIEL'
       AND d."status"::text = 'COMPLETED'
-      AND d."createdAt" < rict."diffusedAt"
+      AND d."createdAt" < COALESCE(rict."diffusedAt", LOCALTIMESTAMP)
     ORDER BY rict."id", m, d."createdAt" DESC
 ),
 emis AS (
@@ -813,6 +861,13 @@ nt AS (
 SELECT
     rict."id"                                         AS "ReportId",
     rict."diffusedAt"                                 AS "DiffusedAt",
+    CASE WHEN rict.diffuse THEN 'DIFFUSE' ELSE 'EN_COURS' END AS "Statut",
+    GREATEST(
+        (SELECT max(d."createdAt") FROM ana JOIN "AIDeliverable" d ON d."id" = ana.did WHERE ana.rid = rict."id"),
+        (SELECT max(e."date")::timestamp FROM "AnalyticEvent" e
+         WHERE e."name" = 'Create Notice From AI CCTP' AND e."properties"->'report'->>'id' = rict."id")
+    )                                                 AS "DerniereActiviteIa",
+    CASE WHEN rict.diffuse THEN NULL ELSE rict."updatedAt" END AS "DerniereModification",
     rict."contractNumber"                             AS "ContractNumber",
     u."email"                                         AS "UserEmail",
     au."email"                                        AS "AuthorEmail",

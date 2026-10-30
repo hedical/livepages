@@ -70,13 +70,15 @@ const KPIAdoption = (function () {
               events: () => get('autocontact').filter(i => notYield(i) && i.fromAI) },
             { id: 'comparateur', label: 'Comparateur', filiale: CT,
               events: () => get('comparateur') },
-            // Géotech / Acoustique / CCTP : l'email est celui du chargé d'affaires.
+            // Géotech / Acoustique : l'email est celui du chargé d'affaires.
             { id: 'analyse-geo', label: 'Géotechnique', filiale: CT,
               events: () => uniqueDeliverables(get('geotech')) },
             { id: 'analyse-acou', label: 'Acoustique', filiale: CT,
               events: () => uniqueDeliverables(get('acoustique')) },
+            // CCTP : utilisateur réel = la personne qui a injecté les avis, sinon
+            // le chargé d'affaires (arbitrage du 30/10/2026, K.cctpUsageEvents).
             { id: 'analyse-cctp', label: 'CCTP', filiale: CT,
-              events: () => uniqueDeliverables(get('cctp')).filter(i => i.status !== 'ERROR') },
+              events: () => K.cctpUsageEvents(get('cctp')) },
             { id: 'expert-ct', label: 'Expert', filiale: CT, events: () => get('expertCT') },
             { id: 'chat-ct', label: 'Chat', filiale: CT, events: () => get('chatCT') },
 

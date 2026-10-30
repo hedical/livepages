@@ -277,6 +277,7 @@ function renderCctp() {
         missing.classList.remove('hidden');
         document.getElementById('cctp-tiles').innerHTML = '';
         document.getElementById('cctp-body').innerHTML = '';
+        document.getElementById('cctp-total').innerHTML = '';
         return;
     }
     missing.classList.add('hidden');
@@ -298,7 +299,8 @@ function renderCctp() {
     document.getElementById('cctp-tiles').innerHTML =
         tile('Recours à l\'IA', pct(total.tauxRecours), `${total.rictAvecIa} RICT précédés d'une analyse sur ${total.rict} diffusés`)
         + tile('Part IA des avis', pct(total.partIa), `${total.avisRapportIa} avis IA sur ${total.avisRapportAvecIa} dans les RICT avec analyse`)
-        + tile('Avis IA utilisés', pct(total.tauxUtilisation), `${total.avisRapportIa} sur ${total.avisIaEmis} émis · ${total.supprimes} supprimés après injection`);
+        + tile('Avis IA utilisés', pct(total.tauxUtilisation), `${total.avisRapportIa} sur ${total.avisIaEmis} émis · ${total.supprimes} supprimés après injection`)
+        + tile('RICT en cours avec avis IA', String(total.enCoursAvecAvisIa), `${total.enCoursAvisIa} avis IA dans des RICT pas encore diffusés · hors taux`);
 
     const search = state.search.trim().toUpperCase();
     const list = rows
@@ -326,22 +328,43 @@ function renderCctp() {
         return `<tr class="hover:bg-off">
             <td class="px-4 py-3 font-mono font-medium text-ink">${esc(x.key)}</td>
             <td class="px-4 py-3 text-graphite">${esc(x.dr)}</td>
+            <td class="px-4 py-3 text-right tabular">${x.rict}</td>
+            <td class="px-4 py-3 text-right tabular">${x.enCours}</td>
+            <td class="px-4 py-3 text-right tabular font-medium">${x.rictTotal}</td>
             <td class="px-4 py-3 whitespace-nowrap"><div class="flex items-center gap-3">${pill}
-                <span class="tabular text-xs text-graphite">${x.rictAvecIa} sur ${x.rict} RICT${few && x.rict ? '<br>moins de ' + MIN_RICT + ' RICT' : ''}</span></div></td>
+                <span class="tabular text-xs text-graphite">${x.rictAvecIa} sur ${x.rict} diffusés${few && x.rict ? '<br>moins de ' + MIN_RICT + ' RICT' : ''}</span></div></td>
             <td class="px-4 py-3 tabular">${pct(x.partIa)}${x.avisRapportAvecIa ? ` <span class="text-xs text-graphite">(${x.avisRapportIa}/${x.avisRapportAvecIa})</span>` : ''}</td>
             <td class="px-4 py-3 tabular">${pct(x.tauxUtilisation)}${x.avisIaEmis ? ` <span class="text-xs text-graphite">(${x.avisRapportIa}/${x.avisIaEmis})</span>` : ''}</td>
             <td class="px-4 py-3 text-right tabular">${x.rictAvecIa ? x.supprimes : '—'}</td>
+            <td class="px-4 py-3 text-right tabular">${x.enCoursAvecAvisIa || '<span class="text-graphite">—</span>'}</td>
         </tr>`;
-    }).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-graphite">Aucune agence ne correspond.</td></tr>';
+    }).join('') || '<tr><td colspan="10" class="px-4 py-8 text-center text-graphite">Aucune agence ne correspond.</td></tr>';
+
+    // Ligne de total sur le périmètre AFFICHÉ (filtre DR et recherche) : agrégat
+    // des RICT de ces agences, pas une moyenne des taux d'agence.
+    const shownAgencies = new Set(list.map(x => x.key));
+    const t = KPICctpRict.aggregate(rictItems.filter(i => shownAgencies.has((i.authorAgency || '').toUpperCase())));
+    document.getElementById('cctp-total').innerHTML = list.length ? `<tr class="bg-off font-semibold text-ink">
+            <td class="px-4 py-3">Total</td>
+            <td class="px-4 py-3 text-graphite font-normal">${list.length} agence${list.length > 1 ? 's' : ''}</td>
+            <td class="px-4 py-3 text-right tabular">${t.rict}</td>
+            <td class="px-4 py-3 text-right tabular">${t.enCours}</td>
+            <td class="px-4 py-3 text-right tabular">${t.rictTotal}</td>
+            <td class="px-4 py-3 whitespace-nowrap tabular">${pct(t.tauxRecours)} <span class="text-xs text-graphite font-normal">${t.rictAvecIa} sur ${t.rict} diffusés</span></td>
+            <td class="px-4 py-3 tabular">${pct(t.partIa)}${t.avisRapportAvecIa ? ` <span class="text-xs text-graphite font-normal">(${t.avisRapportIa}/${t.avisRapportAvecIa})</span>` : ''}</td>
+            <td class="px-4 py-3 tabular">${pct(t.tauxUtilisation)}${t.avisIaEmis ? ` <span class="text-xs text-graphite font-normal">(${t.avisRapportIa}/${t.avisIaEmis})</span>` : ''}</td>
+            <td class="px-4 py-3 text-right tabular">${t.supprimes}</td>
+            <td class="px-4 py-3 text-right tabular" title="${t.enCoursAvisIa} avis IA dans les RICT en cours">${t.enCoursAvecAvisIa}</td>
+        </tr>` : '';
 
     document.querySelectorAll('th[data-csort]').forEach(th => {
         th.textContent = th.textContent.replace(/ [↑↓]$/, '');
         if (th.dataset.csort === cctpSort.key) th.textContent += cctpSort.asc ? ' ↑' : ' ↓';
     });
 
-    const outside = rictItems.filter(i => !known.has((i.authorAgency || '').toUpperCase())).length;
+    const outside = rictItems.filter(i => i.diffuse !== false && !known.has((i.authorAgency || '').toUpperCase())).length;
     document.getElementById('cctp-note').textContent =
-        `Source : RICT diffusés depuis le 12/10/2026, hors dossiers de test (card Metabase 161). `
+        `Source : RICT diffusés depuis le 12/10/2026, hors dossiers de test (card Metabase 161) ; RICT en cours : non diffusés, créés ou modifiés depuis le 12/10 ou contenant des avis IA. `
         + `Avis comparés : Favorable, Suspendu, Défavorable. Un avis IA réécrit à la main compte comme humain : part IA et utilisation sont des minimums. `
         + (outside ? `${outside} RICT rédigés hors des agences de la population cible ne sont pas affichés.` : '');
 }

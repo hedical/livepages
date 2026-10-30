@@ -71,7 +71,7 @@
                             Cette brique apporte d'abord un gain en <strong>qualité</strong> (avis motivés par mission, confrontés au référentiel).
                             Le <strong>gain de temps</strong> est estimé uniquement sur les avis repris dans S+ (hypothèse modifiable, voir « Gain de temps »).
                             Une analyse est dite <strong>exploitée</strong> quand ses remarques ont été reprises dans S+ (rapport créé, avis statués ou notices injectées).
-                            L'utilisateur compté est le chargé d'affaires de l'affaire analysée.
+                            L'utilisateur compté est la personne qui a injecté les avis dans S+, sinon le chargé d'affaires de l'affaire analysée.
                         </p>
                     </div>
                 </div>
@@ -166,8 +166,8 @@
                         </div>
                         <div class="at-card p-6">
                             <p class="text-sm text-graphite mb-2">Utilisateurs uniques</p>
-                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-users" title="Chargés d'affaires distincts des affaires analysées">0</p>
-                            <p class="text-xs text-graphite mt-1" id="total-users-sub">Chargés d'affaires distincts</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-users" title="Personnes qui se sont servies d'une analyse : celle qui a injecté les avis dans S+ (même sur l'affaire d'un collègue), sinon le chargé d'affaires. S+ ne trace pas qui lance une analyse.">0</p>
+                            <p class="text-xs text-graphite mt-1" id="total-users-sub">Utilisateurs réels distincts</p>
                         </div>
                     </div>
                 </div>
@@ -229,6 +229,7 @@
                             <p class="text-xs text-graphite mt-1" id="rict-avec-avis-ia-sub">-</p>
                         </div>
                     </div>
+                    <p class="text-sm text-graphite mt-3 cursor-help" id="rict-en-cours" title="RICT non diffusés, créés ou modifiés depuis le 12/10, ou contenant des avis IA. Ils ne comptent dans aucun taux tant qu'ils ne sont pas diffusés."></p>
                     <p class="text-xs text-amber-700 mt-3 hidden" id="rict-missing"></p>
                 </div>
 

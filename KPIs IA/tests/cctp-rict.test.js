@@ -96,3 +96,52 @@ test('groupBy — par rédacteur et par agence, tri par nombre de RICT', () => {
     assert.deepEqual(parAgence.map(g => g.key), ['CT92S', 'CT75']);
     assert.deepEqual(R.groupBy(items, () => ''), []);
 });
+
+test('RICT en cours : comptés à part, jamais dans les taux', () => {
+    const items = R.parseRows([
+        { ReportId: 'd1', Statut: 'DIFFUSE', DiffusedAt: '2026-10-20T10:00:00', ContractNumber: 'C-A-1', AuthorEmail: 'a@btp-consultants.fr', AnalysesAvant: 1, AvisIaEmis: 10, AvisRapport: 20, AvisRapportIa: 2 },
+        { ReportId: 'e1', Statut: 'EN_COURS', DiffusedAt: '', DerniereActiviteIa: '2026-10-26T11:26:00', ContractNumber: 'C-A-2', AuthorEmail: 'loic@btp-consultants.fr', AnalysesAvant: 1, AvisIaEmis: 40, AvisRapport: 124, AvisRapportIa: 5 },
+        { ReportId: 'e2', Statut: 'EN_COURS', DiffusedAt: '', DerniereActiviteIa: '2026-10-27T09:00:00', ContractNumber: 'C-A-3', AuthorEmail: 'loic@btp-consultants.fr', AnalysesAvant: 1, AvisIaEmis: 12, AvisRapport: 0, AvisRapportIa: 0 },
+    ]);
+    assert.equal(items[1].diffuse, false);
+    assert.equal(items[1].createdAt, '2026-10-26T11:26:00'); // date d'activité pour les filtres
+    const s = R.aggregate(items);
+    assert.equal(s.rict, 1);
+    assert.equal(s.tauxRecours, 1);
+    assert.equal(s.avisIaEmis, 10);         // les 52 avis des RICT en cours n'y sont pas
+    assert.equal(s.partIa, 2 / 20);
+    assert.equal(s.enCours, 2);
+    assert.equal(s.enCoursAvecIa, 2);
+    assert.equal(s.enCoursAvecAvisIa, 1);
+    assert.equal(s.enCoursAvisIa, 5);
+    const loic = R.groupBy(items, i => i.author).find(g => g.key === 'loic@btp-consultants.fr');
+    assert.equal(loic.rict, 0);             // aucun RICT diffusé…
+    assert.equal(loic.enCoursAvecAvisIa, 1); // …mais visible grâce au RICT en cours
+    assert.equal(loic.tauxRecours, null);
+});
+
+test('Ancien fichier sans colonne Statut : tout est considéré diffusé', () => {
+    const [it] = R.parseRows([{ ReportId: 'x', DiffusedAt: '2026-10-20', ContractNumber: 'C-A-1' }]);
+    assert.equal(it.diffuse, true);
+});
+
+test('RICT en cours actifs : total = diffusés + en cours, date = plus récente activité', () => {
+    const items = R.parseRows([
+        { ReportId: 'd1', Statut: 'DIFFUSE', DiffusedAt: '2026-10-20T10:00:00', ContractNumber: 'C-A-1', AuthorEmail: 'a@btp-consultants.fr', AuthorAgence: 'CT75', AnalysesAvant: 1, AvisIaEmis: 10, AvisRapport: 20, AvisRapportIa: 2 },
+        // brouillon sans IA, modifié le 25/10
+        { ReportId: 'e1', Statut: 'EN_COURS', DerniereModification: '2026-10-25T08:00:00', DerniereActiviteIa: '', ContractNumber: 'C-A-2', AuthorEmail: 'a@btp-consultants.fr', AuthorAgence: 'CT75' },
+        // brouillon modifié le 22/10, avis IA injectés le 26/10
+        { ReportId: 'e2', Statut: 'EN_COURS', DerniereModification: '2026-10-22T08:00:00', DerniereActiviteIa: '2026-10-26T11:26:00', ContractNumber: 'C-A-3', AuthorEmail: 'b@btp-consultants.fr', AuthorAgence: 'CT75', AnalysesAvant: 1, AvisRapportIa: 3 },
+    ]);
+    assert.equal(items[1].createdAt, '2026-10-25T08:00:00');
+    assert.equal(items[2].createdAt, '2026-10-26T11:26:00');
+    const s = R.aggregate(items);
+    assert.equal(s.rict, 1);
+    assert.equal(s.enCours, 2);
+    assert.equal(s.rictTotal, 3);
+    assert.equal(s.enCoursAvecIa, 1);
+    assert.equal(s.enCoursAvecAvisIa, 1);
+    assert.equal(s.tauxRecours, 1);          // taux sur les diffusés seulement
+    const [ct75] = R.groupBy(items, i => i.authorAgency);
+    assert.deepEqual([ct75.key, ct75.rict, ct75.enCours, ct75.rictTotal], ['CT75', 1, 2, 3]);
+});

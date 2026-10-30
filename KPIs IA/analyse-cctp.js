@@ -265,9 +265,15 @@ function updateCards(s) {
     $('total-contracts').textContent = formatNumber(s.uniqueContracts);
     $('total-agencies').textContent = formatNumber(s.uniqueAgencies);
     $('total-users').textContent = formatNumber(s.uniqueUsers);
+    // Utilisateurs réels (KPI.aggregateCctp) : injecteur, sinon chargé d'affaires.
+    const collegue = s.analysesCollegue
+        ? ` · ${plural(s.analysesCollegue, 'analyse')} exploitée${s.analysesCollegue > 1 ? 's' : ''} sur l'affaire d'un collègue`
+        : '';
     if (ambassadeurs.size) {
         const amb = s.emails.filter(isAmbassadeur).length;
-        $('total-users-sub').textContent = `dont ${plural(amb, 'ambassadeur')} · ${formatNumber(s.uniqueUsers - amb)} autres`;
+        $('total-users-sub').textContent = `dont ${plural(amb, 'ambassadeur')} · ${formatNumber(s.uniqueUsers - amb)} autres${collegue}`;
+    } else {
+        $('total-users-sub').textContent = `Utilisateurs réels distincts${collegue}`;
     }
 
     $('total-avis').textContent = formatNumber(s.totalAvis);
@@ -726,6 +732,14 @@ function updateRict() {
     $('rict-avec-avis-ia-sub').textContent = r.rictAvecIa
         ? `sur ${formatNumber(r.rictAvecIa)} RICT avec IA (${pct(r.rictAvecAvisIa, r.rictAvecIa)})`
         : '—';
+    // RICT en cours : visibles, jamais dans les taux (contenu non définitif).
+    $('rict-en-cours').textContent = r.enCours
+        // « RICT » et « avis » sont invariables : seuls les verbes s'accordent.
+        ? `En plus, ${formatNumber(r.enCours)} RICT en cours (non diffusé${r.enCours > 1 ? 's' : ''}, actif${r.enCours > 1 ? 's' : ''} depuis le 12/10), `
+          + `soit ${formatNumber(r.rictTotal)} RICT au total : ${formatNumber(r.enCoursAvecIa)} ${r.enCoursAvecIa > 1 ? 'ont' : 'a'} déjà une analyse IA, `
+          + `${formatNumber(r.enCoursAvecAvisIa)} ${r.enCoursAvecAvisIa > 1 ? 'contiennent' : 'contient'} déjà ${formatNumber(r.enCoursAvisIa)} avis IA. `
+          + `${r.enCours > 1 ? 'Ils entreront' : 'Il entrera'} dans les taux à leur diffusion.`
+        : '';
 
     $('rict-dechet-intro').textContent = r.avisIaEmis
         ? `Déchet dans les RICT : ${formatNumber(r.avisNonRetenus)} avis sur ${formatNumber(r.avisIaEmis)} (${pctOrDash(r.tauxDechet)}), `

@@ -668,7 +668,7 @@
                     <p class="text-sm text-graphite mt-1" id="users-list-subtitle">Données de population et d'activité</p>
                 </div>
                 <div class="flex items-center gap-2">
-                <button id="export-adoption-xlsx" type="button" class="at-btn at-btn-sm" title="Synthèse, utilisateurs actifs et adoption par agence — période du filtre de dates">
+                <button id="export-adoption-xlsx" type="button" class="at-btn at-btn-sm" title="Synthèse, utilisateurs actifs, adoption par agence et CCTP par rédacteur — période du filtre de dates">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                     <span id="export-adoption-xlsx-label">Exporter Excel</span>
                 </button>
@@ -840,8 +840,7 @@
                 <!-- CCTP par rédacteur (popup réservée à la direction : noms affichés) -->
                 <div id="panel-cctp-authors" class="hidden">
                     <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
-                        <p class="text-sm text-graphite max-w-2xl">Recours à l'Analyse CCTP par rédacteur de RICT, sur les RICT diffusés depuis le 12/10/2026. Le taux ne s'affiche qu'à partir de <span id="cctp-authors-min">5</span> RICT.</p>
-                        <button id="cctp-authors-export" type="button" class="at-btn at-btn-sm">Exporter (.xlsx)</button>
+                        <p class="text-sm text-graphite max-w-2xl">Recours à l'Analyse CCTP par rédacteur de RICT, sur les RICT diffusés depuis le 12/10/2026. Le taux ne s'affiche qu'à partir de <span id="cctp-authors-min">5</span> RICT. Les RICT en cours qui contiennent déjà des avis IA sont signalés à part, hors taux.</p>
                     </div>
                     <p id="cctp-authors-missing" class="hidden text-sm text-ink bg-compliant rounded-md px-3 py-2 mb-4"></p>
                     <table class="w-full text-sm">
@@ -849,14 +848,18 @@
                             <tr class="bg-off text-left text-graphite">
                                 <th class="px-4 py-2.5 font-medium">Rédacteur</th>
                                 <th class="px-4 py-2.5 font-medium">Agence</th>
-                                <th class="px-4 py-2.5 font-medium text-right">RICT diffusés</th>
-                                <th class="px-4 py-2.5 font-medium text-right">Avec analyse</th>
+                                <th class="px-4 py-2.5 font-medium text-right" title="RICT diffusés depuis le 12/10/2026">RICT diffusés</th>
+                                <th class="px-4 py-2.5 font-medium text-right" title="RICT non diffusés, créés ou modifiés depuis le 12/10 (ou contenant des avis IA) : hors taux tant qu'ils ne sont pas diffusés">RICT en cours</th>
+                                <th class="px-4 py-2.5 font-medium text-right" title="RICT diffusés + RICT en cours">Total</th>
+                                <th class="px-4 py-2.5 font-medium text-right" title="RICT diffusés précédés d'une analyse CCTP">Diffusés avec analyse</th>
+                                <th class="px-4 py-2.5 font-medium text-right" title="RICT en cours qui contiennent déjà des avis IA">En cours avec avis IA</th>
                                 <th class="px-4 py-2.5 font-medium">Recours à l'IA</th>
                                 <th class="px-4 py-2.5 font-medium text-right" title="Dans les RICT avec analyse : avis d'origine IA ÷ avis du rapport">Part IA des avis</th>
                                 <th class="px-4 py-2.5 font-medium text-right" title="Avis d'origine IA retrouvés dans le rapport ÷ avis émis par l'IA">Avis IA utilisés</th>
                             </tr>
                         </thead>
                         <tbody id="cctp-authors-body" class="divide-y divide-stone"></tbody>
+                        <tfoot id="cctp-authors-total" class="border-t-2 border-ink"></tfoot>
                     </table>
                     <p class="text-xs text-graphite text-center mt-4" id="cctp-authors-label"></p>
                 </div>

@@ -555,3 +555,37 @@ test('parseAmbassadeurs — JSON et CSV, emails en minuscules, lignes sans email
     assert.equal(c.get('h.l@btp-consultants.fr').agence, 'Rouen');
     assert.equal(KPI.parseAmbassadeurs('').size, 0);
 });
+
+// ===================== CCTP : utilisateur réel (injecteur) =====================
+
+test('parseInjecteurs — email|agence|DR séparés par ;, minuscules, doublons retirés', () => {
+    assert.deepEqual(KPI.parseInjecteurs('Loic.Camus@btp-consultants.fr|TLCT|DR Midi-Pyrénées;loic.camus@btp-consultants.fr|TLCT|x;;sans-arobase|A|B'),
+        [{ email: 'loic.camus@btp-consultants.fr', agency: 'TLCT', direction: 'DR Midi-Pyrénées' }]);
+    assert.deepEqual(KPI.parseInjecteurs(''), []);
+});
+
+test('cctpUsageEvents — l\'injecteur remplace le chargé d\'affaires, une requête par analyse', () => {
+    const items = KPI.parseCctpRows([
+        // analyse sur l'affaire de Benjamin, exploitée par Loic
+        { DeliverableId: 'a', Status: 'COMPLETED', EventDate: '2026-10-26', ContractNumber: 'C-TLCT-2026-20-1', UserEmail: 'benjamin@btp-consultants.fr', Agence: 'TLCT', DR: 'DR Midi-Pyrénées', Injecteurs: 'loic@btp-consultants.fr|TLCT|DR Midi-Pyrénées' },
+        // sans injection : reste au chargé d'affaires
+        { DeliverableId: 'b', Status: 'COMPLETED', EventDate: '2026-10-20', ContractNumber: 'C-CT75-2026-20-2', UserEmail: 'Claire@btp-consultants.fr', Agence: 'CT75', DR: 'DR IDF Nord' },
+        // deux injecteurs, dont le chargé
+        { DeliverableId: 'c', Status: 'COMPLETED', EventDate: '2026-10-21', ContractNumber: 'C-CT75-2026-20-3', UserEmail: 'claire@btp-consultants.fr', Agence: 'CT75', Injecteurs: 'claire@btp-consultants.fr|CT75|DR IDF Nord;paul@btp-consultants.fr|CT92S|DR IDF Sud' },
+        { DeliverableId: 'z', Status: 'ERROR', EventDate: '2026-10-21', ContractNumber: 'C-CT75-2026-20-4', UserEmail: 'x@btp-consultants.fr' },
+    ]);
+    const ev = KPI.cctpUsageEvents(items);
+    assert.deepEqual(ev.map(e => [e.deliverableId, e.email, e.agencyCode, e.requests, e.viaInjection]), [
+        ['a', 'loic@btp-consultants.fr', 'TLCT', 1, true],
+        ['b', 'claire@btp-consultants.fr', 'CT75', 1, false],
+        ['c', 'claire@btp-consultants.fr', 'CT75', 1, true],
+        ['c', 'paul@btp-consultants.fr', 'CT92S', 0, true],
+    ]);
+    assert.equal(KPI.cctpViaCollegue(items[0]), true);
+    assert.equal(KPI.cctpViaCollegue(items[1]), false);
+    assert.equal(KPI.cctpViaCollegue(items[2]), false); // le chargé a lui-même injecté
+    const s = KPI.aggregateCctp(items);
+    assert.deepEqual(s.emails.sort(), ['claire@btp-consultants.fr', 'loic@btp-consultants.fr', 'paul@btp-consultants.fr']);
+    assert.equal(s.uniqueUsers, 3);          // Benjamin n'est pas compté
+    assert.equal(s.analysesCollegue, 1);
+});

@@ -1377,7 +1377,8 @@ function updateKPIs() {
         if (item.email) allUsers.add(item.email);
     });
 
-    getFilteredData(cctpData).filter(item => item.status !== 'ERROR').forEach(item => {
+    // CCTP : utilisateur réel (injecteur, sinon chargé d'affaires).
+    KPI.cctpUsageEvents(getFilteredData(cctpData)).forEach(item => {
         if (item.email) allUsers.add(item.email);
     });
 
@@ -3125,38 +3126,60 @@ function renderCctpAuthorsTab() {
                 ? ' <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-100 text-indigo-800">Ambassadeur</span>' : ''}</td>
             <td class="px-4 py-2.5 text-graphite"><span class="font-mono text-ink">${esc(g.agency || '—')}</span>${g.dr ? `<span class="block text-xs">${esc(g.dr)}</span>` : ''}</td>
             <td class="px-4 py-2.5 text-right tabular">${g.rict}</td>
+            <td class="px-4 py-2.5 text-right tabular">${g.enCours}</td>
+            <td class="px-4 py-2.5 text-right tabular font-medium">${g.rictTotal}</td>
             <td class="px-4 py-2.5 text-right tabular">${g.rictAvecIa}</td>
+            <td class="px-4 py-2.5 text-right tabular">${g.enCoursAvecAvisIa ? `<span title="${g.enCoursAvisIa} avis IA dans ${g.enCoursAvecAvisIa} RICT non diffusé(s)">${g.enCoursAvecAvisIa}</span>` : '<span class="text-graphite">—</span>'}</td>
             <td class="px-4 py-2.5 tabular">${few ? '<span class="text-xs text-graphite">moins de ' + CCTP_AUTHORS_MIN_RICT + ' RICT</span>'
                 : `<span class="inline-flex px-2.5 py-0.5 rounded-full text-sm font-semibold ${g.tauxRecours > 0 ? 'bg-ink text-off' : 'bg-off border border-stone text-ink'}">${pctOf(g.tauxRecours)}</span>`}</td>
             <td class="px-4 py-2.5 text-right tabular">${few ? '—' : pctOf(g.partIa)}</td>
             <td class="px-4 py-2.5 text-right tabular">${few ? '—' : pctOf(g.tauxUtilisation)}</td>
         </tr>`;
-    }).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-graphite">Aucun RICT diffusé sur la période.</td></tr>';
+    }).join('') || '<tr><td colspan="10" class="px-4 py-8 text-center text-graphite">Aucun RICT sur la période.</td></tr>';
+    // Total : agrégat de TOUS les RICT (et non moyenne des taux par rédacteur).
+    const t = KPICctpRict.aggregate(rictItems);
+    document.getElementById('cctp-authors-total').innerHTML = groups.length ? `<tr class="bg-off font-semibold text-ink">
+            <td class="px-4 py-2.5">Total (${groups.length} rédacteurs)</td>
+            <td class="px-4 py-2.5"></td>
+            <td class="px-4 py-2.5 text-right tabular">${t.rict}</td>
+            <td class="px-4 py-2.5 text-right tabular">${t.enCours}</td>
+            <td class="px-4 py-2.5 text-right tabular">${t.rictTotal}</td>
+            <td class="px-4 py-2.5 text-right tabular">${t.rictAvecIa}</td>
+            <td class="px-4 py-2.5 text-right tabular" title="${t.enCoursAvisIa} avis IA dans les RICT en cours">${t.enCoursAvecAvisIa}</td>
+            <td class="px-4 py-2.5 tabular">${pctOf(t.tauxRecours)}</td>
+            <td class="px-4 py-2.5 text-right tabular">${pctOf(t.partIa)}</td>
+            <td class="px-4 py-2.5 text-right tabular">${pctOf(t.tauxUtilisation)}</td>
+        </tr>` : '';
     const shown = groups.filter(g => g.rict >= CCTP_AUTHORS_MIN_RICT).length;
+    const draftsOnly = groups.filter(g => g.rict === 0 && g.enCours > 0).length;
     document.getElementById('cctp-authors-label').textContent =
-        `${groups.length} rédacteur(s), dont ${shown} avec au moins ${CCTP_AUTHORS_MIN_RICT} RICT. Source : card Metabase 161.`;
+        `${groups.length} rédacteur(s), dont ${shown} avec au moins ${CCTP_AUTHORS_MIN_RICT} RICT diffusés`
+        + (draftsOnly ? ` et ${draftsOnly} sans RICT diffusé mais avec des RICT en cours` : '')
+        + '. Taux calculés sur les RICT diffusés. Source : card Metabase 161.';
 }
 
-async function exportCctpAuthorsXlsx() {
-    const lib = await loadXlsxLib();
+// Feuille « CCTP par rédacteur », intégrée à l'export unique de la popup
+// (bouton « Exporter Excel » de l'en-tête) : un seul export pour tous les onglets.
+function appendCctpAuthorsSheet(lib, wb) {
+    if (!rictItems || !rictItems.length) return;
     const groups = cctpAuthorGroups();
-    const rows = [['Rédacteur', 'Email', 'Ambassadeur', 'Agence', 'Direction régionale', 'RICT diffusés', 'RICT avec analyse',
-        'Recours à l\'IA', 'Part IA des avis', 'Avis IA utilisés', 'Avis IA émis', 'Avis IA supprimés']];
-    groups.forEach(g => {
-        rows.push([g.nom, g.key, g.ambassadeur ? 'oui' : '', g.agency, g.dr, g.rict, g.rictAvecIa,
-            g.tauxRecours === null ? '' : g.tauxRecours, g.partIa === null ? '' : g.partIa,
-            g.tauxUtilisation === null ? '' : g.tauxUtilisation, g.avisIaEmis, g.supprimes]);
-    });
-    const wb = lib.utils.book_new();
-    lib.utils.book_append_sheet(wb, adoptionSheet(lib, rows, [24, 34, 11, 10, 20, 10, 12, 12, 12, 12, 10, 12], { 7: '0%', 8: '0%', 9: '0%' }), 'CCTP par rédacteur');
-    const note = lib.utils.aoa_to_sheet([
-        ['Source : RICT diffusés depuis le 12/10/2026 (card Metabase 161), rédacteur = auteur du RICT.'],
-        ['Recours = RICT précédés d\'une analyse CCTP ÷ RICT diffusés. Part IA et avis utilisés : dans les RICT avec analyse.'],
-        ['Généré le', new Date()],
-    ], { cellDates: true });
-    note['!cols'] = [{ wch: 110 }, { wch: 18 }];
-    lib.utils.book_append_sheet(wb, note, 'Lisez-moi');
-    lib.writeFile(wb, `cctp-redacteurs_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const rows = [['Rédacteur', 'Email', 'Ambassadeur', 'Agence', 'Direction régionale',
+        'RICT diffusés', 'RICT en cours', 'Total RICT', 'Diffusés avec analyse',
+        'Recours à l\'IA', 'Part IA des avis', 'Avis IA utilisés', 'Avis IA émis', 'Avis IA supprimés',
+        'En cours avec avis IA', 'Avis IA dans les RICT en cours']];
+    const line = (g, nom, email) => [nom, email, g.ambassadeur ? 'oui' : '', g.agency || '', g.dr || '',
+        g.rict, g.enCours, g.rictTotal, g.rictAvecIa,
+        g.tauxRecours === null ? '' : g.tauxRecours, g.partIa === null ? '' : g.partIa,
+        g.tauxUtilisation === null ? '' : g.tauxUtilisation, g.avisIaEmis, g.supprimes,
+        g.enCoursAvecAvisIa, g.enCoursAvisIa];
+    groups.forEach(g => rows.push(line(g, g.nom, g.key)));
+    // Total : agrégat de tous les RICT (pas une moyenne des taux par rédacteur).
+    rows.push(line(KPICctpRict.aggregate(rictItems), `Total (${groups.length} rédacteurs)`, ''));
+    rows.push([]);
+    rows.push(['Source : RICT diffusés depuis le 12/10/2026 (card Metabase 161), rédacteur = auteur du RICT.']);
+    rows.push(['Recours = RICT précédés d\'une analyse CCTP ÷ RICT diffusés. Part IA et avis utilisés : dans les RICT avec analyse.']);
+    rows.push(['RICT en cours : non diffusés, créés ou modifiés depuis le 12/10, ou contenant des avis IA. Hors taux.']);
+    lib.utils.book_append_sheet(wb, adoptionSheet(lib, rows, [24, 34, 11, 10, 20, 10, 10, 10, 12, 12, 12, 12, 10, 12, 14, 14], { 9: '0%', 10: '0%', 11: '0%' }), 'CCTP par rédacteur');
 }
 
 function openUsersListModal() {
@@ -3309,6 +3332,7 @@ function buildAdoptionWorkbook(lib) {
         const w = wsMethod[lib.utils.encode_cell({ r, c: 3 })];
         if (w) w.z = '0%';
     }
+    appendCctpAuthorsSheet(lib, wb);
     lib.utils.book_append_sheet(wb, wsMethod, 'Méthode');
 
     const stamp = refDate ? refDate.toISOString().slice(0, 10) : 'na';
@@ -3349,12 +3373,6 @@ async function exportAdoptionXlsx() {
     if (exportBtn) exportBtn.addEventListener('click', exportAdoptionXlsx);
     const tabCctpAuthors = document.getElementById('tab-cctp-authors');
     if (tabCctpAuthors) tabCctpAuthors.addEventListener('click', () => switchUsersListTab('cctpAuthors'));
-    const exportAuthors = document.getElementById('cctp-authors-export');
-    if (exportAuthors) exportAuthors.addEventListener('click', async () => {
-        exportAuthors.disabled = true;
-        try { await exportCctpAuthorsXlsx(); } catch (e) { console.error('Export CCTP par rédacteur :', e); }
-        exportAuthors.disabled = false;
-    });
     const tabSynthesis = document.getElementById('tab-synthesis');
     if (tabSynthesis) tabSynthesis.addEventListener('click', () => switchUsersListTab('synthesis'));
     const synthesisFiliale = document.getElementById('synthesis-filiale');
@@ -4215,7 +4233,8 @@ function publishCopilSnapshot() {
             const autocontactCT = autocontactData.filter(notYield);
             const autocontactCTIA = autocontactCT.filter(item => item.fromAI && fromDomain('@btp-consultants.fr')(item));
 
-            const cctpOk = uniqueDeliverables(cctpData).filter(item => item.status !== 'ERROR');
+            // CCTP : utilisateur réel (injecteur, sinon chargé d'affaires), une
+            // requête par analyse même si plusieurs personnes l'ont exploitée.
 
             // Usage libre : une requête = un message. Trois séries par métier :
             // l'ensemble (kind 'libre') et son détail chat / expert (kind
@@ -4239,7 +4258,7 @@ function publishCopilSnapshot() {
                 { id: 'descriptif', label: 'Descriptif RICT', metier: 'CT', kind: 'module', unite: 'RICT',
                   events: descriptifIA.map(i => ev(i, i.contractNumber, 1)), parc: parcOf(rict) },
                 { id: 'analyse-cctp', label: 'Analyse CCTP', metier: 'CT', kind: 'module', unite: 'affaire',
-                  events: cctpOk.map(i => ev(i, i.contractNumber, 1)), parc: null },
+                  events: KPI.cctpUsageEvents(cctpData).map(i => ev(i, i.contractNumber, i.requests)), parc: null },
                 { id: 'autocontact', label: 'Autocontact', metier: 'CT', kind: 'module', unite: 'affaire',
                   events: autocontactCTIA.map(i => ev(i, i.contractNumber, 1)), parc: parcOf(autocontactCT) },
                 { id: 'comparateur', label: "Comparateur d'indices", metier: 'CT', kind: 'module', unite: 'affaire',

@@ -5,7 +5,14 @@
 //
 // Source : card Metabase 161, exposée par le webhook sous ANALYSE_CCTP_RICT_URL
 // (analyse_cctp_rict.json). 1 ligne = 1 RICT diffusé depuis le 12/10/2026,
-// hors YIELD. Cf. metabase-queries.md, card 161.
+// hors YIELD, PLUS les RICT en cours (Statut = EN_COURS) : non diffusés et
+// actifs depuis le 12/10 (créés ou modifiés depuis), ou touchés par l'IA.
+// Cf. metabase-queries.md, card 161.
+//
+// Les RICT en cours ne sont JAMAIS dans les taux (recours, part IA,
+// utilisation, déchet) : leur contenu n'est pas définitif. Ils sont comptés à
+// part (enCours*), pour ne pas rendre invisible quelqu'un qui utilise l'IA
+// sur un RICT qu'il n'a pas encore diffusé.
 //
 // Chargé en <script> classique APRÈS shared/utils.js (namespace KPI) :
 //     <script src="shared/utils.js"></script>
@@ -40,6 +47,14 @@ const KPICctpRict = (function () {
         return v === null || v === undefined ? '' : String(v).trim();
     }
 
+    // La plus récente de deux dates texte (vide ou invalide ignorée).
+    function _latest(a, b) {
+        const ta = Date.parse(a), tb = Date.parse(b);
+        if (isNaN(ta)) return isNaN(tb) ? '' : b;
+        if (isNaN(tb)) return a;
+        return ta >= tb ? a : b;
+    }
+
     // Lignes de la card (objets clé = nom de colonne) → items normalisés.
     function parseRows(rows) {
         if (!Array.isArray(rows)) return [];
@@ -52,11 +67,16 @@ const KPICctpRict = (function () {
             if (contractNumber.toUpperCase().includes('YIELD')) return;
             const m = contractNumber.match(/C-([A-Z0-9]+)-/);
             const analysesAvant = _int(r.AnalysesAvant);
+            // Colonne absente (ancien fichier) = RICT diffusé.
+            const diffuse = _str(r.Statut).toUpperCase() !== 'EN_COURS';
             items.push({
                 reportId,
+                diffuse,
                 // createdAt : nom commun à toutes les sources, pour les filtres
-                // de période existants. C'est la date de DIFFUSION du RICT.
-                createdAt: _str(r.DiffusedAt),
+                // de période existants. Date de DIFFUSION du RICT ; pour un RICT
+                // en cours, la plus récente de sa dernière modification et de sa
+                // dernière activité IA (analyse ou injection).
+                createdAt: diffuse ? _str(r.DiffusedAt) : _latest(_str(r.DerniereModification), _str(r.DerniereActiviteIa)),
                 contractNumber,
                 agencyCode: m ? m[1] : null,
                 // Chargé d'affaires (SubAffair.userId) — même convention que card 160.
@@ -137,6 +157,8 @@ const KPICctpRict = (function () {
             avisRapport: 0, avisRapportAvecIa: 0, avisRapportIa: 0,
             avisIaEmis: 0, avisNonRetenus: 0, supprimes: 0, jamaisInjectes: 0,
             injectes: 0,
+            // RICT en cours (non diffusés, actifs ou touchés par l'IA) : hors taux.
+            enCours: 0, enCoursAvecIa: 0, enCoursAvecAvisIa: 0, enCoursAvisIa: 0, rictTotal: 0,
             tauxRecours: null, partIa: null, tauxUtilisation: null, tauxDechet: null,
             byMission: {},
         };
@@ -145,6 +167,13 @@ const KPICctpRict = (function () {
         (items || []).forEach(it => {
             if (!it || !it.reportId || seen.has(it.reportId)) return;
             seen.add(it.reportId);
+            if (it.diffuse === false) {
+                s.enCours++;
+                if (it.avecIa) s.enCoursAvecIa++;
+                if (it.avisRapportIa > 0) s.enCoursAvecAvisIa++;
+                s.enCoursAvisIa += it.avisRapportIa;
+                return;
+            }
             s.rict++;
             s.avisRapport += it.avisRapport;
             if (!it.avecIa) return;
@@ -169,6 +198,8 @@ const KPICctpRict = (function () {
             });
         });
         Object.values(s.byMission).forEach(m => { m.tauxDechet = _ratio(m.dechet, m.emis); });
+        // Volume d'activité RICT : diffusés + en cours (les taux restent sur les diffusés).
+        s.rictTotal = s.rict + s.enCours;
         s.tauxRecours = _ratio(s.rictAvecIa, s.rict);
         s.partIa = _ratio(s.avisRapportIa, s.avisRapportAvecIa);
         s.tauxUtilisation = _ratio(s.avisRapportIa, s.avisIaEmis);

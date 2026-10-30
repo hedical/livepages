@@ -371,9 +371,70 @@ const KPI = (function () {
                 // l'analyse, des avis ont reçu un statut, ou des notices ont
                 // été injectées (events "Create Notice From AI CCTP").
                 exploitee: !!reportId || avisInjectes > 0 || noticesCreees > 0,
+                // Personnes qui ont injecté des avis de l'analyse dans S+
+                // (events "Create Notice From AI CCTP"). S+ ne trace pas qui
+                // LANCE une analyse : l'injecteur est le seul utilisateur réel
+                // connu quand il diffère du chargé d'affaires (card 160).
+                injecteurs: parseInjecteurs(_str(r.Injecteurs)),
             });
         });
         return items;
+    }
+
+    // "a@x|TLCT|DR Midi-Pyrénées;b@x|CT75|DR IDF Nord" → [{ email, agency, direction }]
+    // (emails en minuscules, doublons retirés).
+    function parseInjecteurs(str) {
+        const out = [];
+        const seen = new Set();
+        if (!str) return out;
+        str.split(';').forEach(part => {
+            const [email, agency, direction] = part.split('|').map(x => (x || '').trim());
+            const e = (email || '').toLowerCase();
+            if (!e || !e.includes('@') || seen.has(e)) return;
+            seen.add(e);
+            out.push({ email: e, agency: agency || '', direction: direction || '' });
+        });
+        return out;
+    }
+
+    // Usage réel de l'Analyse CCTP : une ligne par (analyse, utilisateur).
+    // Règle arbitrée le 30/10/2026 : l'injecteur REMPLACE le chargé d'affaires
+    // quand il est connu (il est celui qui s'est servi de l'analyse) ; sans
+    // injection, l'analyse reste attribuée au chargé d'affaires. Les lignes
+    // gardent la forme d'un item (email, createdAt, agency, agencyCode…) pour
+    // les consommateurs existants. `requests` vaut 1 pour la première ligne
+    // d'une analyse et 0 pour les suivantes : une analyse = une utilisation.
+    function cctpUsageEvents(items) {
+        const out = [];
+        const seen = new Set();
+        (items || []).forEach(it => {
+            if (!it || !it.deliverableId || it.status === 'ERROR' || seen.has(it.deliverableId)) return;
+            seen.add(it.deliverableId);
+            const inj = it.injecteurs || [];
+            const people = inj.length
+                ? inj.map(p => ({ email: p.email, agency: p.agency, direction: p.direction, viaInjection: true }))
+                : [{ email: (it.email || '').toLowerCase(), agency: it.agency, direction: it.direction, viaInjection: false }];
+            people.forEach((p, i) => {
+                if (!p.email) return;
+                out.push(Object.assign({}, it, {
+                    email: p.email,
+                    agency: p.agency || it.agency,
+                    agencyCode: p.agency ? p.agency.toUpperCase() : it.agencyCode,
+                    direction: p.direction || it.direction,
+                    viaInjection: p.viaInjection,
+                    requests: i === 0 ? 1 : 0,
+                }));
+            });
+        });
+        return out;
+    }
+
+    // Vrai si l'analyse a été exploitée par quelqu'un d'autre que le chargé
+    // d'affaires (et lui seul ne l'a pas fait) : cas « affaire d'un collègue ».
+    function cctpViaCollegue(it) {
+        const inj = (it && it.injecteurs) || [];
+        const charge = ((it && it.email) || '').toLowerCase();
+        return inj.length > 0 && !inj.some(p => p.email === charge);
     }
 
     // CSV de la card (export Metabase : champs à virgules entre guillemets,
@@ -430,7 +491,11 @@ const KPI = (function () {
             // (analysesNonExploitees) : leurs avis n'ont pas été triés.
             avisAnalysesExploitees: 0, avisReprisExploitees: 0, avisNonRepris: 0,
             tauxDechet: null, analysesNonExploitees: 0,
+            // Utilisateurs RÉELS (cf. cctpUsageEvents) : l'injecteur remplace
+            // le chargé d'affaires quand il est connu.
             emails: [],
+            // Analyses exploitées par un autre que le chargé d'affaires.
+            analysesCollegue: 0,
             byMission,
         };
         (items || []).forEach(it => {
@@ -440,7 +505,9 @@ const KPI = (function () {
             if (it.status === 'ERROR') { s.totalErrors++; return; }
             s.totalOperations++;
             if (it.contractNumber) contracts.add(it.contractNumber);
-            if (it.email) users.add(it.email);
+            if (it.injecteurs && it.injecteurs.length) it.injecteurs.forEach(p => users.add(p.email));
+            else if (it.email) users.add(it.email.toLowerCase());
+            if (cctpViaCollegue(it)) s.analysesCollegue++;
             if (it.agency) agencies.add(it.agency);
             s.totalAvis += it.totalAvis;
             s.favorable += it.avisFavorable;
@@ -751,6 +818,9 @@ const KPI = (function () {
         parseCctpRows,
         parseCctpPayload,
         aggregateCctp,
+        parseInjecteurs,
+        cctpUsageEvents,
+        cctpViaCollegue,
         parseAmbassadeurs,
         CCTP_GAIN,
         cctpGainHeures,
