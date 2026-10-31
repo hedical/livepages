@@ -31,8 +31,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 4. Fonction pour mettre à jour l'affichage du statut
   function updateJobStatus() {
-    chrome.storage.local.get(['jobStatus', 'currentIndex', 'totalLines', 'jobData', 'currentCode', 'needsManualScroll', 'jobResults'], (result) => {
-      const { jobStatus, currentIndex, totalLines, jobData, currentCode, needsManualScroll, jobResults } = result;
+    chrome.storage.local.get(['jobStatus', 'currentIndex', 'totalLines', 'jobData', 'currentCode', 'needsManualScroll', 'jobResults', 'pageHidden'], (result) => {
+      const { jobStatus, currentIndex, totalLines, jobData, currentCode, needsManualScroll, jobResults, pageHidden } = result;
 
       console.log("Update status:", { jobStatus, currentIndex, totalLines, hasJobData: !!jobData, currentCode, needsManualScroll });
 
@@ -71,6 +71,9 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
           manualScrollAlert.style.display = 'none';
         }
+
+        // Afficher l'alerte si l'onglet CERQUAL est en arrière-plan
+        document.getElementById('hidden-tab-alert').style.display = pageHidden ? 'block' : 'none';
       } else if (jobStatus === 'completed' || jobStatus === 'stopped') {
         // Afficher le message de fin avec synthèse
         wrongPageDiv.style.display = 'none';
@@ -250,6 +253,18 @@ document.addEventListener('DOMContentLoaded', function() {
   // 6. Vérifier le statut au chargement
   updateJobStatus();
 
+  // Charge la librairie Excel à la demande (1,3 Mo : la charger à chaque ouverture ralentissait la popup)
+  function loadXlsxLibrary() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'xlsx.full.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Impossible de charger la librairie Excel"));
+      document.head.appendChild(script);
+    });
+  }
+
   // 7. Gestion de l'upload
   fileUpload.addEventListener('change', function(event) {
     const file = event.target.files[0];
@@ -258,10 +273,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const reader = new FileReader();
-    
-    reader.onload = function(e) {
+    const xlsxReady = loadXlsxLibrary();
+
+    reader.onload = async function(e) {
       const data = e.target.result;
-      
+
+      try {
+        await xlsxReady;
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+      }
+
       console.log("Fichier lu, parsing Excel...");
       
       // 1. Lire le fichier Excel
@@ -295,8 +319,21 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
       }
       
+      // Codes en texte (une cellule numérique faisait planter code.split), puis regroupement par
+      // catégorie dans l'ordre de première apparition : chaque page de catégorie n'est chargée qu'une fois.
+      // L'ordre à l'intérieur d'une catégorie est ensuite aligné sur la page par le content script.
+      const categoryOrder = [];
+      validRows.forEach(row => {
+        row[0] = String(row[0]).trim();
+        const category = row[0].split('.')[0];
+        if (!categoryOrder.includes(category)) categoryOrder.push(category);
+      });
+      const groupedRows = categoryOrder.flatMap(category =>
+        validRows.filter(row => row[0].split('.')[0] === category)
+      );
+
       // Stocker les données en mémoire (pas encore dans le storage)
-      loadedData = validRows;
+      loadedData = groupedRows;
       
       // Afficher les infos et le bouton de lancement
       fileInfoText.textContent = `✔ Fichier chargé : ${validRows.length} lignes à traiter`;
@@ -350,7 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log("✓ Job arrêté");
       // Ne pas nettoyer jobResults, juste les données temporaires
       setTimeout(() => {
-        chrome.storage.local.remove(['jobData', 'jobIndex', 'currentIndex', 'totalLines', 'currentCode', 'needsManualScroll', 'awaitingNavigation']);
+        chrome.storage.local.remove(['jobData', 'jobIndex', 'currentIndex', 'totalLines', 'currentCode', 'needsManualScroll', 'awaitingNavigation', 'pageHidden']);
         updateJobStatus();
       }, 1000);
     });
@@ -376,4 +413,4 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-});
+});
