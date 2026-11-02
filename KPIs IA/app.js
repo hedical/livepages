@@ -4331,6 +4331,9 @@ function publishCopilSnapshot() {
 
             sessionStorage.setItem('kpi_snapshot_copil', JSON.stringify({
                 generatedAt: new Date().toISOString(),
+                // Date des fichiers du bucket (cf. shared/last-update.js) : la
+                // page COPIL ne charge rien elle-même et l'affiche depuis ici.
+                dataUpdatedAt: typeof KPILastUpdate !== 'undefined' ? KPILastUpdate.latest() : null,
                 months,
                 // CT : population_cible.csv (contrôleurs par agence). Les autres
                 // métiers : KPICopil.POPULATIONS (null tant que non renseignée).

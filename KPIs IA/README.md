@@ -67,6 +67,7 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 - `tools/csv-to-autocontact-sps.js` : Convertit un export CSV du backoffice BTP Force en `autocontact_sps.json` (fichier Supabase de la brique SPS)
 - `shared/utils.js` : Module partagé (parsing CSV/JSON, dates, prédicats métier, constantes)
 - `shared/costs.js` : Module de calcul économique (registre, relevés OpenRouter, KPIs, projection)
+- `shared/last-update.js` : Date de dernière mise à jour des données sous le titre de chaque page (namespace `KPILastUpdate`, voir « Date de mise à jour des données »)
 - `shared/analyztech-tailwind.js`, `shared/analyztech-theme.css`, `shared/analyztech-theme.js`, `shared/analyztech-wordmark*.svg` : Habillage charte AnalyzTech (voir « Charte AnalyzTech »)
 - `tests/utils.test.js`, `tests/costs.test.js` : Tests des modules partagés
 - `README.md` : Documentation du projet
@@ -105,6 +106,21 @@ couleurs de la charte. Pour les surfaces, préférer les jetons `paper`, `off`, 
 `graphite`, `ink`, `compliant` et les composants `at-*`. Combinaisons autorisées par la
 charte : noir sur Off White, noir sur Stone Grey, Off White sur Graphite, Off White sur noir,
 vert sur noir, noir sur vert — jamais de vert en texte sur fond clair.
+
+### Date de mise à jour des données (`shared/last-update.js`)
+
+Chaque page de données affiche sous son titre « Données mises à jour le … ».
+C'est la date des **fichiers du bucket** (en-tête `Last-Modified` des URLs
+signées, c.-à-d. l'heure d'écriture par n8n), pas celle de l'ouverture de la
+page. Le module enveloppe `window.fetch` : aucune page n'a à le câbler. La date
+affichée est la plus récente des fichiers lus ; l'infobulle donne le détail
+fichier par fichier (utile pour repérer une source qui ne se rafraîchit plus).
+
+À charger dans le `<head>`, **avant** le script de page. Pour placer le texte
+ailleurs que sous le `h1`, prévoir un élément `id="data-updated-at"`. La page
+COPIL IA, qui ne charge rien, reçoit la date par l'instantané du tableau de bord
+(`dataUpdatedAt`). Non chargé sur `methode-adoption.html` et
+`explorer-comparaisons.html` (pas de données).
 
 ### Module partagé (`shared/utils.js`)
 

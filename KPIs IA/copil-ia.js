@@ -557,6 +557,7 @@ function renderJson(synthese, variations) {
         mois: selectedMonth,
         moisEnCours: selectedMonth === currentMonthKey(),
         donneesDu: snapshot.generatedAt,
+        donneesMisesAJour: snapshot.dataUpdatedAt || null,
         source: PLATFORM_URL,
         definitions: {
             adoption: 'utilisateurs actifs du mois / population concernée',
@@ -675,6 +676,9 @@ function initMonthSelect() {
         return;
     }
     $('generated-at').textContent = `données du ${new Date(snapshot.generatedAt).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}`;
+    if (snapshot.dataUpdatedAt) {
+        $('data-updated-at').textContent = `Données mises à jour le ${KPILastUpdate.formatDate(snapshot.dataUpdatedAt)}`;
+    }
     $('copy-link').addEventListener('click', async () => {
         const btn = $('copy-link');
         try {
