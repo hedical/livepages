@@ -31,7 +31,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 4. Fonction pour mettre à jour l'affichage du statut
   function updateJobStatus() {
-    chrome.storage.local.get(['jobStatus', 'currentIndex', 'totalLines', 'jobData', 'currentCode', 'needsManualScroll', 'jobResults', 'pageHidden'], (result) => {
+    chrome.storage.local.get(['jobStatus', 'currentIndex', 'totalLines', 'jobData', 'currentCode', 'needsManualScroll', 'jobResults', 'pageHidden',
+      'jobPhase', 'phaseStartedAt', 'scanCategory', 'scanFound', 'scanExpected', 'categoryIndex', 'categoryCount'], (result) => {
       const { jobStatus, currentIndex, totalLines, jobData, currentCode, needsManualScroll, jobResults, pageHidden } = result;
 
       console.log("Update status:", { jobStatus, currentIndex, totalLines, hasJobData: !!jobData, currentCode, needsManualScroll });
@@ -45,12 +46,23 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const currentIdx = currentIndex !== undefined ? currentIndex : 0;
         const total = totalLines || jobData.length;
-        
-        document.getElementById('status-progress').textContent = 
-          `Ligne ${currentIdx + 1} / ${total}`;
-        
-        // Afficher le code en cours avec gestion du cas vide
-        if (currentCode && currentCode.trim() !== '') {
+        const phase = result.jobPhase || 'connecting';
+
+        // Tant que le remplissage n'a pas commencé : loader de préparation, sans code en cours
+        if (phase !== 'filling') {
+          showPreparation(result, phase, total);
+        } else {
+          document.getElementById('status-title').textContent = 'Remplissage en cours...';
+          setProgress(total > 0 ? currentIdx / total : 0);
+          document.getElementById('status-progress').textContent =
+            `Ligne ${currentIdx + 1} / ${total}`;
+          document.getElementById('status-eta').textContent = '';
+        }
+
+        // Afficher le code en cours avec gestion du cas vide (seulement pendant le remplissage)
+        if (phase !== 'filling') {
+          currentCodeSpan.parentElement.style.display = 'none';
+        } else if (currentCode && currentCode.trim() !== '') {
           currentCodeSpan.textContent = currentCode;
           currentCodeSpan.parentElement.style.display = 'block';
         } else {
@@ -106,6 +118,57 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
+  // Barre d'avancement : ratio entre 0 et 1, ou null pour une barre indéterminée
+  function setProgress(ratio) {
+    const fill = document.getElementById('progress-fill');
+    if (ratio === null) {
+      fill.classList.add('indeterminate');
+      fill.style.width = '';
+    } else {
+      fill.classList.remove('indeterminate');
+      fill.style.width = `${Math.round(Math.min(Math.max(ratio, 0), 1) * 100)}%`;
+    }
+  }
+
+  // Loader de préparation : connexion à la page, chargement de la rubrique, repérage des exigences
+  function showPreparation(state, phase, total) {
+    const title = document.getElementById('status-title');
+    const progressText = document.getElementById('status-progress');
+    const etaText = document.getElementById('status-eta');
+    const rubrique = state.categoryCount > 1
+      ? ` (${state.categoryIndex + 1}/${state.categoryCount})`
+      : '';
+
+    if (phase === 'scanning') {
+      const found = state.scanFound || 0;
+      const expected = state.scanExpected || 0;
+      title.textContent = `Repérage des exigences ${state.scanCategory}${rubrique}`;
+      setProgress(expected > 0 ? found / expected : null);
+      progressText.textContent = `${found} / ${expected} exigences repérées`;
+      etaText.textContent = estimateStart(state.phaseStartedAt, found, expected);
+    } else if (phase === 'loading') {
+      title.textContent = `Chargement de la rubrique ${state.scanCategory}${rubrique}`;
+      setProgress(null);
+      progressText.textContent = `${state.scanExpected} exigences à remplir dans cette rubrique`;
+      etaText.textContent = 'Le repérage des exigences démarre dès que la page est affichée';
+    } else {
+      title.textContent = 'Connexion à la page CERQUAL...';
+      setProgress(null);
+      progressText.textContent = `${total} exigences à remplir`;
+      etaText.textContent = 'Si rien ne se passe, la page CERQUAL va être rechargée automatiquement';
+    }
+  }
+
+  // Estimation du démarrage du remplissage à partir du rythme de repérage observé
+  function estimateStart(startedAt, found, expected) {
+    const elapsed = Date.now() - (startedAt || Date.now());
+    if (found < 2 || elapsed < 1500 || found >= expected) {
+      return 'Le remplissage démarre dès que toutes les exigences sont repérées';
+    }
+    const seconds = Math.ceil((elapsed / found) * (expected - found) / 1000);
+    return `Démarrage du remplissage dans ~${seconds} s`;
+  }
+
   // Fonction pour afficher la synthèse des résultats
   function displayResultsSummary(results) {
     const summaryDiv = document.getElementById('results-summary');
@@ -336,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
       loadedData = groupedRows;
       
       // Afficher les infos et le bouton de lancement
-      fileInfoText.textContent = `✔ Fichier chargé : ${validRows.length} lignes à traiter`;
+      fileInfoText.textContent = `✔ Fichier chargé : ${validRows.length} exigences à remplir dans ${categoryOrder.length} rubrique(s)`;
       uploadButton.style.display = 'none';
       fileLoadedSection.style.display = 'block';
       
@@ -362,10 +425,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Maintenant on sauvegarde dans le storage pour déclencher le job
     // ET on initialise jobResults
-    chrome.storage.local.set({ 
-      jobData: loadedData, 
+    chrome.storage.local.set({
+      jobData: loadedData,
       jobIndex: 0,
       jobStatus: 'starting',
+      jobPhase: 'connecting',
+      phaseStartedAt: Date.now(),
       currentIndex: 0,
       totalLines: loadedData.length,
       currentCode: '',
@@ -374,8 +439,25 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log("✓ Job démarré !");
       // La popup va se mettre à jour automatiquement via le listener
       updateJobStatus();
+      ensureContentScript();
     });
   });
+
+  // Si l'onglet était ouvert avant l'installation ou le rechargement de l'extension, il n'a pas
+  // de content script et le job ne démarre jamais. On le recharge : au chargement, le content
+  // script trouve le job en attente et le reprend.
+  function ensureContentScript() {
+    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+      const tab = tabs[0];
+      if (!tab) return;
+      chrome.tabs.sendMessage(tab.id, { type: 'ping' }, function(response) {
+        if (chrome.runtime.lastError || !response) {
+          console.log("Content script absent, rechargement de l'onglet CERQUAL");
+          chrome.tabs.reload(tab.id);
+        }
+      });
+    });
+  }
   
   // 9. Gestion du bouton "Arrêter"
   stopJobButton.addEventListener('click', function() {
@@ -387,7 +469,8 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log("✓ Job arrêté");
       // Ne pas nettoyer jobResults, juste les données temporaires
       setTimeout(() => {
-        chrome.storage.local.remove(['jobData', 'jobIndex', 'currentIndex', 'totalLines', 'currentCode', 'needsManualScroll', 'awaitingNavigation', 'pageHidden']);
+        chrome.storage.local.remove(['jobData', 'jobIndex', 'currentIndex', 'totalLines', 'currentCode', 'needsManualScroll', 'awaitingNavigation', 'pageHidden',
+          'jobPhase', 'phaseStartedAt', 'scanCategory', 'scanFound', 'scanExpected', 'categoryIndex', 'categoryCount']);
         updateJobStatus();
       }, 1000);
     });

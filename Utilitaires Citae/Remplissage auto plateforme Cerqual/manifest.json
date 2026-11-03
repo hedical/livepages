@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
     "name": "AutoCerqual",
-    "version": "1.1",
-    "description": "Automatise le remplissage des rubriques.",
+    "version": "1.2",
+    "description": "Remplit automatiquement les rubriques CERQUAL à partir de l'export AnalyzTech.",
     "action": {
       "default_popup": "popup.html",
       "default_icon": "logo.png"

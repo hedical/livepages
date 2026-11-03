@@ -37,6 +37,12 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   }
 });
 
+// La popup vérifie qu'un content script répond avant de lancer le job. Sans réponse (extension
+// rechargée alors que l'onglet était déjà ouvert), elle recharge l'onglet pour l'injecter.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.type === 'ping') sendResponse({ ok: true });
+});
+
 // Signale à la popup quand l'onglet passe en arrière-plan : Chrome y ralentit les timers
 // et la liste virtualisée n'est plus rendue, le traitement se bloque.
 document.addEventListener('visibilitychange', () => {
@@ -120,6 +126,7 @@ async function processJobLine(jobData, jobIndex) {
   // Étape 1: Navigation
   if (currentCategory !== category) {
     console.log(`Navigation vers la catégorie ${category}...`);
+    await setPhase('loading', categoryProgress(jobData, category));
     window.location.href = `https://outil-eval.cerqual-pro.net/detail/${projectId}/rapport/rubriques/${category}`;
     return true;
   }
@@ -127,11 +134,15 @@ async function processJobLine(jobData, jobIndex) {
   // Étape 2: Premier passage sur cette page → attendre le chargement, inventorier les codes,
   // puis trier les lignes de la catégorie dans l'ordre de la page (on ne fera plus que descendre)
   if (!pageCodes) {
+    const progress = categoryProgress(jobData, category);
     console.log("%c⏳ Attente du chargement de la page...", 'color: blue; font-weight: bold;');
+    await setPhase('loading', progress);
     await waitForPageLoad();
-    pageCodes = await scanPage();
+    await setPhase('scanning', { ...progress, scanFound: 0 });
+    pageCodes = await scanPage(categoryCodes(jobData, category));
     console.log(`%c✅ ${pageCodes.length} codes présents sur la page`, 'color: green; font-weight: bold;');
     await sortCategoryRowsByPageOrder(jobData, jobIndex, category);
+    await setPhase('filling');
     return false; // La boucle relit jobData, désormais trié
   }
 
@@ -147,6 +158,35 @@ async function processJobLine(jobData, jobIndex) {
   }
   await chrome.storage.local.set({ jobIndex: jobIndex + 1 });
   return false;
+}
+
+/**
+ * Phase affichée par la popup pendant l'attente : 'loading' (chargement de la rubrique),
+ * 'scanning' (repérage des exigences), 'filling' (remplissage).
+ */
+async function setPhase(phase, extra = {}) {
+  await chrome.storage.local.set({ jobPhase: phase, phaseStartedAt: Date.now(), ...extra });
+}
+
+/**
+ * Codes du fichier appartenant à la catégorie, sans doublon.
+ */
+function categoryCodes(jobData, category) {
+  const codes = jobData.map(row => String(row[0] ?? '').trim()).filter(code => code.split('.')[0] === category);
+  return [...new Set(codes)];
+}
+
+/**
+ * Position de la catégorie dans le job et nombre d'exigences attendues, pour le loader de la popup.
+ */
+function categoryProgress(jobData, category) {
+  const categories = [...new Set(jobData.map(row => String(row[0] ?? '').trim().split('.')[0]))];
+  return {
+    scanCategory: category,
+    scanExpected: categoryCodes(jobData, category).length,
+    categoryIndex: categories.indexOf(category),
+    categoryCount: categories.length
+  };
 }
 
 /**
@@ -435,10 +475,11 @@ async function scrollListDown(list) {
 }
 
 /**
- * Parcourt toute la page une fois pour inventorier les codes présents, dans l'ordre.
- * Laisse la liste en haut.
+ * Parcourt la page pour inventorier les codes présents, dans l'ordre.
+ * S'arrête dès que tous les codes attendus (ceux du fichier) ont été vus : les suivants ne servent
+ * pas au tri. Publie l'avancement pour le loader de la popup. Laisse la liste en haut.
  */
-async function scanPage() {
+async function scanPage(expectedCodes = []) {
   const list = getList();
   if (!list) {
     console.warn("⚠️ Conteneur '.ReactVirtualized__List' introuvable, inventaire impossible");
@@ -447,10 +488,19 @@ async function scanPage() {
 
   await scrollListTo(list, 0);
   const codes = [];
+  const remaining = new Set(expectedCodes);
+  let reportedFound = 0;
   for (let step = 0; step < MAX_SCAN_STEPS && !stopRequested; step++) {
     for (const code of getRenderedCodes()) {
       if (!codes.includes(code)) codes.push(code);
+      remaining.delete(code);
     }
+    const found = expectedCodes.length - remaining.size;
+    if (found !== reportedFound) {
+      reportedFound = found;
+      await chrome.storage.local.set({ scanFound: found });
+    }
+    if (expectedCodes.length > 0 && remaining.size === 0) break;
     if (!(await scrollListDown(list))) break;
   }
   await scrollListTo(list, 0);

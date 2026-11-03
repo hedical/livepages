@@ -1,260 +1,464 @@
-/* Reset et styles de base */
+/* Charte Citae : vert #78BE20, gris #4A4A4A */
+:root {
+    --citae-green: #78BE20;
+    --citae-green-dark: #5E9A14;
+    --citae-green-soft: #EEF7E2;
+    --citae-grey: #4A4A4A;
+    --ink: #1F1F1F;
+    --muted: #6B6B6B;
+    --line: #E3E3E3;
+    --bg: #F7F7F5;
+    --card: #FFFFFF;
+
+    /* Couleur par famille d'outil */
+    --tool-citae: var(--citae-green);
+    --tool-analyztech: #2A6FB0;
+    --tool-cerqual: var(--citae-grey);
+    --tool-manuel: #A3A3A3;
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-    background-color: #f5f5f5;
-    color: #333;
-    line-height: 1.6;
+    font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    background-color: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
 }
 
-/* Container principal */
 .hub-container {
-    max-width: 1400px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 0 2rem;
 }
 
-/* Header */
+/* En-tête */
 .hub-header {
+    background: var(--card);
+    border-bottom: 4px solid var(--citae-green);
+}
+
+.hub-header-inner {
     display: flex;
     align-items: center;
-    gap: 3rem;
-    margin-bottom: 3rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid #e0e0e0;
+    gap: 1.25rem;
+    padding-top: 1.1rem;
+    padding-bottom: 1.1rem;
 }
 
-.hub-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #1a1a1a;
-    white-space: nowrap;
-}
-
-/* Logo Citae */
 .hub-logo-link {
     display: flex;
     align-items: center;
 }
 
 .hub-logo {
-    height: 40px;
+    height: 38px;
     width: auto;
 }
 
-/* Barre de recherche */
-.search-box {
-    position: relative;
-    display: flex;
-    align-items: center;
-    min-width: 250px;
-    margin-left: auto;
-}
-
-.search-icon {
-    position: absolute;
-    left: 12px;
-    color: #999;
-    pointer-events: none;
-}
-
-.search-input {
-    width: 100%;
-    padding: 0.6rem 0.6rem 0.6rem 2.5rem;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.search-input:focus {
-    border-color: #999;
-}
-
-.search-input::placeholder {
-    color: #999;
-}
-
-/* Grille des outils */
-.tools-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.5rem;
-}
-
-/* Carte d'outil */
-.tool-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    border: 1px solid #e8e8e8;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    display: block;
-    text-decoration: none;
-    color: inherit;
-    min-height: 180px;
-}
-
-.tool-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    border-color: #d0d0d0;
-}
-
-/* Icône de l'outil */
-.tool-icon {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #f0f8f0;
-    border-radius: 10px;
-}
-
-/* Titre de l'outil */
-.tool-title {
-    font-size: 1.05rem;
+.hub-header-label {
     font-weight: 600;
-    color: #1a1a1a;
-    margin-bottom: 0.5rem;
-    line-height: 1.3;
+    color: var(--citae-grey);
+    padding-left: 1.25rem;
+    border-left: 1px solid var(--line);
 }
 
-/* Description de l'outil */
-.tool-description {
-    font-size: 0.875rem;
-    color: #666;
-    line-height: 1.5;
+/* Introduction */
+.intro {
+    padding: 3rem 0 1.5rem;
+    max-width: 760px;
 }
 
-/* Badge Beta */
-.tool-beta {
-    position: relative;
-}
-
-.beta-badge {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    background: #f0f0f0;
-    color: #666;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+.eyebrow {
+    color: var(--citae-green-dark);
+    font-weight: 700;
+    font-size: 0.85rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
 }
 
-/* Badge de temps */
-.time-badge {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+.intro h1 {
+    font-size: 2.4rem;
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--ink);
+    margin-bottom: 1rem;
+}
+
+.intro-text {
+    color: var(--muted);
+    font-size: 1.05rem;
+}
+
+/* Couleur d'outil, portée par data-tool */
+[data-tool="citae"] { --tool: var(--tool-citae); }
+[data-tool="analyztech"] { --tool: var(--tool-analyztech); }
+[data-tool="cerqual"] { --tool: var(--tool-cerqual); }
+[data-tool="manuel"] { --tool: var(--tool-manuel); }
+
+.tool-chip {
+    display: inline-block;
     font-size: 0.75rem;
     font-weight: 600;
-    padding: 0.35rem 0.65rem;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    color: var(--tool);
+    background: color-mix(in srgb, var(--tool) 10%, white);
+    border: 1px solid color-mix(in srgb, var(--tool) 35%, white);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    white-space: nowrap;
 }
 
-/* Carte "Ajouter" */
-.tool-add {
-    border: 2px dashed #d0d0d0;
-    background: transparent;
+/* Parcours */
+.journey {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 1.75rem 1.5rem 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.phases {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.phase {
+    grid-column: span var(--span);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--citae-grey);
+    border-bottom: 2px solid var(--citae-green);
+    padding-bottom: 0.35rem;
+    text-align: center;
+}
+
+.journey-track {
+    position: relative;
+    padding-bottom: 3.5rem;
+}
+
+.journey-curve {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+}
+
+#curvePath {
+    fill: none;
+    stroke: var(--citae-green);
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+#loopPath {
+    fill: none;
+    stroke: var(--citae-grey);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 5;
+}
+
+#loopArrow path {
+    fill: var(--citae-grey);
+}
+
+.steps {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+    position: relative;
+}
+
+/* Une étape sur deux plus bas : la courbe ondule entre les pastilles */
+.step:nth-child(even) {
+    margin-top: 4.5rem;
+}
+
+.step a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    padding: 0.25rem 0.35rem 0.5rem;
+    border-radius: 12px;
+    transition: background-color 0.2s;
+}
+
+.step a:hover,
+.step a:focus-visible {
+    background: var(--citae-green-soft);
+    outline: none;
+}
+
+.step-dot {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 180px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: white;
+    background: var(--tool);
+    border: 4px solid var(--card);
+    box-shadow: 0 0 0 2px var(--tool);
+    position: relative;
+    z-index: 1;
+    transition: transform 0.2s;
 }
 
-.tool-add:hover {
-    border-color: #999;
-    background: #fafafa;
+.step a:hover .step-dot {
+    transform: scale(1.1);
 }
 
-.add-icon {
-    font-size: 3rem;
-    color: #ccc;
-    font-weight: 300;
+.step-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    max-width: 9.5rem;
+    background: var(--card);
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-    .hub-header {
-        flex-wrap: wrap;
-        gap: 1.5rem;
-    }
-    
-    .search-box {
-        min-width: 200px;
-    }
-    
-    .tools-grid {
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    }
+.step .tool-chip {
+    white-space: normal;
 }
 
-@media (max-width: 768px) {
+.loop-note {
+    font-size: 0.85rem;
+    color: var(--citae-grey);
+    text-align: right;
+    margin-top: -0.5rem;
+}
+
+.loop-icon {
+    font-weight: 800;
+    color: var(--citae-green-dark);
+}
+
+.legend {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.legend li::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--tool);
+    margin-right: 0.4rem;
+}
+
+/* Fiches des briques */
+.modules {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 3rem;
+}
+
+.modules h2 {
+    grid-column: 1 / -1;
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.module {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--tool);
+    border-radius: 12px;
+    padding: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    scroll-margin-top: 1.5rem;
+    transition: box-shadow 0.3s;
+}
+
+.module.is-target {
+    box-shadow: 0 0 0 3px var(--citae-green);
+}
+
+.module-head {
+    display: flex;
+    gap: 0.9rem;
+    align-items: flex-start;
+}
+
+.module-num {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--tool);
+    color: white;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.module h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-top: 0.35rem;
+}
+
+.module-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.module-body dt {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.module-body dd {
+    font-size: 0.92rem;
+}
+
+.module-tip {
+    font-size: 0.85rem;
+    background: var(--citae-green-soft);
+    border-left: 3px solid var(--citae-green);
+    padding: 0.6rem 0.8rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.module-foot {
+    margin-top: auto;
+}
+
+.btn {
+    display: inline-block;
+    background: var(--citae-green);
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    padding: 0.6rem 1.1rem;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+
+.btn:hover,
+.btn:focus-visible {
+    background: var(--citae-green-dark);
+}
+
+.link-missing {
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: italic;
+}
+
+.hub-footer {
+    border-top: 1px solid var(--line);
+    padding: 1.25rem 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+/* Parcours vertical sur écran étroit */
+@media (max-width: 860px) {
     .hub-container {
-        padding: 1rem;
+        padding: 0 1rem;
     }
-    
-    .hub-header {
-        gap: 1rem;
+
+    .intro {
+        padding-top: 2rem;
     }
-    
-    .hub-title {
-        font-size: 1.25rem;
+
+    .intro h1 {
+        font-size: 1.8rem;
     }
-    
-    .tools-grid {
+
+    .phases,
+    .journey-curve {
+        display: none;
+    }
+
+    .journey {
+        padding: 1.25rem 1rem;
+    }
+
+    .journey-track {
+        padding-bottom: 0;
+    }
+
+    .steps {
+        grid-template-columns: 1fr;
+        gap: 0;
+        border-left: 3px solid var(--citae-green);
+        margin-left: 1.3rem;
+    }
+
+    .step:nth-child(even) {
+        margin-top: 0;
+    }
+
+    .step a {
+        flex-direction: row;
+        flex-wrap: wrap;
+        text-align: left;
+        gap: 0.35rem 0.75rem;
+        margin-left: -1.55rem;
+        padding: 0.5rem 0.5rem 0.5rem 0;
+    }
+
+    .step-title {
+        max-width: none;
+        flex: 1;
+        min-width: 10rem;
+        background: none;
+    }
+
+    .step .tool-chip {
+        margin-left: 3.3rem;
+        margin-top: -0.35rem;
+    }
+
+    .loop-note {
+        text-align: left;
+        margin-top: 0.75rem;
+    }
+
+    .modules {
         grid-template-columns: 1fr;
     }
-    
-    .search-box {
-        width: 100%;
-    }
 }
-
-/* Animations */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.tool-card {
-    animation: fadeIn 0.4s ease-out;
-}
-
-.tool-card:nth-child(1) { animation-delay: 0.05s; }
-.tool-card:nth-child(2) { animation-delay: 0.1s; }
-.tool-card:nth-child(3) { animation-delay: 0.15s; }
-.tool-card:nth-child(4) { animation-delay: 0.2s; }
-.tool-card:nth-child(5) { animation-delay: 0.25s; }
-.tool-card:nth-child(6) { animation-delay: 0.3s; }
-.tool-card:nth-child(7) { animation-delay: 0.35s; }
-.tool-card:nth-child(8) { animation-delay: 0.4s; }
-.tool-card:nth-child(9) { animation-delay: 0.45s; }
-.tool-card:nth-child(10) { animation-delay: 0.5s; }
-.tool-card:nth-child(11) { animation-delay: 0.55s; }
-.tool-card:nth-child(12) { animation-delay: 0.6s; }
