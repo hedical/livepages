@@ -4,25 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Remplissage auto plateforme CERQUAL - Utilitaires Citae</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../Retour examinateur vers Excel/style.css">
     <style>
         .extension-hero {
-            text-align: center;
-            padding: 3rem 2rem;
-            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-            border-radius: 16px;
             margin-bottom: 2rem;
-        }
-        .extension-hero .tool-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
         }
         .download-section {
             background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
             border-radius: 12px;
             padding: 2rem;
             margin-bottom: 2rem;
-            box-shadow: var(--shadow-lg);
+        }
+        .download-section h2 {
+            font-size: 1.4rem;
+            font-weight: 800;
         }
         .download-btn {
             display: inline-flex;
@@ -51,9 +51,9 @@
             counter-increment: step;
             padding: 1.25rem;
             margin-bottom: 1rem;
-            background: var(--card-background);
+            background: #FAFAF8;
+            border: 1px solid var(--border-color);
             border-radius: 10px;
-            box-shadow: var(--shadow);
             padding-left: 4rem;
             position: relative;
         }
@@ -84,8 +84,8 @@
             font-size: 0.95rem;
         }
         .info-box {
-            background: #fef3c7;
-            border-left: 4px solid #f59e0b;
+            background: var(--primary-soft);
+            border-left: 4px solid var(--primary-color);
             padding: 1rem 1.25rem;
             border-radius: 0 8px 8px 0;
             margin: 1.5rem 0;
@@ -99,20 +99,26 @@
     </style>
 </head>
 <body>
+    <div class="citae-bar">
+        <div class="citae-bar-inner">
+            <a href="../index.html"><img src="../citae-logo.png" alt="Citae"></a>
+            <span class="citae-bar-label"><a href="../index.html">Utilitaires</a></span>
+        </div>
+    </div>
     <div class="container">
         <header>
             <div style="margin-bottom: 1rem;">
-                <a href="../index.html" class="back-link">← Retour aux outils</a>
+                <a href="../index.html#etape-4" class="back-link">← Retour au parcours</a>
             </div>
-            
+
             <div class="extension-hero">
-                <div class="tool-icon">🤖</div>
-                <h1>Remplissage auto plateforme CERQUAL</h1>
-                <p class="subtitle">Connectez-vous sur votre projet CERQUAL et importez l'analyse des pièces écrites exportée d'AnalyzTech. L'extension Chrome automatise le remplissage des rubriques.</p>
+                <p class="eyebrow"><span class="step-pill">4</span>Auto-évaluation</p>
+                <h1>Remplissage automatique de CERQUAL</h1>
+                <p class="subtitle">Connectez-vous sur votre projet CERQUAL et importez l'analyse des pièces écrites exportée d'AnalyzTech. L'extension Chrome AutoCerqual remplit les rubriques à votre place.</p>
             </div>
 
             <section class="download-section">
-                <h2>📥 Télécharger l'extension</h2>
+                <h2>Télécharger l'extension</h2>
                 <p style="margin: 1rem 0; color: var(--text-secondary);">Téléchargez l'extension Chrome AutoCerqual pour automatiser le remplissage des rubriques sur la plateforme CERQUAL.</p>
                 <a href="AutoCerqual-extension.zip" class="download-btn" download>
                     📦 Télécharger AutoCerqual (ZIP)
@@ -120,7 +126,7 @@
             </section>
 
             <section class="download-section">
-                <h2>📋 Comment installer l'extension</h2>
+                <h2>Installer l'extension</h2>
                 <ol class="steps-list">
                     <li>
                         <strong>Téléchargez l'extension</strong>
@@ -153,6 +159,10 @@
                 </div>
             </section>
         </header>
+
+        <footer>
+            <p>Citae · Utilitaires NF Habitat</p>
+        </footer>
     </div>
 </body>
 </html>
