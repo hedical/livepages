@@ -167,6 +167,42 @@ body {
     margin: 10px 0;
   }
   
+  /* Barre d'avancement du job */
+  .progress-track {
+    position: relative;
+    height: 8px;
+    background-color: #e3f2fd;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0 10px 10px 10px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  /* Pendant le chargement, on ne connaît pas l'avancement : bande qui défile */
+  .progress-fill.indeterminate {
+    position: absolute;
+    width: 35%;
+    animation: indeterminate 1.2s ease-in-out infinite;
+  }
+
+  @keyframes indeterminate {
+    0% { left: -35%; }
+    100% { left: 100%; }
+  }
+
+  .eta-text {
+    color: #1976D2;
+    font-size: 12px;
+    margin: 4px 0 8px 0;
+  }
+
   .code-info {
     font-size: 14px;
     color: #666;
@@ -403,4 +439,4 @@ body {
   
   .download-button:active {
     transform: translateY(0);
-  }
+  }

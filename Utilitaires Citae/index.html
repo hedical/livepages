@@ -3,67 +3,302 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Utilitaires Citae</title>
+    <title>Utilitaires NF Habitat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="hub-style.css">
 </head>
 <body>
-    <div class="hub-container">
-        <header class="hub-header">
-            <a href="https://citae.fr" target="_blank" class="hub-logo-link">
-                <img src="https://citae.fr/wp-content/themes/citae/images/logo_black.svg" alt="Citae" class="hub-logo">
+    <header class="hub-header">
+        <div class="hub-container hub-header-inner">
+            <a href="https://citae.fr" target="_blank" rel="noopener" class="hub-logo-link">
+                <img src="citae-logo.png" alt="Citae" class="hub-logo">
             </a>
-            <h1 class="hub-title">Utilitaires</h1>
-            <div class="search-box">
-                <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM18 18l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <span class="hub-header-label">Utilitaires</span>
+        </div>
+    </header>
+
+    <main class="hub-container">
+        <section class="intro">
+            <p class="eyebrow">Certification NF Habitat</p>
+            <h1>Quel outil, à quel moment&nbsp;?</h1>
+            <p class="intro-text">Une opération NF Habitat passe par sept étapes, de l'ouverture du projet au renvoi à l'évaluateur. Chaque étape a sa brique : la plateforme projet Citae, CERQUAL, AnalyzTech ou un utilitaire Citae. Cliquez sur une étape pour savoir à quoi sert la brique et comment l'utiliser.</p>
+        </section>
+
+        <!-- Parcours : la courbe est tracée en JS entre les pastilles des étapes -->
+        <section class="journey" aria-label="Parcours d'une opération NF Habitat">
+            <div class="phases" aria-hidden="true">
+                <span class="phase" style="--span: 2">Lancement</span>
+                <span class="phase" style="--span: 2">Auto-évaluation</span>
+                <span class="phase" style="--span: 3">Retour de l'évaluateur</span>
+            </div>
+
+            <div class="journey-track">
+                <svg class="journey-curve" aria-hidden="true">
+                    <defs>
+                        <marker id="loopArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                            <path d="M 0 0 L 10 5 L 0 10 z"/>
+                        </marker>
+                    </defs>
+                    <path id="curvePath"/>
+                    <path id="loopPath" marker-end="url(#loopArrow)"/>
                 </svg>
-                <input type="text" placeholder="Rechercher un outil..." class="search-input" id="searchInput">
+
+                <ol class="steps">
+                    <li class="step" data-tool="citae"><a href="#etape-1">
+                        <span class="step-dot">1</span>
+                        <span class="step-title">Créer le projet</span>
+                        <span class="tool-chip">Plateforme projet Citae</span>
+                    </a></li>
+                    <li class="step" data-tool="cerqual"><a href="#etape-2">
+                        <span class="step-dot">2</span>
+                        <span class="step-title">Créer le profil NF</span>
+                        <span class="tool-chip">CERQUAL</span>
+                    </a></li>
+                    <li class="step" data-tool="analyztech"><a href="#etape-3">
+                        <span class="step-dot">3</span>
+                        <span class="step-title">Évaluer les pièces écrites</span>
+                        <span class="tool-chip">AnalyzTech</span>
+                    </a></li>
+                    <li class="step" data-tool="citae"><a href="#etape-4">
+                        <span class="step-dot">4</span>
+                        <span class="step-title">Remplir CERQUAL</span>
+                        <span class="tool-chip">Extension AutoCerqual</span>
+                    </a></li>
+                    <li class="step" data-tool="citae"><a href="#etape-5">
+                        <span class="step-dot">5</span>
+                        <span class="step-title">Extraire le retour de l'évaluateur</span>
+                        <span class="tool-chip">Utilitaire Citae</span>
+                    </a></li>
+                    <li class="step" data-tool="analyztech"><a href="#etape-6">
+                        <span class="step-dot">6</span>
+                        <span class="step-title">Réimporter avec les nouveaux documents</span>
+                        <span class="tool-chip">AnalyzTech</span>
+                    </a></li>
+                    <li class="step" data-tool="manuel"><a href="#etape-7">
+                        <span class="step-dot">7</span>
+                        <span class="step-title">Renvoyer à l'évaluateur</span>
+                        <span class="tool-chip">Étape manuelle</span>
+                    </a></li>
+                </ol>
             </div>
-        </header>
 
-        <main class="tools-grid">
-            <!-- Retour examinateur vers Excel -->
-            <a href="Retour examinateur vers Excel/retour-examinateur.html" class="tool-card">
-                <span class="time-badge">⏱️ ~10 min</span>
-                <div class="tool-icon">📄</div>
-                <h3 class="tool-title">Retour examinateur vers Excel</h3>
-                <p class="tool-description">Transformez votre synthèse de non-conformités NF Habitat en un rapport XLS exploitable. Uploadez votre PDF, le système génère automatiquement les documents par code d'exigence et analyse les données.</p>
-            </a>
+            <p class="loop-note"><span class="loop-icon" aria-hidden="true">↺</span> Les étapes 5 à 7 se répètent à chaque retour de l'évaluateur, jusqu'à la levée de toutes les non-conformités.</p>
 
-            <!-- Remplissage auto plateforme CERQUAL -->
-            <a href="Remplissage auto plateforme Cerqual/remplissage-cerqual.html" class="tool-card">
-                <div class="tool-icon">🤖</div>
-                <h3 class="tool-title">Remplissage auto plateforme CERQUAL</h3>
-                <p class="tool-description">Connectez-vous sur votre projet CERQUAL et importez votre analyse des pièces écrites. Téléchargez l'extension Chrome pour automatiser le remplissage des rubriques.</p>
-            </a>
+            <ul class="legend" aria-label="Légende">
+                <li data-tool="citae">Outil Citae</li>
+                <li data-tool="analyztech">AnalyzTech</li>
+                <li data-tool="cerqual">Plateforme CERQUAL</li>
+                <li data-tool="manuel">Sans outil</li>
+            </ul>
+        </section>
 
-            <!-- Ajouter un nouvel outil -->
-            <div class="tool-card tool-add">
-                <div class="add-icon">+</div>
-            </div>
-        </main>
-    </div>
+        <!-- Fiches des briques, dans l'ordre du parcours -->
+        <section class="modules" aria-label="Les briques en détail">
+            <h2>Les briques en détail</h2>
+
+            <article class="module" id="etape-1" data-tool="citae">
+                <div class="module-head">
+                    <span class="module-num">1</span>
+                    <div>
+                        <span class="tool-chip">Plateforme projet Citae</span>
+                        <h3>Créer le projet sur la plateforme projet Citae</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Ouvrir l'opération : profil de l'opération, chiffrage, proposition et circuit de validation. La plateforme enregistre aussi la maturité du maître d'ouvrage vis-à-vis de la certification.</dd></div>
+                    <div><dt>Quand</dt><dd>À l'ouverture de l'affaire, avant toute analyse.</dd></div>
+                    <div><dt>Vous partez de → vous obtenez</dt><dd>Les informations de l'opération → un projet créé et profilé.</dd></div>
+                </dl>
+                <div class="module-foot" data-link="plateforme-citae">
+                    <a class="btn" href="#" target="_blank" rel="noopener">Ouvrir la plateforme projet</a>
+                    <span class="link-missing">Accès : demandez le lien à Claire Meunier.</span>
+                </div>
+            </article>
+
+            <article class="module" id="etape-2" data-tool="cerqual">
+                <div class="module-head">
+                    <span class="module-num">2</span>
+                    <div>
+                        <span class="tool-chip">CERQUAL</span>
+                        <h3>Créer le profil NF sur CERQUAL</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Déclarer l'opération sur l'outil d'évaluation CERQUAL. Le profil fixe les rubriques et les exigences NF Habitat applicables au projet.</dd></div>
+                    <div><dt>Quand</dt><dd>Avant l'évaluation : les rubriques créées ici seront remplies automatiquement à l'étape 4.</dd></div>
+                    <div><dt>Vous partez de → vous obtenez</dt><dd>Le projet créé → un rapport CERQUAL (auto-évaluation ou rapport à blanc) prêt à être rempli.</dd></div>
+                </dl>
+                <div class="module-foot">
+                    <a class="btn" href="https://outil-eval.cerqual-pro.net" target="_blank" rel="noopener">Ouvrir CERQUAL</a>
+                </div>
+            </article>
+
+            <article class="module" id="etape-3" data-tool="analyztech">
+                <div class="module-head">
+                    <span class="module-num">3</span>
+                    <div>
+                        <span class="tool-chip">AnalyzTech</span>
+                        <h3>Évaluation CERQUAL automatique sur AnalyzTech</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Contrôler les pièces écrites (CCTP, notices, études…) critère par critère avec l'autocontrôle NF Habitat. Les résultats arrivent au fur et à mesure : vous pouvez les relire pendant que l'analyse tourne.</dd></div>
+                    <div><dt>Quand</dt><dd>Dès réception du DCE ou des pièces du maître d'ouvrage.</dd></div>
+                    <div><dt>Vous partez de → vous obtenez</dt><dd>Les pièces du projet → l'export Excel de l'autocontrôle, à relire avant l'étape 4.</dd></div>
+                    <div><dt>Durée</dt><dd>Environ 10 minutes, selon le nombre de critères.</dd></div>
+                </dl>
+                <p class="module-tip">Relisez les résultats avec l'œil du client : un maître d'ouvrage qui intègre déjà la certification (processus 2 ou 3) n'appelle pas la même sévérité qu'un premier projet.</p>
+                <div class="module-foot">
+                    <a class="btn" href="https://analyztech.com/auth/company/btp-consultants" target="_blank" rel="noopener">Se connecter à AnalyzTech</a>
+                </div>
+            </article>
+
+            <article class="module" id="etape-4" data-tool="citae">
+                <div class="module-head">
+                    <span class="module-num">4</span>
+                    <div>
+                        <span class="tool-chip">Extension AutoCerqual</span>
+                        <h3>Remplissage automatique de CERQUAL</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Reporter l'export AnalyzTech dans les rubriques CERQUAL : résultat et commentaire de chaque exigence, sans saisie manuelle. Fonctionne sur l'auto-évaluation comme sur un rapport à blanc.</dd></div>
+                    <div><dt>Quand</dt><dd>Une fois l'export AnalyzTech relu et corrigé.</dd></div>
+                    <div><dt>Vous partez de → vous obtenez</dt><dd>L'export Excel AnalyzTech → le rapport CERQUAL rempli, avec un rapport détaillé des réussites et des échecs.</dd></div>
+                    <div><dt>Durée</dt><dd>Environ 5 minutes pour 120 critères. Gardez l'onglet CERQUAL affiché pendant le remplissage.</dd></div>
+                </dl>
+                <div class="module-foot">
+                    <a class="btn" href="Remplissage auto plateforme Cerqual/remplissage-cerqual.html">Installer l'extension</a>
+                </div>
+            </article>
+
+            <article class="module" id="etape-5" data-tool="citae">
+                <div class="module-head">
+                    <span class="module-num">5</span>
+                    <div>
+                        <span class="tool-chip">Utilitaire Citae</span>
+                        <h3>Extraction du retour de l'évaluateur</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Transformer la synthèse des non-conformités (PDF) de l'évaluateur en Excel : une ligne par exigence et par typologie (collectif, individuel), où vous ajoutez vos commentaires et justificatifs.</dd></div>
+                    <div><dt>Quand</dt><dd>À chaque réception d'une synthèse des non-conformités.</dd></div>
+                    <div><dt>Vous partez de → vous obtenez</dt><dd>Le PDF de l'évaluateur → un Excel de levée des non-conformités.</dd></div>
+                    <div><dt>Durée</dt><dd>Environ 10 minutes.</dd></div>
+                </dl>
+                <div class="module-foot">
+                    <a class="btn" href="Retour examinateur vers Excel/retour-examinateur.html">Ouvrir l'utilitaire</a>
+                </div>
+            </article>
+
+            <article class="module" id="etape-6" data-tool="analyztech">
+                <div class="module-head">
+                    <span class="module-num">6</span>
+                    <div>
+                        <span class="tool-chip">AnalyzTech</span>
+                        <h3>Réimport dans AnalyzTech avec les nouveaux documents</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Ajouter à l'autocontrôle les pièces complémentaires (nouveaux indices, documents d'exécution, justificatifs) et demander à AnalyzTech les exigences qu'elles impactent. Vous gardez l'historique des versions au même endroit.</dd></div>
+                    <div><dt>Quand</dt><dd>Quand de nouvelles pièces arrivent pour lever des non-conformités.</dd></div>
+                    <div><dt>Vous partez de → vous obtenez</dt><dd>L'autocontrôle et les nouvelles pièces → un tableau des lignes impactées, à reporter dans l'Excel ou dans CERQUAL.</dd></div>
+                </dl>
+                <div class="module-foot">
+                    <a class="btn" href="https://analyztech.com/auth/company/btp-consultants" target="_blank" rel="noopener">Se connecter à AnalyzTech</a>
+                </div>
+            </article>
+
+            <article class="module" id="etape-7" data-tool="manuel">
+                <div class="module-head">
+                    <span class="module-num">7</span>
+                    <div>
+                        <span class="tool-chip">Étape manuelle</span>
+                        <h3>Renvoi à l'évaluateur</h3>
+                    </div>
+                </div>
+                <dl class="module-body">
+                    <div><dt>À quoi ça sert</dt><dd>Transmettre à l'évaluateur l'Excel complété et les justificatifs, pour qu'il statue sur la levée des non-conformités.</dd></div>
+                    <div><dt>Quand</dt><dd>Une fois toutes les lignes de l'Excel traitées.</dd></div>
+                    <div><dt>Ensuite</dt><dd>S'il reste des non-conformités, sa nouvelle synthèse repart à l'étape 5.</dd></div>
+                </dl>
+            </article>
+        </section>
+    </main>
+
+    <footer class="hub-footer">
+        <div class="hub-container">Citae · Utilitaires NF Habitat</div>
+    </footer>
 
     <script>
-        // Recherche en temps réel
-        document.getElementById('searchInput').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
-            const cards = document.querySelectorAll('.tool-card');
-            
-            cards.forEach(card => {
-                if (card.classList.contains('tool-add')) return;
-                
-                const title = card.querySelector('.tool-title')?.textContent.toLowerCase() || '';
-                const description = card.querySelector('.tool-description')?.textContent.toLowerCase() || '';
-                
-                if (title.includes(searchTerm) || description.includes(searchTerm)) {
-                    card.style.display = 'block';
-                } else {
-                    card.style.display = 'none';
+        // Liens à renseigner : laissés vides, la fiche affiche un message à la place du bouton
+        const LIENS = {
+            'plateforme-citae': ''
+        };
+
+        document.querySelectorAll('[data-link]').forEach(foot => {
+            const url = LIENS[foot.dataset.link];
+            const btn = foot.querySelector('.btn');
+            const missing = foot.querySelector('.link-missing');
+            if (url) {
+                btn.href = url;
+                missing.remove();
+            } else {
+                btn.remove();
+            }
+        });
+
+        // Courbe du parcours : passe par le centre de chaque pastille, en alternant haut et bas.
+        // Recalculée au redimensionnement ; masquée en vue mobile (parcours vertical).
+        const track = document.querySelector('.journey-track');
+        const svg = track.querySelector('.journey-curve');
+        const curvePath = document.getElementById('curvePath');
+        const loopPath = document.getElementById('loopPath');
+
+        function drawCurve() {
+            const box = track.getBoundingClientRect();
+            svg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+            const points = Array.from(track.querySelectorAll('.step-dot')).map(dot => {
+                const r = dot.getBoundingClientRect();
+                return { x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 };
+            });
+            if (getComputedStyle(svg).display === 'none' || points.length < 7) return;
+
+            let d = `M ${points[0].x} ${points[0].y}`;
+            for (let i = 1; i < points.length; i++) {
+                const a = points[i - 1], b = points[i];
+                const mx = (a.x + b.x) / 2;
+                d += ` C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`;
+            }
+            curvePath.setAttribute('d', d);
+
+            // Boucle de retour 7 → 5 : descend sous l'étiquette de l'étape 7, passe sous toutes
+            // les étapes et remonte sous l'étiquette de l'étape 5
+            const chips = Array.from(track.querySelectorAll('.step .tool-chip')).map(c => c.getBoundingClientRect());
+            const x7 = points[6].x, x5 = points[4].x;
+            const y7 = chips[6].bottom - box.top + 6, y5 = chips[4].bottom - box.top + 8;
+            const bottom = box.height - 14, r = 14;
+            loopPath.setAttribute('d', `M ${x7} ${y7} L ${x7} ${bottom - r} Q ${x7} ${bottom} ${x7 - r} ${bottom}`
+                + ` L ${x5 + r} ${bottom} Q ${x5} ${bottom} ${x5} ${bottom - r} L ${x5} ${y5}`);
+        }
+
+        window.addEventListener('resize', drawCurve);
+        document.fonts.ready.then(drawCurve);
+        drawCurve();
+
+        // Mise en avant de la fiche visée depuis le parcours
+        document.querySelectorAll('.step a').forEach(link => {
+            link.addEventListener('click', () => {
+                const target = document.querySelector(link.getAttribute('href'));
+                document.querySelectorAll('.module.is-target').forEach(m => m.classList.remove('is-target'));
+                if (target) {
+                    target.classList.add('is-target');
+                    setTimeout(() => target.classList.remove('is-target'), 1600);
                 }
             });
         });
-
     </script>
 </body>
 </html>
