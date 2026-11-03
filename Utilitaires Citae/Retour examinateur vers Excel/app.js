@@ -601,6 +601,7 @@ async function processFile(file) {
         // Détection structurelle des exigences : le code est le seul élément
         // de la première colonne du tableau, on le repère par sa position.
         const occurrences = [];
+        const pictogrammes = [];
 
         for (let i = 1; i <= pdfDoc.numPages; i++) {
             const page = await pdfDoc.getPage(i);
@@ -609,12 +610,17 @@ async function processFile(file) {
 
             occurrences.push(...detectCodesOnPage(textContent, viewport, i));
 
+            // Pictogrammes de typologie : dessins vectoriels, absents du texte
+            const operatorList = await page.getOperatorList();
+            pictogrammes.push(...detectTypologiesOnPage(operatorList, viewport, i));
+
             updateProgress(30 + (i / pdfDoc.numPages) * 40, `Extraction page ${i}/${pdfDoc.numPages}...`);
         }
 
         updateProgress(70, "Identification des codes d'exigences...");
 
         const detectedCodes = buildCodeRanges(occurrences);
+        attribuerTypologies(detectedCodes, pictogrammes);
         
         updateProgress(85, 'Organisation par codes...');
         
@@ -642,7 +648,9 @@ async function processFile(file) {
 // Un code d'exigence complet, et rien d'autre, dans l'item de texte.
 // Les segments peuvent porter une lettre : les territorialisations sont
 // numerotees DRIHL.V2.6, ANRU.V1.2...
-const CODE_PATTERN = /^[A-Z]{2,6}(?:\.[A-Z]{0,2}\d{1,3}){1,5}$/;
+// Préfixe jusqu'à 8 lettres : CHANTIER.1.1 était sinon ignorée, et sa page
+// rattachée à l'exigence précédente.
+const CODE_PATTERN = /^[A-Z]{2,8}(?:\.[A-Z]{0,2}\d{1,3}){1,5}$/;
 
 // Thème déduit du préfixe : les rapports contiennent des exigences absentes
 // du référentiel embarqué, on veut quand même les classer.
@@ -732,6 +740,98 @@ function detectCodesOnPage(textContent, viewport, pageNumber) {
     return found;
 }
 
+// Typologie d'une ligne (colonne « Typ. ») : CERQUAL n'y met aucun texte,
+// seulement un pictogramme vectoriel (Form XObject) par typologie concernée.
+// L'immeuble à étages entre deux arbres (collectif, ~51x39) est presque
+// carré ; la rangée de maisons (individuel, ~57x27) est deux fois plus
+// large que haute. On classe donc sur le rapport hauteur / largeur.
+const RATIO_PICTO_COLLECTIF = 0.6;
+
+function multiplierMatrices(a, b) {
+    return [
+        a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
+        a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
+        a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]
+    ];
+}
+
+function detectTypologiesOnPage(operatorList, viewport, pageNumber) {
+    const OPS = pdfjsLib.OPS;
+    const found = [];
+    const pile = [];
+    let ctm = [1, 0, 0, 1, 0, 0];
+    let profondeur = 0;
+
+    for (let k = 0; k < operatorList.fnArray.length; k++) {
+        const fn = operatorList.fnArray[k];
+        const args = operatorList.argsArray[k];
+
+        if (fn === OPS.save) {
+            pile.push(ctm);
+        } else if (fn === OPS.restore) {
+            ctm = pile.pop() || [1, 0, 0, 1, 0, 0];
+        } else if (fn === OPS.transform) {
+            ctm = multiplierMatrices(ctm, args);
+        } else if (fn === OPS.paintFormXObjectBegin) {
+            // Begin / End valent save / restore autour de la matrice de la forme
+            pile.push(ctm);
+            ctm = multiplierMatrices(ctm, args[0] || [1, 0, 0, 1, 0, 0]);
+            profondeur++;
+            if (profondeur > 1 || !args[1]) continue; // formes imbriquées : seule l'englobante compte
+
+            // Centre du pictogramme en coordonnées page
+            const bbox = args[1];
+            const cx = (bbox[0] + bbox[2]) / 2;
+            const cy = (bbox[1] + bbox[3]) / 2;
+            const x = ctm[0] * cx + ctm[2] * cy + ctm[4];
+            const y = ctm[1] * cx + ctm[3] * cy + ctm[5];
+
+            // Colonne « Typ. » uniquement (vers 60 % de la largeur en paysage)
+            if (x < viewport.width * 0.57 || x > viewport.width * 0.64) continue;
+
+            const largeur = Math.abs(bbox[2] - bbox[0]);
+            const hauteur = Math.abs(bbox[3] - bbox[1]);
+            if (!largeur || !hauteur) continue;
+
+            found.push({
+                typologie: hauteur / largeur >= RATIO_PICTO_COLLECTIF ? 'Collectif' : 'Individuel',
+                page: pageNumber,
+                y: y
+            });
+        } else if (fn === OPS.paintFormXObjectEnd) {
+            ctm = pile.pop() || [1, 0, 0, 1, 0, 0];
+            profondeur--;
+        }
+    }
+
+    return found;
+}
+
+// Rattache chaque pictogramme à l'exigence qui le précède dans l'ordre de
+// lecture (une exigence mixte peut avoir son 2e pictogramme page suivante).
+function attribuerTypologies(detectedCodes, pictogrammes) {
+    detectedCodes.forEach(c => { c.typologies = []; });
+
+    pictogrammes.forEach(picto => {
+        let proprietaire = null;
+        detectedCodes.forEach(c => {
+            // Tolérance de 10 pt : le pictogramme est centré dans la ligne
+            if (c.firstPage < picto.page || (c.firstPage === picto.page && c.y + 10 >= picto.y)) {
+                proprietaire = c;
+            }
+        });
+        if (proprietaire && !proprietaire.typologies.includes(picto.typologie)) {
+            proprietaire.typologies.push(picto.typologie);
+        }
+    });
+
+    const sansPicto = detectedCodes.filter(c => !c.typologies.length).map(c => c.code);
+    console.log('Typologies lues dans le PDF:', detectedCodes.map(c => `${c.code}: ${c.typologies.join(' + ') || '?'}`));
+    if (sansPicto.length) {
+        console.warn(`⚠️ ${sansPicto.length} exigence(s) sans pictogramme détecté, typologie laissée au modèle:`, sansPicto);
+    }
+}
+
 // Nombre de segments communs entre deux codes (QAI.2.4.13 / QAI.2.4.11 -> 3)
 function longueurPrefixeCommun(a, b) {
     const sa = a.split('.');
@@ -792,7 +892,8 @@ function buildCodeRanges(occurrences) {
             category: meta.category,
             type: meta.type,
             connu: meta.connu,
-            firstPage: occ.page
+            firstPage: occ.page,
+            y: occ.y
         });
     });
 
@@ -832,6 +933,7 @@ function organizeByCode(detectedCodes) {
         theme: item.theme || 'Non classé',
         category: item.category || '',
         type: item.type || '',
+        typologies: item.typologies || [],
         pages: item.pages || [],
         pageCount: item.pages ? item.pages.length : 0
     }));
@@ -1291,7 +1393,8 @@ async function sendAllToWebhook() {
                 formData.append('theme', codeItem.theme);
                 formData.append('sousTheme', codeItem.category || '');
                 formData.append('numeroPage', codeItem.pages.join(', '));
-                
+                formData.append('typologie', codeItem.typologies.join(', '));
+
                 // Envoyer au webhook et ATTENDRE la réponse
                 console.log(`📤 Envoi du PDF vers le webhook...`);
                 const response = await fetch(webhookUrl, {
@@ -1314,7 +1417,7 @@ async function sendAllToWebhook() {
                     
                     // Ajouter les résultats au tableau de la modale
                     if (responseData) {
-                        addResultToTable(responseData);
+                        addResultToTable(corrigerTypologies(responseData, codeItem));
                     }
                 } catch (parseError) {
                     console.log(`✅ ${codeItem.code} envoyé avec succès. Réponse reçue:`, responseText);
@@ -1383,6 +1486,29 @@ function handleEscapeKey(event) {
     if (event.key === 'Escape') {
         closeModal();
     }
+}
+
+// Le modèle lit mal les pictogrammes sur l'image (il renvoie souvent les deux
+// typologies). Le pictogramme détecté dans le PDF fait foi : une ligne par
+// typologie présente, dans l'ordre du rapport.
+function normaliserTypologie(valeur) {
+    const t = (valeur || '').toString().toLowerCase();
+    if (t.includes('coll')) return 'Collectif';
+    if (t.includes('indiv')) return 'Individuel';
+    return '';
+}
+
+function corrigerTypologies(results, codeItem) {
+    const lignes = (Array.isArray(results) ? results : [results]).filter(r => r && typeof r === 'object');
+    const typologies = codeItem.typologies || [];
+
+    // Pictogramme non détecté ou réponse en erreur : on garde la lecture du modèle
+    if (!typologies.length || !lignes.length || lignes.some(r => r.error)) return lignes;
+
+    return typologies.map(typologie => {
+        const ligne = lignes.find(r => normaliserTypologie(r.Typ) === typologie) || lignes[0];
+        return Object.assign({}, ligne, { Typ: typologie });
+    });
 }
 
 // Ajouter une ligne au tableau des résultats
