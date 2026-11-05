@@ -66,6 +66,7 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 - `shared/copil.js` : Calcul des indicateurs COPIL et cibles (namespace `KPICopil`)
 - `autocontact-sps.html` / `autocontact-sps.js` : Page « Autocontact SPS » (contacts créés dans BTP Force)
 - `analyse-cctp.html` / `analyse-cctp.js` : Page « Analyse CCTP vs Référentiel » (card Metabase 160)
+- `tools/n8n-cctp-analyztech.js` : Code du nœud n8n « CCTP AnalyzTech » qui écrit `analyse_cctp_at.json` (analyses CCTP lancées dans AnalyzTech, testé par `tests/cctp-at.test.js`)
 - `tools/csv-to-autocontact-sps.js` : Convertit un export CSV du backoffice BTP Force en `autocontact_sps.json` (fichier Supabase de la brique SPS)
 - `shared/utils.js` : Module partagé (parsing CSV/JSON, dates, prédicats métier, constantes)
 - `shared/costs.js` : Module de calcul économique (registre, relevés OpenRouter, KPIs, projection)
@@ -541,6 +542,29 @@ KPIs affichés :
   l'injection (`metadata.assignedStatusByCctpAvisId`) — une notice = un avis repris ;
 - **Analyses exploitées dans S+** (unité = l'analyse) : au moins un avis repris, ou un rapport
   créé depuis l'analyse (`metadata.reportId`).
+
+**Deux canaux : S+ et AnalyzTech** (05/11/2026). Des contrôleurs lancent l'analyse directement
+dans AnalyzTech, hors S+. Ces analyses viennent de `analyse_cctp_at.json` (URL signée
+`ANALYSE_CCTP_AT_URL`, optionnelle), écrit par le nœud n8n « CCTP AnalyzTech »
+(`tools/n8n-cctp-analyztech.js`, détail dans `metabase-queries.md`, section « CCTP AnalyzTech »).
+Les lignes ont les colonnes de la card 160 plus `Source = 'AT'`, `ProjectId`, `ProjectName` ;
+`KPI.parseCctpRows` pose `item.source` (`'SPLUS'` ou `'AT'`). Les deux bases sont distinctes
+(aucun livrable commun, vérifié le 05/11/2026) : on additionne sans dédoublonner.
+
+- **Page CCTP** : filtre « Canal » (Tous / AnalyzTech / S+, `KPI.filterCctpBySource`) appliqué à
+  toute la page sauf la section RICT (propre à S+) ; section « Canal d'utilisation »
+  (`KPI.cctpSourceSplit`) : part des analyses et des utilisateurs par canal (AT seul, les deux,
+  S+ seul), sur période / DR / agence, **quel que soit** le filtre Canal ; graphique d'évolution
+  empilé par canal ; colonne « Canal » dans les dernières analyses ; « dont N AT » par agence.
+- **Affaire** côté AT = le projet AnalyzTech (`KPI.cctpDossier` : contrat, sinon `AT:<projet>`).
+- **Utilisateur** côté AT = la personne qui a lancé l'analyse (`createdByUserId`), sinon le
+  propriétaire du projet. **Agence et DR** : reprises de la même personne dans S+ (analyses,
+  injecteurs, rédacteurs de RICT — `KPI.cctpAttachAgencies`) ; une personne inconnue de S+ reste
+  sans agence (comptée dans les totaux, pas dans le tableau par agence).
+- **Exploitation, avis repris, déchet, gain** : notions S+ seules. Les taux se rapportent aux
+  analyses / avis S+ (`operationsSplus`, `avisSplus`) ; en filtre AnalyzTech, « sans objet ».
+- **Dashboard (tuile, gains, popup Utilisateurs), COPIL et page Adoption** : les analyses AT sont
+  fusionnées dans les données CCTP (« Tous »), sans distinction de canal.
 
 L'analyse compte dans le total « utilisations » du dashboard (1 analyse = 1 utilisation) et dans
 les utilisateurs uniques. La page détail s'ouvre en mode « Depuis le début » : la brique a démarré

@@ -379,6 +379,87 @@ test('aggregateCctp — totaux, échecs à part, dédup DeliverableId', () => {
     assert.deepEqual(s.byMission.PV, { analyses: 1, avis: 6 });
 });
 
+// Lignes AnalyzTech (analyse_cctp_at.json) : mêmes colonnes que la card 160,
+// plus Source / ProjectId / ProjectName, sans contrat, agence ni injection.
+const CCTP_AT_ROWS = [
+    { DeliverableId: 'at1', EventDate: '2026-10-21T08:00:00.000Z', Status: 'COMPLETED', Source: 'AT',
+      ProjectId: 'p1', ProjectName: 'Projet 1', UserEmail: 'a@btp-consultants.fr', Missions: 'S,F',
+      TotalAvis: 8, AvisFavorable: 1, AvisSuspendu: 2, AvisDefavorable: 5, AvisCritique: 5, AvisParMission: 'F:3;S:5' },
+    { DeliverableId: 'at2', EventDate: '2026-10-22T08:00:00.000Z', Status: 'COMPLETED', Source: 'AT',
+      ProjectId: 'p1', ProjectName: 'Projet 1', UserEmail: 'c@btp-consultants.fr', TotalAvis: 4, AvisFavorable: 4 },
+    { DeliverableId: 'at3', EventDate: '2026-10-22T09:00:00.000Z', Status: 'ERROR', Source: 'AT',
+      ProjectId: 'p2', UserEmail: 'c@btp-consultants.fr' },
+];
+
+test('parseCctpRows — canal : S+ par défaut, AT si Source = AT', () => {
+    const splus = KPI.parseCctpPayload(CCTP_CSV);
+    assert.ok(splus.every(i => i.source === 'SPLUS'));
+    const at = KPI.parseCctpRows(CCTP_AT_ROWS);
+    assert.deepEqual(at.map(i => i.source), ['AT', 'AT', 'AT']);
+    assert.equal(at[0].projectId, 'p1');
+    assert.equal(at[0].agencyCode, null);
+    assert.equal(at[0].exploitee, false);
+    assert.equal(KPI.cctpDossier(at[0]), 'AT:p1');
+    assert.equal(KPI.cctpDossier(splus[0]), 'C-CT75-2024-20-216852');
+});
+
+test('aggregateCctp — Tous : affaires AT = projets, non-exploitées sur S+ seul', () => {
+    const items = KPI.parseCctpPayload(CCTP_CSV).concat(KPI.parseCctpRows(CCTP_AT_ROWS));
+    const s = KPI.aggregateCctp(items);
+    assert.equal(s.totalOperations, 4);
+    assert.equal(s.totalErrors, 2);
+    assert.equal(s.operationsSplus, 2);
+    assert.equal(s.operationsAT, 2);
+    assert.equal(s.uniqueContracts, 3); // 2 contrats S+ + 1 projet AT
+    assert.equal(s.uniqueUsers, 3);     // a (deux canaux), b, c
+    assert.equal(s.totalAvis, 88);
+    assert.equal(s.analysesExploitees, 1);
+    assert.equal(s.analysesNonExploitees, 1); // les analyses AT n'entrent pas dans le tri S+
+    assert.deepEqual(s.byMission.S, { analyses: 1, avis: 5 });
+});
+
+test('filterCctpBySource — Tous, S+ ou AnalyzTech', () => {
+    const items = KPI.parseCctpPayload(CCTP_CSV).concat(KPI.parseCctpRows(CCTP_AT_ROWS));
+    assert.equal(KPI.filterCctpBySource(items, 'all').length, 6);
+    assert.equal(KPI.filterCctpBySource(items, null).length, 6);
+    assert.equal(KPI.filterCctpBySource(items, 'SPLUS').length, 3);
+    assert.equal(KPI.filterCctpBySource(items, 'AT').length, 3);
+});
+
+test('cctpSourceSplit — analyses et utilisateurs par canal, erreurs exclues', () => {
+    const items = KPI.parseCctpPayload(CCTP_CSV).concat(KPI.parseCctpRows(CCTP_AT_ROWS));
+    const r = KPI.cctpSourceSplit(items);
+    assert.deepEqual(r.analyses, { SPLUS: 2, AT: 2, total: 4 });
+    assert.deepEqual(r.users, { SPLUS: 2, AT: 2, both: 1, total: 3 });
+    assert.deepEqual(KPI.cctpSourceSplit([]).users, { SPLUS: 0, AT: 0, both: 0, total: 0 });
+});
+
+test('cctpAttachAgencies — agence majoritaire de la personne dans S+', () => {
+    const at = KPI.parseCctpRows(CCTP_AT_ROWS);
+    const refs = KPI.parseCctpPayload(CCTP_CSV).concat([
+        { email: 'A@btp-consultants.fr', agency: 'CT75', direction: 'DR IDF Nord' },
+        { email: 'z@btp-consultants.fr', agency: '', injecteurs: [{ email: 'c@btp-consultants.fr', agency: 'LYCT', direction: 'DR Centre-Est' }] },
+        // Un item AT ne sert jamais de référence.
+        { email: 'c@btp-consultants.fr', agency: 'XXCT', source: 'AT' },
+    ]);
+    const out = KPI.cctpAttachAgencies(at, refs);
+    assert.deepEqual([out[0].agencyCode, out[0].agency, out[0].direction], ['CT75', 'CT75', 'DR IDF Nord']);
+    assert.deepEqual([out[1].agencyCode, out[1].direction], ['LYCT', 'DR Centre-Est']);
+    assert.equal(at[0].agencyCode, null); // pas de mutation
+    // Personne inconnue de S+ : item rendu tel quel.
+    assert.equal(KPI.cctpAttachAgencies(at, [])[0], at[0]);
+    // RICT : le rédacteur porte son agence.
+    const viaRict = KPI.cctpAttachAgencies(at, [{ author: 'a@btp-consultants.fr', authorAgency: 'LICT', authorDirection: 'DR Nord' }]);
+    assert.equal(viaRict[0].agencyCode, 'LICT');
+});
+
+test('cctpUsageEvents — une analyse AT est attribuée à son lanceur', () => {
+    const ev = KPI.cctpUsageEvents(KPI.parseCctpRows(CCTP_AT_ROWS));
+    assert.deepEqual(ev.map(e => [e.email, e.source, e.requests]), [
+        ['a@btp-consultants.fr', 'AT', 1], ['c@btp-consultants.fr', 'AT', 1],
+    ]);
+});
+
 test('aggregateCctp — lot vide', () => {
     const s = KPI.aggregateCctp([]);
     assert.equal(s.totalOperations, 0);

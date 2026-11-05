@@ -133,7 +133,7 @@ async function load() {
     errorEl.classList.add('hidden');
     mainEl.classList.add('hidden');
     try {
-        const [pop, desc, auto, comp, geo, acou, cctp, expert, chat, rict] = await Promise.all([
+        const [pop, desc, auto, comp, geo, acou, cctp, expert, chat, rict, cctpAt] = await Promise.all([
             fetchText(urls.POPULATION_CIBLE_URL, true),
             fetchText(urls.DESCRIPTIF_URL, true),
             fetchText(urls.AUTOCONTACT_URL, true),
@@ -144,6 +144,8 @@ async function load() {
             fetchText(urls.EXPERT_BTP_URL, false),
             fetchText(urls.CHAT_BTP_URL, false),
             fetchText(urls.ANALYSE_CCTP_RICT_URL, false),
+            // Analyses CCTP lancées dans AnalyzTech : comptées avec S+, sans distinction.
+            fetchText(urls.ANALYSE_CCTP_AT_URL, false),
         ]);
         rictItems = rict ? KPICctpRict.parsePayload(rict) : null;
         population = parsePopulationRows(pop);
@@ -154,7 +156,14 @@ async function load() {
             comparateur: decodeTabularPayload(comp, parseComparateurJSON, parseComparateurCSV),
             geotech: decodeTabularPayload(geo, parseGeotechJSON, parseGeotechCSV),
             acoustique: decodeTabularPayload(acou, parseAcoustiqueJSON, parseAcoustiqueCSV),
-            cctp: KPI.parseCctpPayload(cctp),
+            // CCTP « Tous » : S+ (card 160) + AnalyzTech. L'agence des items AT
+            // vient de la même personne dans S+ ; à défaut, KPIAdoption rattache
+            // l'utilisateur à l'agence majoritaire de ses autres sessions.
+            cctp: (() => {
+                const splus = KPI.parseCctpPayload(cctp);
+                const at = KPI.cctpAttachAgencies(KPI.parseCctpPayload(cctpAt), splus.concat(rictItems || []));
+                return splus.concat(at);
+            })(),
             expertCT: parseChatSessions(json(expert)),
             chatCT: parseChatSessions(json(chat)),
         };

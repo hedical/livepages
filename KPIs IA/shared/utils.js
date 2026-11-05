@@ -337,8 +337,15 @@ const KPI = (function () {
             const reportId = _str(r.ReportId);
             const avisInjectes = _int(r.AvisInjectes);
             const noticesCreees = _int(r.NoticesCreees);
+            // Canal de lancement : S+ (card 160, sans colonne Source) ou
+            // AnalyzTech (analyse_cctp_at.json, Source = 'AT', cf. CCTP_SOURCES).
+            const source = _str(r.Source).toUpperCase() === 'AT' ? 'AT' : 'SPLUS';
             items.push({
                 deliverableId,
+                source,
+                // Projet AnalyzTech : tient lieu d'affaire (pas de numéro de contrat).
+                projectId: _str(r.ProjectId),
+                projectName: _str(r.ProjectName),
                 createdAt: _str(r.EventDate),
                 status: _str(r.Status).toUpperCase(),
                 contractNumber,
@@ -437,6 +444,94 @@ const KPI = (function () {
         return inj.length > 0 && !inj.some(p => p.email === charge);
     }
 
+    // ----- Deux canaux : S+ et AnalyzTech -----
+    //
+    // L'Analyse CCTP se lance depuis S+ (AIDeliverable, card 160) ou directement
+    // dans AnalyzTech (route superadmin GET /v1/deliverables, fichier
+    // analyse_cctp_at.json écrit par n8n). Les deux bases sont distinctes : un
+    // livrable n'existe que dans l'une (vérifié le 05/11/2026, 0 id commun).
+    // Côté AnalyzTech, ni numéro d'affaire, ni agence, ni injection dans un
+    // rapport : l'affaire est le projet AT, l'agence est reprise des sources S+
+    // (cctpAttachAgencies), et « exploitée / avis repris » ne s'applique pas.
+    const CCTP_SOURCES = {
+        SPLUS: { id: 'SPLUS', label: 'S+' },
+        AT:    { id: 'AT',    label: 'AnalyzTech' },
+    };
+
+    // Clé d'affaire : numéro de contrat (S+), sinon projet AnalyzTech.
+    function cctpDossier(it) {
+        if (!it) return '';
+        if (it.contractNumber) return it.contractNumber;
+        return it.projectId ? 'AT:' + it.projectId : '';
+    }
+
+    // source : 'all' / null (tous), 'SPLUS' ou 'AT'.
+    function filterCctpBySource(items, source) {
+        if (!source || source === 'all') return items || [];
+        return (items || []).filter(it => (it.source || 'SPLUS') === source);
+    }
+
+    // Répartition des usages par canal (analyses terminées, hors ERROR) :
+    // analyses par canal et utilisateurs RÉELS par canal (cf. cctpUsageEvents),
+    // dont ceux qui ont servi des deux canaux sur le périmètre.
+    function cctpSourceSplit(items) {
+        const out = {
+            analyses: { SPLUS: 0, AT: 0, total: 0 },
+            users: { SPLUS: 0, AT: 0, both: 0, total: 0 },
+        };
+        const seen = new Set();
+        (items || []).forEach(it => {
+            if (!it || !it.deliverableId || it.status === 'ERROR' || seen.has(it.deliverableId)) return;
+            seen.add(it.deliverableId);
+            out.analyses[it.source === 'AT' ? 'AT' : 'SPLUS']++;
+            out.analyses.total++;
+        });
+        const bySource = { SPLUS: new Set(), AT: new Set() };
+        cctpUsageEvents(items).forEach(e => bySource[e.source === 'AT' ? 'AT' : 'SPLUS'].add(e.email));
+        const all = new Set([...bySource.SPLUS, ...bySource.AT]);
+        out.users.SPLUS = bySource.SPLUS.size;
+        out.users.AT = bySource.AT.size;
+        out.users.both = [...bySource.AT].filter(e => bySource.SPLUS.has(e)).length;
+        out.users.total = all.size;
+        return out;
+    }
+
+    // Agence et DR des items AnalyzTech, qui n'en portent pas : agence la plus
+    // fréquente de la même personne dans les sources S+ fournies (`refs` :
+    // items CCTP S+, RICT…, objets { email, agency, agencyCode, direction }).
+    // Les injecteurs des analyses S+ comptent aussi. Un item qui a déjà une
+    // agence est rendu tel quel ; une personne inconnue de S+ reste sans agence.
+    function cctpAttachAgencies(items, refs) {
+        const seen = {}; // email → [{ agency, agencyCode, direction }]
+        const add = (email, agency, agencyCode, direction) => {
+            const e = _str(email).toLowerCase();
+            const code = _str(agencyCode || agency).toUpperCase();
+            if (!e || !code) return;
+            (seen[e] = seen[e] || []).push({ agency: _str(agency) || code, agencyCode: code, direction: _str(direction) });
+        };
+        (refs || []).forEach(r => {
+            if (!r || r.source === 'AT') return;
+            add(r.email, r.agency, r.agencyCode, r.direction);
+            (r.injecteurs || []).forEach(p => add(p.email, p.agency, p.agency, p.direction));
+            if (r.author) add(r.author, r.authorAgency, r.authorAgency, r.authorDirection);
+        });
+        const best = {};
+        Object.keys(seen).forEach(e => {
+            const code = mode(seen[e].map(x => x.agencyCode));
+            const withDr = seen[e].filter(x => x.agencyCode === code);
+            best[e] = {
+                agencyCode: code,
+                agency: mode(withDr.map(x => x.agency)) || code,
+                direction: mode(withDr.map(x => x.direction)) || '',
+            };
+        });
+        return (items || []).map(it => {
+            if (!it || it.agency || it.agencyCode) return it;
+            const b = best[_str(it.email).toLowerCase()];
+            return b ? Object.assign({}, it, b) : it;
+        });
+    }
+
     // CSV de la card (export Metabase : champs à virgules entre guillemets,
     // ex. Missions = "L,P1") → lignes objets.
     function _csvToObjects(csv) {
@@ -496,6 +591,10 @@ const KPI = (function () {
             emails: [],
             // Analyses exploitées par un autre que le chargé d'affaires.
             analysesCollegue: 0,
+            // Analyses terminées par canal (cf. CCTP_SOURCES). L'exploitation
+            // dans S+ n'existe que pour les analyses S+ : les taux
+            // « exploitées » se rapportent à operationsSplus.
+            operationsSplus: 0, operationsAT: 0, avisSplus: 0,
             byMission,
         };
         (items || []).forEach(it => {
@@ -504,7 +603,10 @@ const KPI = (function () {
             s.totalLaunches++;
             if (it.status === 'ERROR') { s.totalErrors++; return; }
             s.totalOperations++;
-            if (it.contractNumber) contracts.add(it.contractNumber);
+            if (it.source === 'AT') s.operationsAT++;
+            else { s.operationsSplus++; s.avisSplus += it.totalAvis; }
+            const dossier = cctpDossier(it);
+            if (dossier) contracts.add(dossier);
             if (it.injecteurs && it.injecteurs.length) it.injecteurs.forEach(p => users.add(p.email));
             else if (it.email) users.add(it.email.toLowerCase());
             if (cctpViaCollegue(it)) s.analysesCollegue++;
@@ -538,7 +640,7 @@ const KPI = (function () {
         s.uniqueUsers = users.size;
         s.uniqueAgencies = agencies.size;
         s.emails = Array.from(users);
-        s.analysesNonExploitees = s.totalOperations - s.analysesExploitees;
+        s.analysesNonExploitees = s.operationsSplus - s.analysesExploitees;
         s.avisNonRepris = s.avisAnalysesExploitees - s.avisReprisExploitees;
         s.tauxDechet = s.avisAnalysesExploitees ? s.avisNonRepris / s.avisAnalysesExploitees : null;
         return s;
@@ -821,6 +923,11 @@ const KPI = (function () {
         parseInjecteurs,
         cctpUsageEvents,
         cctpViaCollegue,
+        CCTP_SOURCES,
+        cctpDossier,
+        filterCctpBySource,
+        cctpSourceSplit,
+        cctpAttachAgencies,
         parseAmbassadeurs,
         CCTP_GAIN,
         cctpGainHeures,

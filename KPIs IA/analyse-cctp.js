@@ -2,6 +2,8 @@
 // CCTP_VS_REFERENTIEL (card Metabase 160, 1 ligne = 1 livrable, avis agrégés en SQL).
 // Parsing et agrégats dans shared/utils.js (KPI.parseCctpPayload / KPI.aggregateCctp),
 // partagés avec la tuile du dashboard (app.js).
+// Deux canaux : S+ (card 160) et AnalyzTech (analyse_cctp_at.json, ANALYSE_CCTP_AT_URL,
+// optionnel) — filtre « Canal » et section « Canal d'utilisation ».
 
 // URL population : remplacée par l'URL signée du webhook après auth
 // (fallback public conservé le temps de la transition bucket privé).
@@ -13,6 +15,8 @@ let DATA_URL = '';
 // « Adoption dans les RICT » affiche un message si la source manque.
 let rictData = [];
 let rictLoaded = false;
+// Analyses lancées dans AnalyzTech : optionnel, la page reste S+ seule sans.
+let atLoaded = false;
 
 // State
 let allData = [];
@@ -40,6 +44,8 @@ const filters = {
     endDate: null,
     dr: null,
     agence: null,
+    // Canal : 'all', 'AT' ou 'SPLUS' (cf. KPI.CCTP_SOURCES).
+    source: 'all',
 };
 
 const MISSION_LABELS = {
@@ -218,13 +224,16 @@ function filterByDR(data, dr) {
     });
 }
 
-function getFilteredData(skipDateFilter) {
+// ignoreSource : la section « Canal d'utilisation » compare les deux canaux,
+// elle ne suit pas le filtre de canal.
+function getFilteredData(skipDateFilter, ignoreSource) {
     let filtered = allData;
     if (!skipDateFilter) {
         filtered = filterByDateRange(filtered, filters.startDate, filters.endDate);
     }
     filtered = filterByDR(filtered, filters.dr);
     filtered = filterByAgence(filtered, filters.agence);
+    if (!ignoreSource) filtered = KPI.filterCctpBySource(filtered, filters.source);
     return filtered;
 }
 
@@ -257,12 +266,17 @@ function populateSelect(el, allLabel, values) {
 
 // ==================== KPI CARDS ====================
 
+const SANS_OBJET_AT = "Sans objet : l'injection dans un rapport n'existe que dans S+";
+
 function updateCards(s) {
     $('total-operations').textContent = formatNumber(s.totalOperations);
     $('total-errors').textContent = s.totalErrors
         ? `+ ${plural(s.totalErrors, 'lancement')} en erreur`
         : 'Aucun lancement en erreur';
     $('total-contracts').textContent = formatNumber(s.uniqueContracts);
+    $('total-contracts-sub').textContent = filters.source === 'AT'
+        ? 'Projets AnalyzTech distincts'
+        : filters.source === 'SPLUS' ? 'Numéros de contrat distincts' : 'Contrats S+ et projets AnalyzTech distincts';
     $('total-agencies').textContent = formatNumber(s.uniqueAgencies);
     $('total-users').textContent = formatNumber(s.uniqueUsers);
     // Utilisateurs réels (KPI.aggregateCctp) : injecteur, sinon chargé d'affaires.
@@ -286,12 +300,17 @@ function updateCards(s) {
     $('non-favorable-rate').textContent = s.totalAvis
         ? `${pct(nonFav, s.totalAvis)} des avis (${formatNumber(s.defavorable)} défavorables)`
         : '—';
-    $('total-avis-repris').textContent = formatNumber(s.avisRepris);
-    $('avis-repris-rate').textContent = s.totalAvis ? `${pct(s.avisRepris, s.totalAvis)} des avis émis` : '—';
-    $('total-exploitees').textContent = formatNumber(s.analysesExploitees);
-    $('exploitees-sub').textContent = s.totalOperations
-        ? `${pct(s.analysesExploitees, s.totalOperations)} des analyses (≥ 1 avis repris ou rapport créé)`
-        : '—';
+    // Reprise dans un rapport : notion S+ seule. Les taux se rapportent aux
+    // analyses S+ (les analyses AnalyzTech ne peuvent pas être injectées).
+    const atOnly = filters.source === 'AT';
+    $('total-avis-repris').textContent = atOnly ? '—' : formatNumber(s.avisRepris);
+    $('avis-repris-rate').textContent = atOnly ? SANS_OBJET_AT
+        : s.avisSplus ? `${pct(s.avisRepris, s.avisSplus)} des avis émis dans S+` : '—';
+    $('total-exploitees').textContent = atOnly ? '—' : formatNumber(s.analysesExploitees);
+    $('exploitees-sub').textContent = atOnly ? SANS_OBJET_AT
+        : s.operationsSplus
+            ? `${pct(s.analysesExploitees, s.operationsSplus)} des analyses S+ (≥ 1 avis repris ou rapport créé)`
+            : '—';
 
     // Déchet : sur les analyses exploitées uniquement (cf. KPI.aggregateCctp).
     $('dechet-rate').textContent = s.tauxDechet === null ? '—' : pct(s.avisNonRepris, s.avisAnalysesExploitees);
@@ -302,10 +321,74 @@ function updateCards(s) {
     $('dechet-count-sub').textContent = s.avisAnalysesExploitees
         ? `sur ${formatNumber(s.avisAnalysesExploitees)} avis générés · ${formatNumber(s.avisReprisExploitees)} repris`
         : '—';
-    $('non-exploitees').textContent = formatNumber(s.analysesNonExploitees);
-    $('non-exploitees-sub').textContent = s.totalOperations
-        ? `${pct(s.analysesNonExploitees, s.totalOperations)} des analyses · ${formatNumber(s.totalAvis - s.avisAnalysesExploitees)} avis non triés`
-        : '—';
+    // Avis non triés : ceux des analyses S+ non exploitées (les avis AnalyzTech
+    // ne passent pas par le tri S+).
+    $('non-exploitees').textContent = atOnly ? '—' : formatNumber(s.analysesNonExploitees);
+    $('non-exploitees-sub').textContent = atOnly ? SANS_OBJET_AT
+        : s.operationsSplus
+            ? `${pct(s.analysesNonExploitees, s.operationsSplus)} des analyses S+ · ${formatNumber(s.avisSplus - s.avisAnalysesExploitees)} avis non triés`
+            : '—';
+}
+
+// ==================== CANAL D'UTILISATION ====================
+
+// Couleurs de canal (charte) : S+ en noir, AnalyzTech en vert, les deux en graphite.
+const SOURCE_COLORS = { SPLUS: '#1A1A1A', AT: '#BAF266', both: '#595959' };
+
+// Barre 100 % + légende chiffrée. parts : [{ key, label, value, title }].
+function renderSplitBar(barId, legendId, parts, total) {
+    const bar = $(barId);
+    const legend = $(legendId);
+    bar.innerHTML = total
+        ? parts.filter(p => p.value > 0).map(p => `<div style="width:${(p.value / total * 100).toFixed(2)}%;background:${SOURCE_COLORS[p.key]}"
+                title="${KPI.escapeHtml(p.label)} : ${formatNumber(p.value)} (${pct(p.value, total)})"></div>`).join('')
+        : '';
+    bar.setAttribute('aria-label', total
+        ? parts.map(p => `${p.label} ${pct(p.value, total)}`).join(', ')
+        : 'Aucune donnée');
+    legend.innerHTML = parts.map(p => `
+        <div title="${KPI.escapeHtml(p.title || '')}">
+            <dt class="flex items-center gap-2 text-xs text-graphite">
+                <span class="inline-block w-3 h-3 rounded-sm border border-stone" style="background:${SOURCE_COLORS[p.key]}"></span>${KPI.escapeHtml(p.label)}
+            </dt>
+            <dd class="at-num text-2xl text-ink mt-1">${total ? pct(p.value, total) : '—'}</dd>
+            <dd class="text-xs text-graphite">${formatNumber(p.value)}</dd>
+        </div>`).join('');
+}
+
+function updateSourceSplit() {
+    const data = getFilteredData(isCumulativeMode, true);
+    const r = KPI.cctpSourceSplit(data);
+    $('split-analyses-total').textContent = plural(r.analyses.total, 'analyse');
+    renderSplitBar('split-analyses-bar', 'split-analyses-legend', [
+        { key: 'AT', label: 'AnalyzTech', value: r.analyses.AT },
+        { key: 'SPLUS', label: 'S+', value: r.analyses.SPLUS },
+    ], r.analyses.total);
+    $('split-users-total').textContent = plural(r.users.total, 'utilisateur');
+    renderSplitBar('split-users-bar', 'split-users-legend', [
+        { key: 'AT', label: 'AnalyzTech seul', value: r.users.AT - r.users.both, title: "N'a lancé que des analyses AnalyzTech sur le périmètre" },
+        { key: 'both', label: 'Les deux', value: r.users.both, title: 'A utilisé les deux canaux sur le périmètre' },
+        { key: 'SPLUS', label: 'S+ seul', value: r.users.SPLUS - r.users.both, title: "N'a utilisé que des analyses S+ sur le périmètre" },
+    ], r.users.total);
+
+    // Analyses AT sans agence : personne inconnue des sources S+ (aucune
+    // analyse ni RICT S+) — comptées partout sauf dans le tableau par agence.
+    const sansAgence = data.filter(it => it.source === 'AT' && it.status !== 'ERROR' && !it.agency).length;
+    $('split-note').textContent = sansAgence
+        ? `${plural(sansAgence, 'analyse')} AnalyzTech sans agence connue (lanceur absent de S+, ou projet supprimé) : comptée${sansAgence > 1 ? 's' : ''} dans les totaux, pas dans le tableau par agence ni dans les filtres DR / agence.`
+        : '';
+    const missing = $('split-missing');
+    missing.classList.toggle('hidden', atLoaded);
+    missing.textContent = atLoaded ? '' : 'Source AnalyzTech indisponible (ANALYSE_CCTP_AT_URL absente du webhook) : seules les analyses S+ sont comptées.';
+}
+
+function syncSourceButtons() {
+    document.querySelectorAll('[data-source]').forEach(btn => {
+        const on = btn.dataset.source === filters.source;
+        btn.classList.toggle('bg-ink', on);
+        btn.classList.toggle('text-paper', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
 }
 
 // ==================== TABLES ====================
@@ -355,7 +438,8 @@ function updateAgencyTable(data) {
         const effectif = g.agencyCode ? agencyPopulation[g.agencyCode] || 0 : 0;
         return {
             agency, direction: g.direction || '-', effectif,
-            operations: s.totalOperations, contracts: s.uniqueContracts, users: s.uniqueUsers,
+            operations: s.totalOperations, operationsAT: s.operationsAT,
+            contracts: s.uniqueContracts, users: s.uniqueUsers,
             avis: s.totalAvis, exploitees: s.analysesExploitees,
             dechet: s.tauxDechet, avisExploitees: s.avisAnalysesExploitees,
             ambassadeurs: s.emails.filter(isAmbassadeur).length,
@@ -384,7 +468,8 @@ function updateAgencyTable(data) {
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${KPI.escapeHtml(r.direction)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${KPI.escapeHtml(r.agency)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-semibold">${r.operations}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-semibold">${r.operations}${filters.source === 'all' && r.operationsAT
+                ? ` <span class="text-xs text-graphite font-normal" title="Analyses lancées dans AnalyzTech">(dont ${r.operationsAT} AT)</span>` : ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${r.contracts}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${r.users}${r.ambassadeurs
                 ? ` <span class="text-xs text-graphite" title="Ambassadeurs IA parmi les utilisateurs">(dont ${r.ambassadeurs} amb.)</span>` : ''}</td>
@@ -407,25 +492,33 @@ function updateRecentTable(data) {
         .slice(0, 15);
     recentTableBodyEl.innerHTML = '';
     if (recent.length === 0) {
-        recentTableBodyEl.innerHTML = `<tr><td colspan="10" class="px-4 py-4 text-center text-gray-500">Aucune analyse sur cette période</td></tr>`;
+        recentTableBodyEl.innerHTML = `<tr><td colspan="11" class="px-4 py-4 text-center text-gray-500">Aucune analyse sur cette période</td></tr>`;
         return;
     }
     recent.forEach((it, index) => {
         const d = parseDate(it.createdAt);
+        const isAT = it.source === 'AT';
         const tr = document.createElement('tr');
         tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
         tr.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${d ? d.toLocaleDateString('fr-FR') : '-'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${isAT
+                ? '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-ink text-paper">AnalyzTech</span>'
+                : '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-off text-ink border border-stone">S+</span>'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${KPI.escapeHtml(it.agency || '-')}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600 font-mono">${KPI.escapeHtml(it.contractNumber || '-')}</td>
+            ${isAT
+                ? `<td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title="${KPI.escapeHtml(it.projectName || '')}">${KPI.escapeHtml(it.projectName || '-')}</td>`
+                : `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600 font-mono">${KPI.escapeHtml(it.contractNumber || '-')}</td>`}
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${KPI.escapeHtml(it.missions.join(', ') || '-')}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-blue-600">${it.totalAvis}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-emerald-700">${it.avisFavorable}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-amber-700">${it.avisSuspendu}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-red-700">${it.avisDefavorable}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${it.exploitee
-                ? '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">Oui</span>'
-                : '<span class="text-gray-400">—</span>'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${isAT
+                ? `<span class="text-xs text-graphite" title="${SANS_OBJET_AT}">sans objet</span>`
+                : it.exploitee
+                    ? '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">Oui</span>'
+                    : '<span class="text-gray-400">—</span>'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${isAmbassadeur(it.email)
                 ? '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800" title="Chargé d\'affaires ambassadeur IA">Ambassadeur</span>'
                 : '<span class="text-gray-400">—</span>'}</td>
@@ -561,20 +654,32 @@ function updateChart(data) {
         type: 'bar',
         data: {
             labels,
+            // Analyses empilées par canal (pile « analyses »), exploitées à
+            // côté (pile « exploitees ») : la hauteur de la pile = total.
             datasets: [
                 {
-                    label: 'Analyses réalisées',
-                    data: stats.map(s => s.totalOperations),
-                    backgroundColor: 'rgba(59, 130, 246, 0.85)',
-                    borderRadius: 4,
+                    label: 'Analyses S+',
+                    data: stats.map(s => s.operationsSplus),
+                    backgroundColor: SOURCE_COLORS.SPLUS,
+                    stack: 'analyses',
+                    hidden: filters.source === 'AT',
+                },
+                {
+                    label: 'Analyses AnalyzTech',
+                    data: stats.map(s => s.operationsAT),
+                    backgroundColor: SOURCE_COLORS.AT,
+                    stack: 'analyses',
+                    hidden: filters.source === 'SPLUS',
                 },
                 {
                     label: 'Dont exploitées dans S+',
                     data: stats.map(s => s.analysesExploitees),
-                    backgroundColor: 'rgba(16, 185, 129, 0.75)',
-                    borderRadius: 4,
+                    backgroundColor: SOURCE_COLORS.both,
+                    stack: 'exploitees',
+                    hidden: filters.source === 'AT',
                 },
-            ],
+            // Série sans objet pour le canal choisi : retirée, pas barrée en légende.
+            ].filter(d => !d.hidden),
         },
         options: {
             responsive: true,
@@ -582,11 +687,20 @@ function updateChart(data) {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'top', labels: { font: { size: 12 }, color: '#1F2937', usePointStyle: true, pointStyle: 'rectRounded' } },
-                tooltip: { ...TOOLTIP, callbacks: { label: ctx => `${ctx.dataset.label} : ${formatNumber(ctx.parsed.y)}` } },
+                tooltip: {
+                    ...TOOLTIP,
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label} : ${formatNumber(ctx.parsed.y)}`,
+                        footer: items => {
+                            const s = stats[items[0].dataIndex];
+                            return s.totalOperations ? `Total : ${plural(s.totalOperations, 'analyse')} · AnalyzTech ${pct(s.operationsAT, s.totalOperations)}` : '';
+                        },
+                    },
+                },
             },
             scales: {
-                x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
-                y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Analyses', color: '#374151' } },
+                x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Analyses', color: '#374151' } },
             },
         },
     });
@@ -769,6 +883,8 @@ function updateKPIs() {
     const stats = KPI.aggregateCctp(filtered);
 
     updateCards(stats);
+    updateSourceSplit();
+    syncSourceButtons();
     updateRict();
     updateGain(stats);
     const firstDate = getFirstDate(allData);
@@ -796,6 +912,7 @@ function applyInitialFilters() {
     agencyFilterEl.value = 'all';
     filters.dr = null;
     filters.agence = null;
+    filters.source = 'all';
     isCumulativeMode = true;
     cumulToggleEl.checked = true;
 }
@@ -830,6 +947,13 @@ resetFiltersBtn.addEventListener('click', () => {
 cumulToggleEl.addEventListener('change', e => {
     isCumulativeMode = e.target.checked;
     updateKPIs();
+});
+document.querySelectorAll('[data-source]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (filters.source === btn.dataset.source) return;
+        filters.source = btn.dataset.source;
+        updateKPIs();
+    });
 });
 [['gran-day', 'day'], ['gran-week', 'week']].forEach(([id, value]) => {
     $(id).addEventListener('click', () => {
@@ -891,6 +1015,10 @@ async function init() {
         const rictPromise = urls.ANALYSE_CCTP_RICT_URL
             ? fetch(urls.ANALYSE_CCTP_RICT_URL).then(r => (r.ok ? r.text() : null)).catch(() => null)
             : Promise.resolve(null);
+        // Analyses lancées dans AnalyzTech : optionnel (page S+ seule sans).
+        const atPromise = urls.ANALYSE_CCTP_AT_URL
+            ? fetch(urls.ANALYSE_CCTP_AT_URL).then(r => (r.ok ? r.text() : null)).catch(() => null)
+            : Promise.resolve(null);
         // Ambassadeurs : optionnel, la page fonctionne sans (aucun tag).
         const ambassadeursPromise = urls.AMBASSADEURS_URL
             ? fetch(urls.AMBASSADEURS_URL).then(r => (r.ok ? r.text() : '')).catch(() => '')
@@ -922,7 +1050,12 @@ async function init() {
         const rictText = await rictPromise;
         rictLoaded = rictText !== null;
         rictData = rictLoaded ? KPICctpRict.parsePayload(rictText) : [];
-        console.log('Loaded', allData.length, 'CCTP deliverables');
+        // AnalyzTech : agence et DR repris des sources S+ de la même personne.
+        const atText = await atPromise;
+        atLoaded = atText !== null;
+        const atItems = atLoaded ? KPI.cctpAttachAgencies(KPI.parseCctpPayload(atText), allData.concat(rictData)) : [];
+        allData = allData.concat(atItems);
+        console.log('Loaded', allData.length, 'CCTP deliverables, dont', atItems.length, 'AnalyzTech');
 
         // Listes construites sur les DEUX sources : une agence qui diffuse des
         // RICT sans jamais lancer d'analyse (recours 0 %) doit rester sélectionnable.

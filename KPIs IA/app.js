@@ -16,6 +16,7 @@ let AO_URL = ''; // exposée par le webhook passwordROI sous le nom ANALYSE_AO_U
 let ACOUSTIQUE_URL = ''; // exposée par le webhook sous le nom ANALYSE_ACOUSTIQUE_URL ; pas de fallback hardcodé
 let CCTP_URL = ''; // exposée par le webhook sous le nom ANALYSE_CCTP_URL (card 160) ; pas de fallback hardcodé
 let CCTP_RICT_URL = ''; // RICT diffusés (card 161), ANALYSE_CCTP_RICT_URL — onglet « CCTP par rédacteur »
+let CCTP_AT_URL = '';   // Analyses CCTP lancées dans AnalyzTech (ANALYSE_CCTP_AT_URL), fusionnées dans cctpData
 let rictItems = null;   // KPICctpRict.parsePayload ; null = source absente
 // URLs chat/expert/population : remplacées par les URLs SIGNÉES du webhook
 // après auth (fallback public conservé le temps de la transition bucket privé).
@@ -1715,6 +1716,8 @@ async function authenticateWithPassword(password) {
             if (claudeKpisMatch) CLAUDE_KPIS_URL = claudeKpisMatch[1];
             const cctpRictMatch = urlRegex('ANALYSE_CCTP_RICT_URL');
             if (cctpRictMatch) CCTP_RICT_URL = cctpRictMatch[1];
+            const cctpAtMatch = urlRegex('ANALYSE_CCTP_AT_URL');
+            if (cctpAtMatch) CCTP_AT_URL = cctpAtMatch[1];
 
             // URLs signées chat/expert/population (remplacent les fallbacks publics)
             const expertBtpMatch     = urlRegex('EXPERT_BTP_URL');
@@ -2361,6 +2364,23 @@ async function loadData() {
                 if (r.ok) rictItems = KPICctpRict.parsePayload(await r.text());
             } catch (e) {
                 console.warn('Error loading CCTP RICT data:', e);
+            }
+        }
+
+        // Analyses CCTP lancées dans AnalyzTech — optionnel. Fusionnées dans
+        // cctpData : tuile, gains, popup Utilisateurs et COPIL comptent « Tous »
+        // les canaux sans les distinguer. Agence reprise des sources S+ (après
+        // le chargement des RICT, dont les rédacteurs portent leur agence).
+        if (CCTP_AT_URL) {
+            try {
+                const r = await fetch(CCTP_AT_URL);
+                if (r.ok) {
+                    const at = KPI.parseCctpPayload(await r.text());
+                    cctpData = cctpData.concat(KPI.cctpAttachAgencies(at, cctpData.concat(rictItems || [])));
+                    console.log('Loaded', at.length, 'CCTP deliverables from AnalyzTech');
+                }
+            } catch (e) {
+                console.warn('Error loading CCTP AnalyzTech data:', e);
             }
         }
 
@@ -4284,7 +4304,7 @@ function publishCopilSnapshot() {
                 { id: 'descriptif', label: 'Descriptif RICT', metier: 'CT', kind: 'module', unite: 'RICT',
                   events: descriptifIA.map(i => ev(i, i.contractNumber, 1)), parc: parcOf(rict) },
                 { id: 'analyse-cctp', label: 'Analyse CCTP', metier: 'CT', kind: 'module', unite: 'affaire',
-                  events: KPI.cctpUsageEvents(cctpData).map(i => ev(i, i.contractNumber, i.requests)), parc: null },
+                  events: KPI.cctpUsageEvents(cctpData).map(i => ev(i, KPI.cctpDossier(i), i.requests)), parc: null },
                 { id: 'autocontact', label: 'Autocontact', metier: 'CT', kind: 'module', unite: 'affaire',
                   events: autocontactCTIA.map(i => ev(i, i.contractNumber, 1)), parc: parcOf(autocontactCT) },
                 { id: 'comparateur', label: "Comparateur d'indices", metier: 'CT', kind: 'module', unite: 'affaire',

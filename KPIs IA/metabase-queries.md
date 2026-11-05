@@ -721,6 +721,55 @@ Le front tolère l'absence de `ANALYSE_CCTP_URL` : tuile à 0 + message clair su
 
 ---
 
+## CCTP AnalyzTech — analyses lancées hors S+ (`analyse_cctp_at.json`)
+
+Pas une card Metabase : l'API AnalyzTech, lue par le nœud Code **« CCTP AnalyzTech »** du
+workflow « ROI Global » (source : `tools/n8n-cctp-analyztech.js`, à recoller dans le nœud après
+toute modification).
+
+**Chaîne :** `Token AnalyzTech` (jeton JWT déjà utilisé par l'auto-contrôle) → `CCTP AnalyzTech`
+→ `CCTP AT OK ?` (IF : seuls les items avec `DeliverableId` passent) → `Convert to File CCTP AT`
+(toJson) → `POST CCTP AT` (upsert `analyse_cctp_at.json`) → `Respond to Webhook`. Le nœud Code
+sort aussi un item `_diag` (comptages ou message d'erreur) : c'est lui qu'on lit dans
+l'exécution n8n pour diagnostiquer, l'IF l'écarte de l'upload. `Sign URLs` + `Build signed response` : `analyse_cctp_at.json` →
+`ANALYSE_CCTP_AT_URL` (commun aux webhooks `passwordROI` et `passwordadoption`).
+Aucune clé dans le code : clé API lue dans `GET Auto Control1`, en-têtes Supabase dans
+`POST Acoustique`. Un nœud Code lit `$('X').params` **en brut, sans évaluer les
+expressions** : dans `Token AnalyzTech`, `x-api-key` n'est qu'une expression vers
+`GET Auto Control1`, et la lire là envoyait le texte de l'expression → 401 (run 19276).
+Le code refuse désormais toute valeur commençant par `=`.
+
+**Routes** (spec `https://api.analyztech.com/api-json`) :
+
+| Route | Usage |
+|---|---|
+| `GET /v1/deliverables?type=CCTP_VS_REFERENTIEL` | liste superadmin : id, statut, dates, `createdByUserId`, projet, attribution company/BU — sans contenu |
+| `GET /v1/deliverables/{id}` | `long_result` (~160 KB) : `avis[]`, `input.missions`, `summary` — même forme que `longResult.cctp` de S+, mais à la racine |
+| `GET /v1/users/{id}` | e-mail du lanceur (`createdByUserId` renseigné depuis le 19/10/2026) |
+| `GET /v1/admin/projects-by-type` | e-mail du propriétaire du projet, pour les livrables antérieurs |
+
+**Règles :**
+- Une ligne = un livrable `COMPLETED` ou `ERROR`, colonnes de la card 160 + `Source = 'AT'`,
+  `ProjectId`, `ProjectName`, `UpdatedAt` ; `ContractNumber`, `DR`, `Agence`, injection vides.
+- Périmètre : lanceur `@btp-consultants.fr` ; lanceur inconnu (projet supprimé) → retenu si
+  l'attribution historique pointe la company « Groupe BTP-Consultants » (`ec82845a…`).
+  Comptes Databuildr et autres clients écartés.
+- **Incrémental** : le fichier précédent est relu ; un livrable final au même `updatedAt` est
+  repris tel quel, seul le détail des nouveaux est téléchargé (premier passage ~30 s, 190 détails).
+- **Jamais d'erreur par-dessus la donnée** : jeton absent, liste illisible → seul `_diag` sort,
+  l'IF ne laisse rien passer, le fichier précédent reste.
+- **Mémoire** : chaque détail (~160 KB) est converti en ligne dès réception puis abandonné (au plus
+  5 en mémoire). La version qui gardait les 190 détails avant calcul a fait planter un run complet
+  (exécution 19273, 05/11/2026).
+- S+ et AnalyzTech sont deux bases distinctes : 0 id commun entre la card 160 (277 livrables)
+  et l'API (198) au 05/11/2026.
+
+**Volume (05/11/2026, essai à blanc)** : 194 livrables retenus (190 analyses + erreurs), 37
+utilisateurs dont 27 utilisent aussi S+, du 07/07 au 02/11/2026 ; 15 analyses AT seulement
+depuis le 12/10 (ouverture S+), contre 190 dans S+.
+
+---
+
 ## Card 161 — CCTP : adoption dans les RICT
 
 **URL :** `https://metabase.btp-force.cloud/question/161`

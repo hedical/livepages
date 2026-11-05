@@ -9,13 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611042359">
+    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611051740">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="shared/analyztech-tailwind.js?v=202611042359"></script>
+    <script src="shared/analyztech-tailwind.js?v=202611051740"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="shared/analyztech-theme.js?v=202611042359"></script>
+    <script src="shared/analyztech-theme.js?v=202611051740"></script>
     <!-- Date de mise à jour des données (Last-Modified du bucket) : avant le script de page. -->
-    <script src="shared/last-update.js?v=202611042359"></script>
+    <script src="shared/last-update.js?v=202611051740"></script>
 </head>
 <body>
     <div class="min-h-screen bg-off">
@@ -74,13 +74,15 @@
                             Le <strong>gain de temps</strong> est estimé uniquement sur les avis repris dans S+ (hypothèse modifiable, voir « Gain de temps »).
                             Une analyse est dite <strong>exploitée</strong> quand ses remarques ont été reprises dans S+ (rapport créé, avis statués ou notices injectées).
                             L'utilisateur compté est la personne qui a injecté les avis dans S+, sinon le chargé d'affaires de l'affaire analysée.
+                            L'analyse se lance depuis <strong>S+</strong> ou directement dans <strong>AnalyzTech</strong> : le filtre « Canal » sépare les deux.
+                            Une analyse AnalyzTech est comptée pour la personne qui l'a lancée, sur son projet AnalyzTech ; l'injection dans un rapport n'existe que dans S+.
                         </p>
                     </div>
                 </div>
 
                 <!-- Filters -->
                 <div class="mb-8">
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
                         <!-- Date Range Filter -->
                         <div class="at-card p-5">
                             <div class="flex items-center justify-between mb-4">
@@ -138,6 +140,16 @@
                                 <option value="all">Toutes les agences</option>
                             </select>
                         </div>
+
+                        <!-- Canal : S+ ou AnalyzTech -->
+                        <div class="at-card p-5">
+                            <p class="block text-sm font-medium text-ink mb-4" id="source-filter-label">Filtrer par canal</p>
+                            <div class="inline-flex border border-ink rounded-md overflow-hidden text-sm" role="group" aria-labelledby="source-filter-label">
+                                <button type="button" id="source-all" class="px-3 py-2" data-source="all">Tous</button>
+                                <button type="button" id="source-at" class="px-3 py-2 border-l border-stone" data-source="AT">AnalyzTech</button>
+                                <button type="button" id="source-splus" class="px-3 py-2 border-l border-stone" data-source="SPLUS">S+</button>
+                            </div>
+                        </div>
                     </div>
                     <button
                         id="reset-filters"
@@ -158,7 +170,7 @@
                         </div>
                         <div class="at-card p-6">
                             <p class="text-sm text-graphite mb-2">Affaires uniques</p>
-                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-contracts" title="Affaires distinctes (ContractNumber) dont le CCTP a été analysé">0</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-contracts" title="Affaires distinctes dont le CCTP a été analysé : numéro de contrat pour S+, projet pour AnalyzTech">0</p>
                             <p class="text-xs text-graphite mt-1" id="total-contracts-sub">ContractNumber distincts</p>
                         </div>
                         <div class="at-card p-6">
@@ -168,10 +180,38 @@
                         </div>
                         <div class="at-card p-6">
                             <p class="text-sm text-graphite mb-2">Utilisateurs uniques</p>
-                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-users" title="Personnes qui se sont servies d'une analyse : celle qui a injecté les avis dans S+ (même sur l'affaire d'un collègue), sinon le chargé d'affaires. S+ ne trace pas qui lance une analyse.">0</p>
+                            <p class="at-num text-4xl text-ink mb-2 cursor-help" id="total-users" title="Personnes qui se sont servies d'une analyse : dans S+, celle qui a injecté les avis (même sur l'affaire d'un collègue), sinon le chargé d'affaires — S+ ne trace pas qui lance une analyse ; dans AnalyzTech, la personne qui l'a lancée.">0</p>
                             <p class="text-xs text-graphite mt-1" id="total-users-sub">Utilisateurs réels distincts</p>
                         </div>
                     </div>
+                </div>
+
+                <!-- Canal d'utilisation : part AnalyzTech / S+ (filtre canal ignoré) -->
+                <div class="mb-10">
+                    <h2 class="at-title text-2xl text-ink mb-1">Canal d'utilisation</h2>
+                    <p class="text-sm text-graphite mb-5">
+                        Part des usages lancés dans AnalyzTech et dans S+, sur la période, la direction et l'agence choisies (tous canaux, quel que soit le filtre « Canal »).
+                    </p>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="at-card p-6">
+                            <div class="flex items-baseline justify-between gap-4 mb-3">
+                                <h3 class="text-sm font-medium text-ink">Analyses réalisées</h3>
+                                <p class="text-xs text-graphite" id="split-analyses-total">-</p>
+                            </div>
+                            <div class="flex h-6 w-full rounded overflow-hidden bg-off border border-stone" id="split-analyses-bar" role="img"></div>
+                            <dl class="grid grid-cols-2 gap-4 mt-4" id="split-analyses-legend"></dl>
+                        </div>
+                        <div class="at-card p-6">
+                            <div class="flex items-baseline justify-between gap-4 mb-3">
+                                <h3 class="text-sm font-medium text-ink">Utilisateurs</h3>
+                                <p class="text-xs text-graphite" id="split-users-total">-</p>
+                            </div>
+                            <div class="flex h-6 w-full rounded overflow-hidden bg-off border border-stone" id="split-users-bar" role="img"></div>
+                            <dl class="grid grid-cols-3 gap-4 mt-4" id="split-users-legend"></dl>
+                        </div>
+                    </div>
+                    <p class="text-xs text-graphite mt-3" id="split-note"></p>
+                    <p class="text-xs text-amber-700 mt-3 hidden" id="split-missing"></p>
                 </div>
 
                 <!-- KPIs qualité -->
@@ -207,6 +247,7 @@
                     <p class="text-sm text-graphite mb-5">
                         RICT diffusés depuis le lancement officiel (12/10/2026), filtrés sur leur date de diffusion.
                         On compare ce que l'IA a produit à ce que le chargé d'affaires a réellement mis dans son rapport.
+                        Section propre à S+ : une analyse lancée dans AnalyzTech n'est rattachée à aucun RICT, le filtre « Canal » ne s'y applique pas.
                         Seuls les avis Favorable, Suspendu et Défavorable sont comparés (ceux que l'IA sait produire).
                     </p>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -447,6 +488,7 @@
                                 <thead class="bg-off">
                                     <tr>
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Date</th>
+                                        <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Canal</th>
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Agence</th>
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Affaire</th>
                                         <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider">Missions</th>
@@ -503,8 +545,8 @@
         </div>
     </div>
 
-    <script src="shared/utils.js?v=202611042359"></script>
-    <script src="shared/cctp-rict.js?v=202611042359"></script>
-    <script src="analyse-cctp.js?v=202611042359"></script>
+    <script src="shared/utils.js?v=202611051740"></script>
+    <script src="shared/cctp-rict.js?v=202611051740"></script>
+    <script src="analyse-cctp.js?v=202611051740"></script>
 </body>
 </html>
