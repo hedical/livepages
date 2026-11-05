@@ -8,6 +8,7 @@ let AUTOCONTACT_URL = '';
 // l'accès API au backoffice BTP Force n'est pas ouvert (cf. README).
 let AUTOCONTACT_SPS_URL = '';
 let AMBASSADEURS_URL = ''; // ambassadeurs.json déposé à la main dans le bucket (tag ambassadeurs)
+let CLAUDE_KPIS_URL = ''; // claude_kpis.json (exports console Claude, workflow n8n « KPIs IA — Dépôt exports Claude »)
 let COMPARATEUR_URL = '';
 let NF_HABITAT_URL = '';
 let GEOTECH_URL = '';
@@ -1710,6 +1711,8 @@ async function authenticateWithPassword(password) {
             if (autocontactSpsMatch) AUTOCONTACT_SPS_URL = autocontactSpsMatch[1];
             const ambassadeursMatch = urlRegex('AMBASSADEURS_URL');
             if (ambassadeursMatch) AMBASSADEURS_URL = ambassadeursMatch[1];
+            const claudeKpisMatch = urlRegex('CLAUDE_KPIS_URL');
+            if (claudeKpisMatch) CLAUDE_KPIS_URL = claudeKpisMatch[1];
             const cctpRictMatch = urlRegex('ANALYSE_CCTP_RICT_URL');
             if (cctpRictMatch) CCTP_RICT_URL = cctpRictMatch[1];
 
@@ -2361,6 +2364,16 @@ async function loadData() {
             }
         }
 
+        // Tuile Claude (deux Teams réunies) — optionnelle : sans URL, la tuile garde ses tirets.
+        if (CLAUDE_KPIS_URL && typeof KPIClaude !== 'undefined') {
+            try {
+                const r = await fetch(CLAUDE_KPIS_URL);
+                if (r.ok) renderClaudeBrick(await r.json());
+            } catch (e) {
+                console.warn('Error loading Claude KPIs:', e);
+            }
+        }
+
         // Ambassadeurs IA (tag de la popup Utilisateurs) — optionnel.
         if (AMBASSADEURS_URL) {
             try {
@@ -2489,6 +2502,19 @@ function initializeFeatureCards() {
             card.element = parent;
         }
     });
+}
+
+// Tuile « Claude » de la grille des fonctionnalités : vue réunie des deux Teams
+// (shared/claude.js). Le détail est sur claude-ia.html.
+function renderClaudeBrick(kpis) {
+    const fmt = (n) => (typeof n === 'number' ? n.toLocaleString('fr-FR') : '—');
+    const m = KPIClaude.view(kpis, 'tous', 'membres').cur;
+    const s = KPIClaude.view(kpis, 'tous', 'skills').cur;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = fmt(v); };
+    set('claude-actifs', m && m.actifs_7j);
+    set('claude-sieges', m && m.sieges);
+    set('claude-artefacts', m && m.artefacts);
+    set('claude-skills', s && s.invocations);
 }
 
 /**

@@ -61,6 +61,8 @@ Les données sont récupérées depuis un bucket Supabase et filtrent automatiqu
 - `app.js` : Logique JavaScript pour le traitement des données et l'affichage
 - `pilotage-ia.html` / `pilotage-ia.js` : Page « Pilotage économique » (coût, budget, retour)
 - `copil-ia.html` / `copil-ia.js` : Page « COPIL IA » (adoption mensuelle, hausses et baisses, par grand métier)
+- `claude-ia.html` / `claude-ia.js` : Page « Claude » (adoption, production, skills et fonctionnalités Claude, Team Groupe et Pôle PPI)
+- `shared/claude.js` : Composition des indicateurs Claude, vue par Team ou réunie (namespace `KPIClaude`, testé par `tests/claude.test.js`)
 - `shared/copil.js` : Calcul des indicateurs COPIL et cibles (namespace `KPICopil`)
 - `autocontact-sps.html` / `autocontact-sps.js` : Page « Autocontact SPS » (contacts créés dans BTP Force)
 - `analyse-cctp.html` / `analyse-cctp.js` : Page « Analyse CCTP vs Référentiel » (card Metabase 160)
@@ -106,6 +108,33 @@ couleurs de la charte. Pour les surfaces, préférer les jetons `paper`, `off`, 
 `graphite`, `ink`, `compliant` et les composants `at-*`. Combinaisons autorisées par la
 charte : noir sur Off White, noir sur Stone Grey, Off White sur Graphite, Off White sur noir,
 vert sur noir, noir sur vert — jamais de vert en texte sur fond clair.
+
+### Page Claude (`claude-ia.html`)
+
+Page accessible depuis la tuile « Claude » (tag « Tous », dernière de la grille
+des fonctionnalités, visible quel que soit le filtre filiale). Elle lit
+`claude_kpis.json` (URL signée `CLAUDE_KPIS_URL`), sans autre source.
+
+**Chaîne d'alimentation**, chaque lundi :
+
+1. une tâche planifiée Claude (Claude in Chrome, compte `hedi.calabrese@databuildr.com`,
+   admin des deux organisations) télécharge, pour la Team Groupe puis le Pôle PPI,
+   trois exports de la console Claude (Analytique) : Membres > Tout voir > Exporter
+   en CSV (30 j), Skills > Tout voir > Télécharger le CSV (30 j), Claude Code >
+   Utilisation > Télécharger le CSV (mois en cours) ;
+2. elle envoie chaque fichier au webhook n8n `kpis-ia-claude-exports` (workflow
+   « KPIs IA — Dépôt exports Claude », en-tête `x-kpis-token`) ;
+3. le workflow range le CSV dans `DataFromMetabase/claude/<groupe|ppi>/` (copie
+   datée + `_latest`) et met à jour `claude_kpis.json` : une entrée par Team et par
+   jour de dépôt, sections `membres`, `skills`, `fonctionnalites`.
+
+Les CSV contiennent noms et e-mails : ils restent dans le bucket privé et ne
+passent jamais par ce dépôt public. `claude_kpis.json` ne porte que des agrégats,
+plus le top 20 des utilisateurs (lu derrière le mot de passe, comme les autres pages).
+
+L'export console n'offre que des fenêtres de 30, 60 ou 90 jours : la page montre
+des fenêtres glissantes de 30 jours relevées chaque semaine, et l'évolution
+compare deux relevés successifs.
 
 ### Date de mise à jour des données (`shared/last-update.js`)
 

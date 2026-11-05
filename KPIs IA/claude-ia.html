@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude - AnalyzTech</title>
+    <!-- Charte AnalyzTech (guideline V1.0) : polices, palette Tailwind, thème des graphiques.
+         Ordre obligatoire : Tailwind CDN → analyztech-tailwind.js ; chart.js → analyztech-theme.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611042359">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="shared/analyztech-tailwind.js?v=202611042359"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="shared/analyztech-theme.js?v=202611042359"></script>
+    <style>
+        /* Règles propres à la page (police et fond : shared/analyztech-theme.css). */
+        .num { font-variant-numeric: tabular-nums; }
+        html .seg-active { background: #1A1A1A; color: #F8F5EB; }
+        .bar-track { height: 10px; background: #F8F5EB; border-radius: 2px; overflow: hidden; }
+        .bar-fill { height: 100%; background: #1A1A1A; }
+        .bar-fill.alt { background: #B6B9AD; }
+        .delta-up { color: #1A1A1A; }
+        .delta-down { color: #595959; }
+    </style>
+    <!-- Date de mise à jour des données (Last-Modified du bucket) : avant le script de page. -->
+    <script src="shared/last-update.js?v=202611042359"></script>
+</head>
+<body>
+    <div class="min-h-screen bg-off">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+            <!-- Header -->
+            <div class="mb-10 pb-6 border-b border-stone flex flex-wrap items-end justify-between gap-6">
+                <div class="flex flex-col gap-5">
+                    <img src="shared/analyztech-wordmark.svg" alt="AnalyzTech" class="at-logo self-start">
+                    <div>
+                        <a href="index.html" class="at-back mb-3">← Retour au tableau de bord</a>
+                        <h1 class="at-title text-4xl sm:text-5xl text-ink mb-3">Claude — Usage et adoption</h1>
+                        <p class="text-graphite text-sm" id="periodes">Exports de la console Claude (Analytique)</p>
+                        <p class="text-graphite text-xs mt-1" id="data-updated-at"></p>
+                    </div>
+                </div>
+                <div class="flex flex-col items-end gap-2">
+                    <span class="text-xs font-medium text-graphite">Périmètre</span>
+                    <div class="inline-flex rounded-lg bg-paper border border-stone p-1" role="tablist" aria-label="Périmètre" id="team-tabs">
+                        <button type="button" role="tab" data-team="tous" class="px-3 py-1.5 text-sm rounded-md text-gray-600">Les deux Teams</button>
+                        <button type="button" role="tab" data-team="groupe" class="px-3 py-1.5 text-sm rounded-md text-gray-600">Team Groupe</button>
+                        <button type="button" role="tab" data-team="ppi" class="px-3 py-1.5 text-sm rounded-md text-gray-600">Pôle PPI</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading" class="py-24 text-center text-graphite">Chargement…</div>
+
+            <div id="error" class="hidden py-16">
+                <div class="max-w-xl mx-auto at-card p-8 text-center">
+                    <p class="at-title text-2xl text-ink">Indicateurs Claude indisponibles</p>
+                    <p class="text-sm text-graphite mt-3" id="error-message"></p>
+                    <a href="index.html" class="at-btn at-btn-primary mt-6">Retour au tableau de bord</a>
+                </div>
+            </div>
+
+            <main id="main-content" class="hidden">
+
+                <!-- 1. Synthèse -->
+                <section class="mb-10" aria-labelledby="h-synthese">
+                    <h2 id="h-synthese" class="at-title text-2xl text-ink mb-2">Synthèse</h2>
+                    <p class="text-sm text-graphite mb-5">Fenêtre glissante de 30 jours à la date du dernier export. L'évolution compare au relevé précédent.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="tiles"></div>
+                </section>
+
+                <!-- 2. Évolution -->
+                <section class="mb-10" aria-labelledby="h-evolution">
+                    <h2 id="h-evolution" class="at-title text-2xl text-ink mb-2">Évolution par relevé</h2>
+                    <p class="text-sm text-graphite mb-5">Un point par export hebdomadaire : sièges actifs sur les 7 derniers jours et artefacts créés sur 30 jours.</p>
+                    <div class="at-card p-6">
+                        <p id="evolution-empty" class="hidden text-sm text-graphite">La courbe apparaîtra au deuxième relevé.</p>
+                        <div class="relative h-72" id="evolution-box"><canvas id="evolution-chart" role="img" aria-label="Évolution des sièges actifs et des artefacts par relevé"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- 3. Production et fonctionnalités -->
+                <section class="mb-10" aria-labelledby="h-prod">
+                    <h2 id="h-prod" class="at-title text-2xl text-ink mb-2">Production et fonctionnalités</h2>
+                    <p class="text-sm text-graphite mb-5">Ce que les collaborateurs produisent avec Claude, et les briques de la plateforme qu'ils ont adoptées.</p>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="at-card p-6">
+                            <h3 class="text-lg font-medium text-ink mb-1">Production par surface</h3>
+                            <p class="text-xs text-graphite mb-4">Artefacts créés et messages échangés, 30 jours</p>
+                            <div class="flex flex-col gap-2.5" id="bars-artefacts"></div>
+                            <div class="border-t border-stone my-4"></div>
+                            <div class="flex flex-col gap-2.5" id="bars-messages"></div>
+                        </div>
+                        <div class="at-card p-6">
+                            <h3 class="text-lg font-medium text-ink mb-1">Fonctionnalités adoptées</h3>
+                            <p class="text-xs text-graphite mb-4" id="feat-hint">Part des utilisateurs actifs du mois</p>
+                            <div class="flex flex-col gap-2.5" id="bars-feat"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. Skills -->
+                <section class="mb-10" aria-labelledby="h-skills">
+                    <h2 id="h-skills" class="at-title text-2xl text-ink mb-2">Skills</h2>
+                    <p class="text-sm text-graphite mb-5" id="skills-note"></p>
+                    <div class="at-card p-6">
+                        <div class="flex flex-wrap items-baseline justify-between gap-3 mb-4">
+                            <h3 class="text-lg font-medium text-ink">Top 10 des invocations, 30 jours</h3>
+                            <div class="flex gap-4 text-xs text-graphite">
+                                <span class="inline-flex items-center gap-1.5"><i class="inline-block w-2.5 h-2.5 rounded-sm bg-ink"></i>Skill maison</span>
+                                <span class="inline-flex items-center gap-1.5"><i class="inline-block w-2.5 h-2.5 rounded-sm bg-stone"></i>Skill Anthropic</span>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-2.5" id="bars-skills"></div>
+                        <div class="border-t border-stone my-4"></div>
+                        <div class="flex h-3 rounded-sm overflow-hidden" id="skills-split" role="img"></div>
+                        <p class="text-xs text-graphite mt-2" id="skills-split-legend"></p>
+                    </div>
+                </section>
+
+                <!-- 5. Entités -->
+                <section class="mb-10" aria-labelledby="h-ent">
+                    <h2 id="h-ent" class="at-title text-2xl text-ink mb-2">Adoption par entité</h2>
+                    <p class="text-sm text-graphite mb-5">Intensité rapportée au siège, pour comparer des entités de tailles très différentes.</p>
+                    <div class="at-card px-4 py-2 overflow-x-auto"><table class="w-full text-sm num" id="t-ent"></table></div>
+                </section>
+
+                <!-- 6. Top utilisateurs -->
+                <section class="mb-10" aria-labelledby="h-top">
+                    <h2 id="h-top" class="at-title text-2xl text-ink mb-2">Top 20 des utilisateurs</h2>
+                    <p class="text-sm text-graphite mb-5" id="top-note">Messages Chat et Cowork sur 30 jours. Les sessions Claude Code ne comptent pas comme des messages.</p>
+                    <div class="at-card px-4 py-2 overflow-x-auto"><table class="w-full text-sm num" id="t-top"></table></div>
+                </section>
+
+                <!-- 7. Méthode -->
+                <section class="mb-4" aria-labelledby="h-methode">
+                    <h2 id="h-methode" class="at-title text-2xl text-ink mb-4">Méthode</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-graphite">
+                        <div class="at-card p-5"><p class="font-medium text-ink mb-1">Sources</p>Trois exports de la console Claude par Team, chaque lundi : membres et skills (30 jours glissants), Claude Code usage (mois en cours). Le workflow n8n « KPIs IA — Dépôt exports Claude » les agrège dans claude_kpis.json.</div>
+                        <div class="at-card p-5"><p class="font-medium text-ink mb-1">Définitions</p>Actifs 7 j : dernière activité dans les 7 jours précédant la fin de la fenêtre. Réguliers : 10 jours actifs ou plus sur 30. Concentration : part des messages portée par les 20 comptes les plus actifs.</div>
+                        <div class="at-card p-5"><p class="font-medium text-ink mb-1">Deux Teams réunies</p>Sièges, messages, artefacts et top 20 sont additionnés exactement. Les skills distincts sont sommés par Team : un skill utilisé dans les deux compte deux fois.</div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="shared/utils.js?v=202611042359"></script>
+    <script src="shared/claude.js?v=202611042359"></script>
+    <script src="claude-ia.js?v=202611042359"></script>
+</body>
+</html>

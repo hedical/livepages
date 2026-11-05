@@ -9,13 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611021146">
+    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611042359">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="shared/analyztech-tailwind.js?v=202611021146"></script>
+    <script src="shared/analyztech-tailwind.js?v=202611042359"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="shared/analyztech-theme.js?v=202611021146"></script>
+    <script src="shared/analyztech-theme.js?v=202611042359"></script>
     <!-- Date de mise à jour des données (Last-Modified du bucket) : avant le script de page. -->
-    <script src="shared/last-update.js?v=202611021146"></script>
+    <script src="shared/last-update.js?v=202611042359"></script>
 </head>
 <body>
     <div class="min-h-screen bg-off">
@@ -652,6 +652,25 @@
                                 <p>Avec <strong class="text-ink font-medium" id="autocontact-sps-users">0</strong> utilisateurs uniques</p>
                             </div>
                         </a>
+
+                        <!-- Claude (Team Groupe + Pôle PPI) : toutes entités, tag « Tous ».
+                             Hors featureCards : la tuile reste visible quel que soit le filtre
+                             filiale. Chiffres de claude_kpis.json (CLAUDE_KPIS_URL), cf. app.js. -->
+                        <a href="claude-ia.html" class="bg-white at-card at-brick at-fil-autre p-6 cursor-pointer block">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-medium text-ink leading-tight">Claude</h3>
+                                <span class="shrink-0 px-2 py-1 text-xs font-medium rounded at-fil">Tous</span>
+                            </div>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <span class="at-num text-5xl text-ink" id="claude-actifs">—</span>
+                                <span class="text-sm text-graphite">membres actifs sur 7 jours</span>
+                            </div>
+                            <div class="space-y-1 text-xs text-graphite border-t border-stone pt-3">
+                                <p>Sur <strong class="text-ink font-medium" id="claude-sieges">—</strong> sièges attribués (deux Teams)</p>
+                                <p><strong class="text-ink font-medium" id="claude-artefacts">—</strong> artefacts créés sur 30 jours</p>
+                                <p><strong class="text-ink font-medium" id="claude-skills">—</strong> invocations de skills sur 30 jours</p>
+                            </div>
+                        </a>
                     </div>
                 </div>
 
@@ -966,11 +985,12 @@
         </div>
     </div>
 
-    <script src="shared/utils.js?v=202611021146"></script>
-    <script src="shared/sources.js?v=202611021146"></script>
-    <script src="shared/adoption.js?v=202611021146"></script>
-    <script src="shared/cctp-rict.js?v=202611021146"></script>
-    <script src="shared/copil.js?v=202611021146"></script>
-    <script src="app.js?v=202611021146"></script>
+    <script src="shared/utils.js?v=202611042359"></script>
+    <script src="shared/sources.js?v=202611042359"></script>
+    <script src="shared/adoption.js?v=202611042359"></script>
+    <script src="shared/cctp-rict.js?v=202611042359"></script>
+    <script src="shared/copil.js?v=202611042359"></script>
+    <script src="shared/claude.js?v=202611042359"></script>
+    <script src="app.js?v=202611042359"></script>
 </body>
 </html>
