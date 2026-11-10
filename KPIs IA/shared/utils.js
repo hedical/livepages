@@ -351,7 +351,11 @@ const KPI = (function () {
                 contractNumber,
                 agencyCode: m ? m[1] : null,
                 email: _str(r.UserEmail),
-                agency: _str(r.Agence),
+                // Agence du chargé d'affaires (AgencyToUser.isMain) ; à défaut,
+                // agence du numéro d'affaire. Des comptes S+ n'ont pas d'agence
+                // principale (CT78 : 3 comptes au 10/11/2026) : sans repli, leurs
+                // analyses sortaient du tableau et du filtre par agence.
+                agency: _str(r.Agence) || (m ? m[1] : ''),
                 direction: _str(r.DR),
                 missions: _str(r.Missions).split(/[,;|/]/).map(s => s.trim()).filter(Boolean),
                 totalMissions: _int(r.TotalMissions),

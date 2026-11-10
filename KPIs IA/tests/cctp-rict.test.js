@@ -34,6 +34,16 @@ test('parsePayload — CSV brut et enveloppe n8n, YIELD exclu, emails en minuscu
     assert.deepEqual(R.parsePayload(HEADER), []);
 });
 
+test('parseRows — agence vide (compte S+ sans agence principale) : repli sur le n° d\'affaire', () => {
+    const [a, b] = R.parseRows([
+        { ReportId: 'r1', ContractNumber: 'C-CT78-2026-20-1', Agence: '', DR: '' },
+        { ReportId: 'r2', ContractNumber: 'C-CT78-2026-20-2', Agence: 'CT92S', DR: 'DR IDF Sud' },
+    ]);
+    assert.equal(a.agency, 'CT78');
+    assert.equal(a.agencyCode, 'CT78');
+    assert.equal(b.agency, 'CT92S'); // l'agence du chargé d'affaires prime
+});
+
 test('aggregate — recours, part IA, utilisation, déchet décomposé', () => {
     const s = R.aggregate(R.parsePayload(CSV));
     assert.equal(s.rict, 3);

@@ -348,6 +348,18 @@ test('parseCctpRows — avis repris = max(avis statués, notices injectées)', (
     assert.equal(c.avisRepris, 0);
 });
 
+test('parseCctpRows — agence vide (compte S+ sans agence principale) : repli sur le n° d\'affaire', () => {
+    const [a, b, c] = KPI.parseCctpRows([
+        { DeliverableId: 'a', ContractNumber: 'C-CT78-2026-20-318408', Agence: '', DR: '' },
+        { DeliverableId: 'b', ContractNumber: 'C-CT78-2026-20-1', Agence: 'CT92S', DR: 'DR IDF Sud' },
+        { DeliverableId: 'c', Source: 'AT', ContractNumber: '', Agence: '' },
+    ]);
+    assert.equal(a.agency, 'CT78');
+    assert.equal(a.agencyCode, 'CT78');
+    assert.equal(b.agency, 'CT92S'); // l'agence du chargé d'affaires prime
+    assert.equal(c.agency, '');      // AnalyzTech : agence reprise par cctpAttachAgencies
+});
+
 test('parseCctpRows — exclut YIELD et lignes sans livrable', () => {
     const items = KPI.parseCctpRows([
         { DeliverableId: 'a', ContractNumber: 'C-YIELD-STUDIO-1' },

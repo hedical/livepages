@@ -82,7 +82,9 @@ const KPICctpRict = (function () {
                 // Chargé d'affaires (SubAffair.userId) — même convention que card 160.
                 email: _str(r.UserEmail).toLowerCase(),
                 direction: _str(r.DR),
-                agency: _str(r.Agence),
+                // Repli sur l'agence du numéro d'affaire quand le chargé
+                // d'affaires n'a pas d'agence principale (cf. KPI.parseCctpRows).
+                agency: _str(r.Agence) || (m ? m[1] : ''),
                 // Rédacteur du RICT (Report.createdById) : différent dans ~8 % des cas.
                 author: _str(r.AuthorEmail).toLowerCase(),
                 authorDirection: _str(r.AuthorDR),
