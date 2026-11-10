@@ -9,13 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611051740">
+    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611101513">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="shared/analyztech-tailwind.js?v=202611051740"></script>
+    <script src="shared/analyztech-tailwind.js?v=202611101513"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="shared/analyztech-theme.js?v=202611051740"></script>
+    <script src="shared/analyztech-theme.js?v=202611101513"></script>
     <!-- Date de mise à jour des données (Last-Modified du bucket) : avant le script de page. -->
-    <script src="shared/last-update.js?v=202611051740"></script>
+    <script src="shared/last-update.js?v=202611101513"></script>
 </head>
 <body>
     <div class="min-h-screen bg-off">
@@ -212,6 +212,30 @@
                     </div>
                     <p class="text-xs text-graphite mt-3" id="split-note"></p>
                     <p class="text-xs text-amber-700 mt-3 hidden" id="split-missing"></p>
+                </div>
+
+                <!-- Adoption hebdomadaire (KPI.cctpWeeklyActivity) : pendant de
+                     l'« Adoption mensuelle » du COPIL IA, à la semaine. -->
+                <div class="mb-10">
+                    <h2 class="at-title text-2xl text-ink mb-1">Adoption hebdomadaire</h2>
+                    <p class="text-sm text-graphite mb-5">
+                        Utilisateurs actifs de la semaine ÷ population concernée (contrôleurs de la direction ou de l'agence choisie). Hebdomadaire, pas cumulée : une semaine qui décroche se voit.
+                        Même utilisateur qu'au COPIL (injecteur, sinon chargé d'affaires). Suit les filtres direction et agence ; la période est ignorée (tendance depuis le lancement) et les canaux sont tous tracés. Pointillés : semaine en cours, incomplète.
+                    </p>
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <div class="lg:col-span-3 at-card p-6">
+                            <h3 class="text-lg font-medium text-ink mb-1">Par semaine : tous canaux et par canal</h3>
+                            <p class="text-xs text-graphite mb-3" id="weekly-unit">-</p>
+                            <div class="relative h-80"><canvas id="weeklyAdoptionChart" role="img" aria-label="Adoption hebdomadaire de l'analyse CCTP, tous canaux, S+ et AnalyzTech"></canvas></div>
+                        </div>
+                        <div class="lg:col-span-2 at-card p-6">
+                            <dl class="grid grid-cols-2 gap-4" id="weekly-tiles"></dl>
+                            <h3 class="text-sm font-medium text-ink mt-6 mb-1">4 semaines glissantes, face à la cible</h3>
+                            <p class="text-xs text-graphite mb-3" id="weekly-rolling-unit">-</p>
+                            <div class="relative h-40"><canvas id="weeklyRollingChart" role="img" aria-label="Utilisateurs distincts sur 4 semaines glissantes, avec la cible d'adoption"></canvas></div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-graphite mt-3" id="weekly-note"></p>
                 </div>
 
                 <!-- KPIs qualité -->
@@ -545,8 +569,9 @@
         </div>
     </div>
 
-    <script src="shared/utils.js?v=202611051740"></script>
-    <script src="shared/cctp-rict.js?v=202611051740"></script>
-    <script src="analyse-cctp.js?v=202611051740"></script>
+    <script src="shared/utils.js?v=202611101513"></script>
+    <script src="shared/copil.js?v=202611101513"></script>
+    <script src="shared/cctp-rict.js?v=202611101513"></script>
+    <script src="analyse-cctp.js?v=202611101513"></script>
 </body>
 </html>

@@ -670,3 +670,36 @@ test('cctpUsageEvents — l\'injecteur remplace le chargé d\'affaires, une requ
     assert.equal(s.uniqueUsers, 3);          // Benjamin n'est pas compté
     assert.equal(s.analysesCollegue, 1);
 });
+
+// ---------- Adoption hebdomadaire CCTP ----------
+
+test('cctpWeeklyActivity — semaines lundi → dimanche, canaux, nouveaux et 4 semaines glissantes', () => {
+    const it = (id, date, email, extra) => Object.assign({ deliverableId: id, createdAt: date, email, status: 'COMPLETED', source: 'SPLUS', injecteurs: [] }, extra);
+    const items = [
+        it('a', '2026-10-12T09:00:00', 'A@x.fr'),                       // lundi 12/10
+        it('b', '2026-10-18T18:00:00', 'b@x.fr', { source: 'AT' }),     // dimanche 18/10 : même semaine
+        it('c', '2026-10-19T09:00:00', 'a@x.fr', { source: 'AT' }),     // lundi 19/10
+        it('d', '2026-10-20T09:00:00', 'a@x.fr'),                       // a sur les deux canaux
+        it('e', '2026-10-21T09:00:00', 'c@x.fr', { status: 'ERROR' }),  // erreur : ignorée
+        // Injecteur connu : il remplace le chargé d'affaires.
+        it('f', '2026-11-09T09:00:00', 'charge@x.fr', { injecteurs: [{ email: 'inj@x.fr', agency: '', direction: '' }] }),
+    ];
+    const w = KPI.cctpWeeklyActivity(items, new Date('2026-11-10T12:00:00'));
+    assert.deepEqual(w.map(x => x.week), ['2026-10-12', '2026-10-19', '2026-10-26', '2026-11-02', '2026-11-09']);
+    assert.deepEqual(w[0].users, { all: 2, SPLUS: 1, AT: 1 });
+    assert.equal(w[0].newUsers, 2);
+    assert.deepEqual(w[1].users, { all: 1, SPLUS: 1, AT: 1 });
+    assert.equal(w[1].newUsers, 0);
+    // Semaine sans usage : présente, à zéro.
+    assert.deepEqual(w[2].users, { all: 0, SPLUS: 0, AT: 0 });
+    assert.equal(w[2].rolling4, 2);
+    assert.deepEqual(w[4].users, { all: 1, SPLUS: 1, AT: 0 });
+    assert.equal(w[4].newUsers, 1);
+    // 4 semaines glissantes au 09/11 : 19/10 → 09/11 (a, inj) ; b est sorti.
+    assert.equal(w[4].rolling4, 2);
+});
+
+test('cctpWeeklyActivity — aucune analyse → []', () => {
+    assert.deepEqual(KPI.cctpWeeklyActivity([]), []);
+    assert.deepEqual(KPI.cctpWeeklyActivity([{ deliverableId: 'x', createdAt: 'nope', email: 'a@x.fr' }]), []);
+});

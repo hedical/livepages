@@ -556,6 +556,14 @@ Les lignes ont les colonnes de la card 160 plus `Source = 'AT'`, `ProjectId`, `P
   (`KPI.cctpSourceSplit`) : part des analyses et des utilisateurs par canal (AT seul, les deux,
   S+ seul), sur période / DR / agence, **quel que soit** le filtre Canal ; graphique d'évolution
   empilé par canal ; colonne « Canal » dans les dernières analyses ; « dont N AT » par agence.
+- **Adoption hebdomadaire** (page CCTP, `KPI.cctpWeeklyActivity`) : pendant à la semaine de
+  l'« Adoption mensuelle » du COPIL. Utilisateurs actifs de la semaine (lundi → dimanche, mêmes
+  utilisateurs réels que le COPIL via `KPI.cctpUsageEvents`) ÷ contrôleurs du périmètre
+  (`population_cible.csv` : agence choisie, sinon ses agences de la DR, sinon tout le CT), en
+  courbes Tous / S+ / AnalyzTech. Suit DR et agence, ignore la période et le filtre Canal.
+  Panneau : dernière semaine complète (± vs la précédente), nouveaux utilisateurs, semaine en
+  cours (partielle, en pointillés) et **4 semaines glissantes** face à la cible du COPIL
+  (`KPICopil.CIBLES.adoption`, > 50 %) — la cible est mensuelle, elle ne se lit pas sur une semaine.
 - **Affaire** côté AT = le projet AnalyzTech (`KPI.cctpDossier` : contrat, sinon `AT:<projet>`).
 - **Utilisateur** côté AT = la personne qui a lancé l'analyse (`createdByUserId`), sinon le
   propriétaire du projet. **Agence et DR** : reprises de la même personne dans S+ (analyses,

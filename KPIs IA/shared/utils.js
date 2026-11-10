@@ -496,6 +496,49 @@ const KPI = (function () {
         return out;
     }
 
+    // Activité hebdomadaire (semaines lundi → dimanche, heure locale) pour
+    // l'adoption hebdomadaire de la page Analyse CCTP. Mêmes utilisateurs
+    // réels que le COPIL (cctpUsageEvents), comptés une fois par semaine.
+    // Semaines contiguës de la première analyse jusqu'à `until` (défaut :
+    // aujourd'hui) : une semaine sans usage reste visible à 0.
+    // → [{ week: 'YYYY-MM-DD' (lundi), users: { all, SPLUS, AT }, newUsers,
+    //      rolling4 }] ; rolling4 = utilisateurs distincts sur les 4 semaines
+    //      finissant à celle-ci (ordre de grandeur d'une adoption mensuelle).
+    function cctpWeeklyActivity(items, until) {
+        const byWeek = new Map(); // index de semaine → { all, SPLUS, AT } (Sets)
+        cctpUsageEvents(items).forEach(e => {
+            const d = new Date(e.createdAt);
+            if (isNaN(d.getTime())) return;
+            const w = weekIndex(d);
+            if (!byWeek.has(w)) byWeek.set(w, { all: new Set(), SPLUS: new Set(), AT: new Set() });
+            const s = byWeek.get(w);
+            s.all.add(e.email);
+            s[e.source === 'AT' ? 'AT' : 'SPLUS'].add(e.email);
+        });
+        if (!byWeek.size) return [];
+        const first = Math.min(...byWeek.keys());
+        const last = Math.max(weekIndex(until || new Date()), Math.max(...byWeek.keys()));
+        const empty = { all: new Set(), SPLUS: new Set(), AT: new Set() };
+        const seen = new Set();
+        const out = [];
+        for (let w = first; w <= last; w++) {
+            const s = byWeek.get(w) || empty;
+            let newUsers = 0;
+            s.all.forEach(e => { if (!seen.has(e)) { seen.add(e); newUsers++; } });
+            const rolling = new Set();
+            for (let k = Math.max(first, w - 3); k <= w; k++) (byWeek.get(k) || empty).all.forEach(e => rolling.add(e));
+            // Lundi de la semaine w : jour (w * 7 - 3) depuis l'epoch (jeudi).
+            const monday = new Date((w * 7 - 3) * _DAY);
+            out.push({
+                week: monday.toISOString().slice(0, 10),
+                users: { all: s.all.size, SPLUS: s.SPLUS.size, AT: s.AT.size },
+                newUsers,
+                rolling4: rolling.size,
+            });
+        }
+        return out;
+    }
+
     // Agence et DR des items AnalyzTech, qui n'en portent pas : agence la plus
     // fréquente de la même personne dans les sources S+ fournies (`refs` :
     // items CCTP S+, RICT…, objets { email, agency, agencyCode, direction }).
@@ -927,6 +970,7 @@ const KPI = (function () {
         cctpDossier,
         filterCctpBySource,
         cctpSourceSplit,
+        cctpWeeklyActivity,
         cctpAttachAgencies,
         parseAmbassadeurs,
         CCTP_GAIN,

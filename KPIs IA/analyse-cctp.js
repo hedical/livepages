@@ -178,7 +178,8 @@ async function loadAgencyPopulation() {
             const parts = lines[i].split(separator);
             if (parts.length >= 3) {
                 const dr = parts[0].trim();
-                const agencyCode = parts[1].trim();
+                // Codes en majuscules, comme ceux des items (C-XXXX-) et d'app.js.
+                const agencyCode = parts[1].trim().toUpperCase();
                 const effectif = parseInt(parts[2].trim());
                 if (agencyCode && !isNaN(effectif)) {
                     population[agencyCode] = effectif;
@@ -380,6 +381,163 @@ function updateSourceSplit() {
     const missing = $('split-missing');
     missing.classList.toggle('hidden', atLoaded);
     missing.textContent = atLoaded ? '' : 'Source AnalyzTech indisponible (ANALYSE_CCTP_AT_URL absente du webhook) : seules les analyses S+ sont comptées.';
+}
+
+// ==================== ADOPTION HEBDOMADAIRE ====================
+
+// Couleurs : « tous canaux » reprend le violet « Tous modules CT » du COPIL ;
+// AnalyzTech en vert foncé (le Compliant Green est trop pâle pour une courbe).
+const WEEK_COLORS = { all: '#4a3aa7', SPLUS: '#1A1A1A', AT: '#008300' };
+let weeklyChart = null;
+let weeklyRollingChart = null;
+
+// Contrôleurs du périmètre (population_cible.csv) : l'agence choisie, sinon
+// les agences de la direction choisie (même rattachement que filterByDR),
+// sinon tout le CT. 0 = inconnue : on affiche des nombres, pas des %.
+function scopePopulation() {
+    const refs = allData.concat(rictData);
+    const codeOf = it => (it.agencyCode ? String(it.agencyCode).toUpperCase() : '');
+    if (filters.agence) {
+        const it = refs.find(x => x.agency === filters.agence && x.agencyCode);
+        return it ? agencyPopulation[codeOf(it)] || 0 : 0;
+    }
+    if (filters.dr) {
+        const codes = new Set();
+        Object.keys(agencyToDR).forEach(code => { if (agencyToDR[code] === filters.dr) codes.add(code.toUpperCase()); });
+        refs.forEach(it => { if (it.direction === filters.dr && codeOf(it)) codes.add(codeOf(it)); });
+        return [...codes].reduce((s, c) => s + (agencyPopulation[c] || 0), 0);
+    }
+    return Object.values(agencyPopulation).reduce((s, n) => s + n, 0);
+}
+
+// « 1 utilisateur actif », « 12 utilisateurs actifs ».
+function usersLabel(n, adj) {
+    const s = n > 1 ? 's' : '';
+    return `${formatNumber(n)} utilisateur${s} ${adj}${s}`;
+}
+
+function weekLabel(key) {
+    const [, m, d] = key.split('-');
+    return `${d}/${m}`;
+}
+
+// Le dernier segment (semaine en cours, partielle) est en pointillés : sa
+// chute n'est pas un décrochage.
+function weeklyLine(label, data, color, extra) {
+    const last = data.length - 1;
+    return Object.assign({
+        label, data, borderColor: color, backgroundColor: color,
+        borderWidth: 2, tension: 0.25, spanGaps: false,
+        pointRadius: 3, pointHoverRadius: 5, pointBorderColor: '#ffffff', pointBorderWidth: 2,
+        segment: { borderDash: ctx => (ctx.p1DataIndex === last ? [4, 4] : undefined) },
+    }, extra || {});
+}
+
+function weeklyOptions(pop, suggestedMax) {
+    const asPct = v => `${(v * 100).toFixed(0)} %`;
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, usePointStyle: true } },
+            tooltip: {
+                ...TOOLTIP,
+                filter: c => c.raw !== null,
+                callbacks: { label: c => `${c.dataset.label} : ${pop ? `${(c.raw * 100).toFixed(1).replace('.', ',')} %` : formatNumber(c.raw)}` },
+            },
+        },
+        scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+            y: pop
+                ? { beginAtZero: true, suggestedMax, ticks: { callback: asPct } }
+                : { beginAtZero: true, ticks: { precision: 0 } },
+        },
+    };
+}
+
+function updateWeeklyAdoption() {
+    const weeks = KPI.cctpWeeklyActivity(getFilteredData(true, true));
+    const pop = scopePopulation();
+    const cible = KPICopil.CIBLES.adoption;
+    const v = n => (pop ? n / pop : n);
+    const show = n => (pop ? pct(n, pop) : formatNumber(n));
+    // La dernière semaine est la semaine en cours : partielle.
+    const labels = weeks.map((w, i) => `${weekLabel(w.week)}${i === weeks.length - 1 ? ' (en cours)' : ''}`);
+    const perimetre = filters.agence ? `agence ${filters.agence}` : filters.dr ? filters.dr : 'CT';
+
+    $('weekly-unit').textContent = pop
+        ? `actifs de la semaine ÷ ${formatNumber(pop)} (population ${perimetre}) · semaine du lundi au dimanche`
+        : `actifs de la semaine · population ${perimetre} inconnue, pas de % ni de cible`;
+    if (weeklyChart) weeklyChart.destroy();
+    weeklyChart = new Chart($('weeklyAdoptionChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                weeklyLine('Tous canaux', weeks.map(w => v(w.users.all)), WEEK_COLORS.all, { borderWidth: 3 }),
+                weeklyLine('S+', weeks.map(w => v(w.users.SPLUS)), WEEK_COLORS.SPLUS),
+                // Avant la source AnalyzTech, la courbe resterait à 0 à tort.
+                ...(atLoaded ? [weeklyLine('AnalyzTech', weeks.map(w => v(w.users.AT)), WEEK_COLORS.AT)] : []),
+            ],
+        },
+        options: weeklyOptions(pop, 0.2),
+    });
+
+    // Repères : dernière semaine complète (avant-dernière de la série), la
+    // précédente, et la semaine en cours.
+    const cur = weeks[weeks.length - 1] || null;
+    const last = weeks[weeks.length - 2] || null;
+    const prev = weeks[weeks.length - 3] || null;
+    const d = last && prev ? KPICopil.change(prev.users.all, last.users.all) : null;
+    const delta = d === null ? ''
+        : ` · <span class="${d < 0 ? 'text-red-700' : 'text-green-700'}">${d < 0 ? '▼' : '▲'} ${d > 0 ? '+' : ''}${Math.round(d * 100)} %</span> vs sem. du ${weekLabel(prev.week)}`;
+    const need = pop ? Math.floor(cible.value * pop) + 1 : null;
+    const tile = (label, value, sub) => `<div>
+        <dt class="text-xs text-graphite">${label}</dt>
+        <dd class="at-num text-3xl text-ink mt-1">${value}</dd>
+        <dd class="text-xs text-graphite mt-1">${sub}</dd>
+    </div>`;
+    $('weekly-tiles').innerHTML = [
+        tile(last ? `Semaine du ${weekLabel(last.week)}` : 'Dernière semaine complète',
+            last ? show(last.users.all) : '—',
+            last ? `${usersLabel(last.users.all, 'actif')}${pop ? ` sur ${formatNumber(pop)}` : ''}${delta}` : 'Pas encore de semaine complète'),
+        tile('Nouveaux utilisateurs', last ? formatNumber(last.newUsers) : '—',
+            last ? `premier usage la semaine du ${weekLabel(last.week)}` : '—'),
+        tile('Semaine en cours', cur ? show(cur.users.all) : '—',
+            cur ? `${usersLabel(cur.users.all, 'actif')} depuis le lundi ${weekLabel(cur.week)} (partielle)` : '—'),
+        tile('4 semaines glissantes', last ? show(last.rolling4) : '—',
+            last ? `${usersLabel(last.rolling4, 'distinct')}${need ? ` · cible : plus de ${pct(cible.value, 1)}, il en faut ${formatNumber(need)}` : ''}` : '—'),
+    ].join('');
+
+    // Utilisateurs distincts sur 4 semaines : l'ordre de grandeur de
+    // l'adoption mensuelle, que juge la cible du COPIL (> 50 % fin 2026).
+    $('weekly-rolling-unit').textContent = pop
+        ? `utilisateurs distincts des 4 semaines finissant à chaque semaine ÷ ${formatNumber(pop)} · comparable à l'adoption mensuelle du COPIL`
+        : 'utilisateurs distincts des 4 semaines finissant à chaque semaine';
+    if (weeklyRollingChart) weeklyRollingChart.destroy();
+    const ro = weeklyOptions(pop, pop ? 0.6 : undefined);
+    ro.plugins.legend.display = false;
+    ro.scales.x.ticks.maxTicksLimit = 6;
+    ro.scales.y.ticks.maxTicksLimit = 4;
+    weeklyRollingChart = new Chart($('weeklyRollingChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [weeklyLine('4 semaines glissantes', weeks.map(w => v(w.rolling4)), WEEK_COLORS.all, { pointRadius: 2 })]
+                .concat(pop ? [{
+                    label: `Cible d'adoption : plus de ${pct(cible.value, 1)} (fin ${cible.month.slice(0, 4)})`,
+                    data: weeks.map(() => cible.value),
+                    borderColor: '#595959', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, fill: false,
+                }] : []),
+        },
+        options: ro,
+    });
+
+    $('weekly-note').textContent = filters.source !== 'all'
+        ? `Le filtre « Canal » ne s'applique pas à cette section : les canaux y sont comparés.`
+        : '';
 }
 
 function syncSourceButtons() {
@@ -884,6 +1042,7 @@ function updateKPIs() {
 
     updateCards(stats);
     updateSourceSplit();
+    updateWeeklyAdoption();
     syncSourceButtons();
     updateRict();
     updateGain(stats);
