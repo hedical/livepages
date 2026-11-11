@@ -156,3 +156,10 @@ test('detectFluctuations — mois précédent absent : rien', () => {
     const items = [{ id: 'm', label: 'M', metier: 'CT', series: serie([['2026-09', 50, 50, 0, null]]) }];
     assert.deepEqual(C.detectFluctuations(items, '2026-09'), []);
 });
+
+test('inPopulation — garde les seuls membres, population vide = aucun filtre', () => {
+    const ev = [{ email: 'CT@x.fr', month: '2026-10' }, { email: 'da@x.fr', month: '2026-10' }, { month: '2026-10' }];
+    assert.deepEqual(C.inPopulation(ev, new Set(['ct@x.fr'])).map(e => e.email), ['CT@x.fr']);
+    assert.equal(C.inPopulation(ev, new Set()).length, 3);
+    assert.equal(C.inPopulation(ev, null).length, 3);
+});

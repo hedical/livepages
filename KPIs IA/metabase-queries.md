@@ -242,7 +242,7 @@ ORDER BY c."createdAt" DESC
 
 **URL :** `https://metabase.btp-force.cloud/question/136`
 **Collection :** KPI IA (id 17)
-**Format de sortie :** ~47 lignes, <1 KB
+**Format de sortie :** ~39 lignes, <1 KB
 **Format colonnes :** `DR`, `Agence`, `Effectif` — drop-in pour remplacer l'ancien CSV statique `population_cible.csv`
 
 ### SQL
@@ -251,25 +251,35 @@ ORDER BY c."createdAt" DESC
 SELECT
     a."management"          AS "DR",
     a."productionService"   AS "Agence",
-    COUNT(DISTINCT u."id") FILTER (WHERE u."isEnabled" = true) AS "Effectif"
+    COUNT(DISTINCT u."id")  AS "Effectif",
+    string_agg(DISTINCT lower(trim(u."email")), ' ') AS "Controleurs"
 FROM "Agency" a
-LEFT JOIN "AgencyToUser" atu
+JOIN "AgencyToUser" atu
     ON atu."agencyId" = a."id" AND atu."isMain" = true
-LEFT JOIN "User" u
+JOIN "User" u
     ON u."id" = atu."userId"
+   AND u."isEnabled" = true
+   AND u."position"::text IN ('TECHNICAL_CONTROLLER', 'TECHNICAL_CONTROLLER_ELECTRICITY')
+WHERE a."productionService" IS NOT NULL
+  AND a."productionService" <> 'ADMIN'
 GROUP BY a."management", a."productionService"
-HAVING COUNT(DISTINCT u."id") FILTER (WHERE u."isEnabled" = true) > 0
 ORDER BY a."management", a."productionService"
 ```
 
 ### Description
 
-> Population cible agrégée (drop-in replacement du CSV statique). 1 ligne par agence avec DR/Agence/Effectif. Effectif = nombre d'users actifs (`isEnabled=true`) dont c'est l'agence principale (`AgencyToUser.isMain=true`).
+> Population cible CT : 1 ligne par agence (DR/Agence/Effectif). Effectif = contrôleurs techniques (`position` `TECHNICAL_CONTROLLER` ou `TECHNICAL_CONTROLLER_ELECTRICITY`), comptes actifs (`isEnabled`), rattachés à cette agence principale (`AgencyToUser.isMain`). Agence `ADMIN` et agences sans code exclues.
 
 ### Volume attendu
 
-- 47 agences avec ≥1 user actif principal
-- Total effectif : ~345 users actifs (cf. ancien hardcoded 192 — périmètre élargi)
+- 39 agences, **247 contrôleurs** au 11/11/2026 (221 CT + 35 CT électricité, moins 5 comptes ADMIN et 4 sans code agence)
+
+### Historique
+
+- **11/11/2026 — restriction aux contrôleurs.** Avant, la carte comptait tous les comptes S+ actifs, tous postes confondus : 371 retenus par la page (380 moins 9 comptes sans code agence, que le parseur ignore), dont 40 assistantes, 40 directeurs d'agence, 19 responsables de groupe, 12 directeurs régionaux et les comptes ADMIN/support. Le « ÷ 371 CT » du COPIL de novembre était donc faux.
+- **Effet de bord :** l'effectif alimente aussi le taux horaire des gains (`app.js`, `getHourlyRate` = 44 M€ ÷ (effectif × 1 607 h)) : 73,8 €/h à 371, **110,9 €/h à 247**. Les gains en € et en % de temps augmentent de 50 % à compter de ce changement.
+- **11/11/2026 — colonne `Controleurs`** (adresses séparées par des espaces, sans virgule ni guillemet, donc sans échappement CSV). La page s'en sert pour filtrer le numérateur CT sur la même population que l'effectif : `parsePopulationControllers` (shared/sources.js), `KPICopil.inPopulation` (instantané COPIL, `app.js`), couverture par agence (`collectAgencyScores`) et `agencyAppropriation(..., { controllers })` (page Adoption agences). Colonne absente (ancien fichier) : pas de filtre. Octobre 2026 : CCTP 74/247 = 30 %, usage libre 155/247 = 63 %, Descriptif 99, Autocontact 62. Les lecteurs historiques ne lisent que les 3 premières colonnes et ignorent celle-ci.
+- Avant la carte 136 : CSV statique de 192 contrôleurs (39 agences).
 
 ---
 

@@ -32,6 +32,7 @@ const mainEl = document.getElementById('main-content');
 let urls = null;
 let data = null;        // items parsés par source
 let population = [];    // [{dr, agencyCode, effectif}]
+let controllers = new Set(); // adresses des contrôleurs (carte 136, colonne Controleurs)
 let state = { months: 6, dr: '', search: '', sort: { key: 'taux', asc: false } };
 let rictItems = null;   // RICT diffusés (card 161, KPICctpRict) ; null = source absente
 let cctpSort = { key: 'tauxRecours', asc: false };
@@ -149,6 +150,7 @@ async function load() {
         ]);
         rictItems = rict ? KPICctpRict.parsePayload(rict) : null;
         population = parsePopulationRows(pop);
+        controllers = parsePopulationControllers(pop);
         const json = text => { try { return JSON.parse(text); } catch (_) { return []; } };
         data = {
             descriptif: decodeTabularPayload(desc, parseDescriptifJSON, parseDescriptifCSV),
@@ -193,7 +195,7 @@ function compute(months) {
     const ref = KPIAdoption.collect(modules, { start: null, end: null }).refDate;
     const period = KPIAdoption.lastMonths(ref, months);
     const result = KPIAdoption.collect(modules, period);
-    return { ref, period, ...KPIAdoption.agencyAppropriation(result.users, population) };
+    return { ref, period, ...KPIAdoption.agencyAppropriation(result.users, population, { controllers }) };
 }
 
 // ==================== AFFICHAGE ====================
@@ -268,7 +270,8 @@ function render() {
 
     const h = r.horsPopulation;
     document.getElementById('table-note').textContent =
-        `Effectif : population cible du tableau de bord, par agence, sans distinction de poste. `
+        `Effectif : contrôleurs techniques de l'agence (CT et CT électricité, comptes S+ actifs). `
+        + (controllers.size ? `Seuls ces contrôleurs comptent parmi les utilisateurs appropriés. ` : '')
         + `Chaque utilisateur est rattaché à l'agence où il a le plus de sessions. `
         + (h.utilisateurs ? `${h.utilisateurs} utilisateur(s) rattaché(s) à un code absent de la population cible ne comptent dans aucune agence.` : '');
 

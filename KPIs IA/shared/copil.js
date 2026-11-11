@@ -84,6 +84,15 @@ const KPICopil = (function () {
         return (e || '').toString().toLowerCase().trim();
     }
 
+    // Garde les usages des seules personnes de la population (adresses de la
+    // colonne Controleurs de la carte 136), pour que le numérateur porte sur la
+    // même population que l'effectif. Population vide ou absente (ancien
+    // fichier) : aucun filtre, comme avant.
+    function inPopulation(events, population) {
+        if (!population || !population.size) return events || [];
+        return (events || []).filter(e => population.has(_email(e && e.email)));
+    }
+
     // events  : [{ email, month, dossier?, requests? }] — un usage du module.
     // dossiers: [{ email, month, dossier }] | null — TOUS les dossiers du
     //           périmètre (avec ou sans IA), quand la source les porte.
@@ -228,6 +237,7 @@ const KPICopil = (function () {
         nextMonth,
         previousMonth,
         monthRange,
+        inPopulation,
         buildModuleSeries,
         ratio,
         adoption,

@@ -837,3 +837,30 @@ function parsePopulationRows(raw) {
     };
     return decodeTabularPayload(raw, fromJson, fromCsv);
 }
+
+/**
+ * Adresses des contrôleurs de la population cible : 4e colonne « Controleurs »
+ * de la carte 136 (adresses séparées par des espaces, une ligne par agence).
+ * → Set d'adresses en minuscules ; vide si la colonne est absente.
+ */
+function parsePopulationControllers(raw) {
+    const out = new Set();
+    const add = cell => String(cell || '').split(/\s+/).forEach(e => { e = e.trim().toLowerCase(); if (e.includes('@')) out.add(e); });
+    const fromJson = arr => {
+        if (!arr.length || typeof arr[0] !== 'object') return [];
+        const k = Object.keys(arr[0]).find(x => x.toLowerCase() === 'controleurs');
+        if (k) arr.forEach(r => add(r[k]));
+        return [];
+    };
+    const fromCsv = text => {
+        const clean = extractCSVFromDataField(fixEncoding(text)).trim();
+        const firstLine = clean.split(/\r?\n/)[0] || '';
+        const sep = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
+        const rows = KPI.parseFullCSV(clean, sep);
+        const idx = (rows[0] || []).findIndex(h => String(h).trim().toLowerCase() === 'controleurs');
+        if (idx >= 0) rows.slice(1).forEach(cols => add(cols[idx]));
+        return [];
+    };
+    decodeTabularPayload(raw, fromJson, fromCsv);
+    return out;
+}

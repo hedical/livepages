@@ -114,4 +114,27 @@ test('parsePopulationRows — CSV « ; », CSV « , » et JSON Metabase', () => 
     assert.deepEqual(JSON.parse(JSON.stringify(ctx.parsePopulationRows(JSON.stringify([{ data: 'DR,Agence,Effectif\nDR Aquitaine,BXCT,7\nDR Aquitaine,LRCT,3' }])))), expected);
     // Format réel du bucket : ligne « data » puis le CSV entre guillemets
     assert.deepEqual(JSON.parse(JSON.stringify(ctx.parsePopulationRows('data\n"DR,Agence,Effectif\nDR Aquitaine,BXCT,7\nDR Aquitaine,LRCT,3\n"'))), expected);
+    // 4e colonne Controleurs (carte 136) : ignorée par parsePopulationRows
+    assert.deepEqual(JSON.parse(JSON.stringify(ctx.parsePopulationRows('data\n"DR,Agence,Effectif,Controleurs\nDR Aquitaine,BXCT,7,a@x.fr b@x.fr\nDR Aquitaine,LRCT,3,c@x.fr\n"'))), expected);
+});
+
+test('parsePopulationControllers — colonne Controleurs, absente = ensemble vide', () => {
+    const vm = require('node:vm');
+    const ctx = { KPI: require('../shared/utils.js'), console };
+    vm.createContext(ctx);
+    vm.runInContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '../shared/sources.js'), 'utf8'), ctx);
+    const list = s => [...ctx.parsePopulationControllers(s)].sort();
+    assert.deepEqual(list('data\n"DR,Agence,Effectif,Controleurs\nDR Aquitaine,BXCT,2,A@x.fr  b@x.fr\nDR Aquitaine,LRCT,1,c@x.fr\n"'), ['a@x.fr', 'b@x.fr', 'c@x.fr']);
+    assert.deepEqual(list(JSON.stringify([{ DR: 'D', Agence: 'BXCT', Effectif: 1, Controleurs: 'a@x.fr' }])), ['a@x.fr']);
+    assert.deepEqual(list('data\n"DR,Agence,Effectif\nDR Aquitaine,BXCT,7\n"'), []);
+});
+
+test('agencyAppropriation — option controllers : seuls les membres de la population comptent', () => {
+    const A = KPIAdoption;
+    const user = (email, agency, score) => ({ email, filiale: A.FILIALES.CT.label, agency, adoption: { score, level: 'Adopté' } });
+    const users = [user('ct@x.fr', 'BXCT', 80), user('da@x.fr', 'BXCT', 90)];
+    const pop = [{ dr: 'D', agencyCode: 'BXCT', effectif: 2 }];
+    assert.equal(A.agencyAppropriation(users, pop).rows[0].appropries, 2);
+    assert.equal(A.agencyAppropriation(users, pop, { controllers: new Set(['ct@x.fr']) }).rows[0].appropries, 1);
+    assert.equal(A.agencyAppropriation(users, pop, { controllers: new Set() }).rows[0].appropries, 2);
 });

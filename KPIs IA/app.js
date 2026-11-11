@@ -84,6 +84,9 @@ let cctpData = []; // Analyse CCTP vs Référentiel — 1 item = 1 livrable (cf.
 let aoMarches = []; // [{marcheId, refMarche, typeAvis, dateDetection, leads:[...]}]
 let agencyPopulation = {}; // {agencyCode: effectif}
 let populationRows = []; // [{dr, agencyCode, effectif}] — full rows from population_cible.csv
+// Adresses des contrôleurs de la population (colonne Controleurs, carte 136) :
+// filtre du numérateur CT (COPIL, couverture). Vide = pas de filtre.
+let ctControllers = new Set();
 let availableAgencies = [];
 let availableDirections = [];
 let agencyToDirection = {};
@@ -252,6 +255,8 @@ function parsePopulationData(csvString) {
     if (!csvString || typeof csvString !== 'string') return;
 
     console.log('=== Parsing Population Data ===');
+    ctControllers = parsePopulationControllers(csvString);
+    console.log('Contrôleurs de la population (filtre du numérateur CT):', ctControllers.size);
 
     // First try: new direct Metabase JSON array format ([{"DR":"...","Agence":"...","Effectif":N}, ...])
     const trimmed = csvString.trim();
@@ -3018,6 +3023,8 @@ function collectAgencyScores(users) {
         g.users.forEach(u => { levels[u.adoption.level] = (levels[u.adoption.level] || 0) + 1; });
         // Effectif : population cible (contrôle technique uniquement).
         const effectif = g.agency && g.filiale === ADOPTION_FILIALES.CT.label ? (agencyPopulation[g.agency] || 0) : 0;
+        // Couverture : seuls les contrôleurs de la population comptent au numérateur.
+        const inPop = ctControllers.size ? g.users.filter(u => ctControllers.has(u.email)).length : g.users.length;
         const sorted = scores.slice().sort((a, b) => a - b);
         return {
             filiale: g.filiale,
@@ -3025,7 +3032,8 @@ function collectAgencyScores(users) {
             direction: g.agency ? (agencyToDirection[g.agency] || '') : '',
             active: g.users.length,
             effectif,
-            coverage: effectif ? g.users.length / effectif : null,
+            activeInPopulation: inPop,
+            coverage: effectif ? inPop / effectif : null,
             median: med === null ? null : Math.round(med),
             level: med === null ? null : KPI.adoptionLevel(Math.round(med)),
             levels,
@@ -3046,7 +3054,7 @@ function agencyMethodHtml() {
         <ul class="space-y-1">
             <li><span class="font-semibold">Note</span> : médiane des notes d'adoption des utilisateurs actifs rattachés à l'agence (survoler l'en-tête « Adoption » de l'onglet Utilisateurs actifs pour le calcul d'une note).</li>
             <li><span class="font-semibold">Rattachement</span> : agence majoritaire des sessions de l'utilisateur, toutes périodes confondues (agence de l'affaire, ou service de production pour les chats). Une personne active dans deux filiales compte dans chacune.</li>
-            <li><span class="font-semibold">Couverture</span> : utilisateurs actifs ÷ effectif de la population cible (contrôle technique). La médiane ne dit rien de ceux qui n'utilisent pas l'IA : la lire avec la couverture.</li>
+            <li><span class="font-semibold">Couverture</span> : contrôleurs actifs ÷ contrôleurs de l'agence (CT et CT électricité) ; directeurs et assistantes n'entrent ni dans l'un ni dans l'autre. La médiane ne dit rien de ceux qui n'utilisent pas l'IA : la lire avec la couverture.</li>
             <li><span class="font-semibold">Moins de ${AGENCY_MIN_USERS} utilisateurs</span> : médiane grisée, peu représentative.</li>
         </ul>`;
 }
@@ -3081,7 +3089,7 @@ function renderAgenciesTab() {
         const badgeClass = FILIALE_BADGE[a.filiale] || FILIALE_BADGE['Autre'];
         const weak = a.active < AGENCY_MIN_USERS;
         const coverage = a.coverage === null ? '<span class="text-gray-300">—</span>'
-            : `${Math.round(a.coverage * 100)} %<span class="text-gray-400 text-xs"> (${a.active}/${a.effectif})</span>`;
+            : `${Math.round(a.coverage * 100)} %<span class="text-gray-400 text-xs"> (${a.activeInPopulation}/${a.effectif})</span>`;
         return `<tr class="hover:bg-indigo-50/30 transition-colors">
             <td class="px-4 py-2.5">
                 ${a.agency ? `<span class="font-mono font-medium text-indigo-700">${esc(a.agency)}</span>`
@@ -3336,7 +3344,7 @@ function buildAdoptionWorkbook(lib) {
         [`Fraîcheur (${W.freshness})`, A.freshness.map(([days, part]) => `≤ ${days} j : ${Math.round(part * W.freshness)}`).join(' · ') + ' · au-delà : 0'],
         ['Niveaux', A.levels.map(([min, label]) => `${label} ≥ ${min}`).join(' · ')],
         ['Note par agence', 'Médiane des notes des utilisateurs actifs rattachés à l\'agence (agence majoritaire de leurs sessions, toutes périodes).'],
-        ['Couverture', 'Utilisateurs actifs ÷ effectif de la population cible (contrôle technique uniquement).'],
+        ['Couverture', 'Contrôleurs actifs ÷ contrôleurs de l\'agence (CT et CT électricité, comptes S+ actifs).'],
         [],
         ['Module', 'Filiale', 'Lancement (premier usage observé)', 'Poids dans la diversité'],
         ...modules.map(m => [m.label, m.filiale, day(m.launch), KPI.exposureWeight(m.launch, refDate)]),
@@ -4327,6 +4335,12 @@ function publishCopilSnapshot() {
                   events: nfHabitatData.filter(isNFHabitatItem).map(i => ev(i, i.projectId, 1)), parc: null },
                 ...usageLibre('PPI', 'ppi', chatCitaeData, expertCitaeData, fromDomain('@citae.fr')),
             ];
+            // CT : le numérateur porte sur la même population que l'effectif
+            // (contrôleurs de la carte 136). Les autres métiers n'ont pas
+            // d'effectif de référence et restent en nombre d'utilisateurs.
+            sources.forEach(src => {
+                if (src.metier === 'CT') src.events = KPICopil.inPopulation(src.events, ctControllers);
+            });
 
             // Heures gagnées par grand métier : le COPIL ne pilote plus les
             // modules en heures, mais la cible mensuelle reste suivie.

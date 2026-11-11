@@ -229,7 +229,10 @@ const KPIAdoption = (function () {
         const o = opts || {};
         const filiale = o.filiale || FILIALES.CT.label;
         const min = typeof o.threshold === 'number' ? o.threshold : APPROPRIATION_MIN;
-        const scoped = (users || []).filter(u => u.filiale === filiale);
+        // o.controllers (Set d'adresses, carte 136) : seuls les membres de la
+        // population comptent, pour que le numérateur porte sur l'effectif.
+        const pop = o.controllers && o.controllers.size ? o.controllers : null;
+        const scoped = (users || []).filter(u => u.filiale === filiale && (!pop || pop.has(u.email)));
         const byAgency = {};
         scoped.forEach(u => { (byAgency[u.agency] = byAgency[u.agency] || []).push(u); });
 

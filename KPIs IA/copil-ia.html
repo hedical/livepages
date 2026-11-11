@@ -9,11 +9,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611101734">
+    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611112331">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="shared/analyztech-tailwind.js?v=202611101734"></script>
+    <script src="shared/analyztech-tailwind.js?v=202611112331"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="shared/analyztech-theme.js?v=202611101734"></script>
+    <script src="shared/analyztech-theme.js?v=202611112331"></script>
     <style>
         /* Règles propres à la page (police et fond : shared/analyztech-theme.css). */
         .num { font-variant-numeric: tabular-nums; }
@@ -23,7 +23,7 @@
         .heat td.cell { min-width: 92px; }
     </style>
     <!-- Date de mise à jour des données (Last-Modified du bucket) : avant le script de page. -->
-    <script src="shared/last-update.js?v=202611101734"></script>
+    <script src="shared/last-update.js?v=202611112331"></script>
 </head>
 <body>
     <div class="min-h-screen bg-off">
@@ -188,7 +188,7 @@
                         <h3 class="text-lg font-medium text-ink mb-3">Définitions</h3>
                         <dl class="space-y-3 text-sm text-graphite">
                             <div><dt class="font-medium text-ink">Grands métiers</dt><dd>Pôle Conformité : CT (BTP Consultants), SPS (BTP Consultants SPS), Diag (BTP Diagnostics). PPI : Citae — Nextiim et MBAcity ne sont pas encore tracés.</dd></div>
-                            <div><dt class="font-medium text-ink">Adoption</dt><dd>Utilisateurs actifs du mois ÷ population concernée. CT : effectif de <code>population_cible.csv</code>. Sans population de référence, l'adoption est donnée en nombre d'utilisateurs.</dd></div>
+                            <div><dt class="font-medium text-ink">Adoption</dt><dd>Utilisateurs actifs du mois ÷ population concernée. CT : contrôleurs techniques, électriciens compris (comptes S+ actifs, <code>population_cible.csv</code>). Sans population de référence, l'adoption est donnée en nombre d'utilisateurs.</dd></div>
                             <div><dt class="font-medium text-ink">Systématisation</dt><dd>Dossiers du mois traités avec le module ÷ dossiers du mois des utilisateurs actifs de ce module.</dd></div>
                             <div><dt class="font-medium text-ink">Requêtes par utilisateur</dt><dd>Usages du mois ÷ utilisateurs actifs. Usage libre : messages échangés.</dd></div>
                             <div><dt class="font-medium text-ink">Descriptif RICT</dt><dd>Compté au-delà de 100 mots, seuil retenu en COPIL, pour les dossiers comme pour les utilisateurs.</dd></div>
@@ -205,8 +205,8 @@
         </div>
     </div>
 
-    <script src="shared/utils.js?v=202611101734"></script>
-    <script src="shared/copil.js?v=202611101734"></script>
-    <script src="copil-ia.js?v=202611101734"></script>
+    <script src="shared/utils.js?v=202611112331"></script>
+    <script src="shared/copil.js?v=202611112331"></script>
+    <script src="copil-ia.js?v=202611112331"></script>
 </body>
 </html>
