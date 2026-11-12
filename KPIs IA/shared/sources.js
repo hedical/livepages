@@ -864,3 +864,122 @@ function parsePopulationControllers(raw) {
     decodeTabularPayload(raw, fromJson, fromCsv);
     return out;
 }
+
+// ==================== SOURCES DU CATALOGUE D'ADOPTION ====================
+
+// Autocontact SPS (backoffice BTP Force) : toutes les lignes sont SPS.
+// Même forme que la branche Autocontact SPS de loadData (app.js).
+function parseAutocontactSpsPayload(text) {
+    let json = null;
+    try { json = JSON.parse(text); } catch (_) { return []; }
+    const items = Array.isArray(json) ? json : (json && Array.isArray(json.items) ? json.items : []);
+    return items.map(item => ({
+        email: (item.userEmail || '').toLowerCase().trim(),
+        createdAt: item.createdAt || '',
+        fromAI: (item.sourceType || '').toUpperCase() === 'IA',
+        contractNumber: item.affairNumber || '',
+        agency: item.agencyName || '',
+        direction: item.direction || '',
+        deliverableId: item.deliverableId || '',
+        bu: 'SPS',
+    }));
+}
+
+// NF Habitat (auto_control.json, API AnalyzTech) : [{items}], {items} ou tableau.
+// Même forme que la branche NF Habitat de loadData (app.js).
+function parseNFHabitatPayload(text) {
+    let json = null;
+    try { json = JSON.parse(text); } catch (_) { return []; }
+    const items = (Array.isArray(json) && json.length && Array.isArray(json[0].items)) ? json[0].items
+        : (json && !Array.isArray(json) && Array.isArray(json.items)) ? json.items
+        : Array.isArray(json) ? json : [];
+    return items.map(item => {
+        const email = (item.user && item.user.email) ? item.user.email : (item.email || '');
+        return {
+            id: item.id, createdAt: item.createdAt || '', status: item.status || '',
+            projectId: item.projectId || '', projectName: item.projectName || '',
+            controlName: item.controlName || '', email, userEmail: email,
+            userName: (item.user && item.user.name) ? item.user.name : (item.userName || ''),
+            direction: '', agency: '',
+        };
+    });
+}
+
+function parseChatSessionsText(text) {
+    let json = null;
+    try { json = JSON.parse(text); } catch (_) { return []; }
+    return parseChatSessions(json);
+}
+
+/**
+ * Lecture de chaque source du catalogue d'adoption (KPIAdoption.catalogue,
+ * champ `source`) : variables d'URL du webhook, puis lecture des textes reçus
+ * (dans l'ordre de `urls`, '' si absente ou en erreur). Une source ajoutée au
+ * catalogue se déclare ICI, une seule fois : toutes les pages qui chargent par
+ * loadCatalogueSources la reçoivent. tests/pages.test.js vérifie que chaque
+ * source du catalogue est déclarée.
+ */
+const CATALOGUE_SOURCES = {
+    descriptif:  { urls: ['DESCRIPTIF_URL'],  parse: ([t]) => decodeTabularPayload(t, parseDescriptifJSON, parseDescriptifCSV) },
+    autocontact: { urls: ['AUTOCONTACT_URL'], parse: ([t]) => decodeTabularPayload(t, parseAutocontactJSON, parseAutocontactCSV) },
+    comparateur: { urls: ['COMPARATEUR_URL'], parse: ([t]) => decodeTabularPayload(t, parseComparateurJSON, parseComparateurCSV) },
+    geotech:     { urls: ['GEOTECH_URL'],     parse: ([t]) => decodeTabularPayload(t, parseGeotechJSON, parseGeotechCSV) },
+    acoustique:  { urls: ['ANALYSE_ACOUSTIQUE_URL'], parse: ([t]) => decodeTabularPayload(t, parseAcoustiqueJSON, parseAcoustiqueCSV) },
+    // CCTP « Tous » : S+ (card 160) + AnalyzTech. L'agence des items AT vient de
+    // la même personne dans S+ ou dans les RICT (card 161) ; à défaut,
+    // KPIAdoption rattache l'utilisateur à l'agence majoritaire de ses sessions.
+    cctp: {
+        urls: ['ANALYSE_CCTP_URL', 'ANALYSE_CCTP_AT_URL', 'ANALYSE_CCTP_RICT_URL'],
+        parse: ([splusText, atText, rictText]) => {
+            const splus = KPI.parseCctpPayload(splusText);
+            const rict = (rictText && typeof KPICctpRict !== 'undefined') ? KPICctpRict.parsePayload(rictText) : [];
+            return splus.concat(KPI.cctpAttachAgencies(KPI.parseCctpPayload(atText), splus.concat(rict)));
+        },
+    },
+    expertCT:       { urls: ['EXPERT_BTP_URL'],      parse: ([t]) => parseChatSessionsText(t) },
+    chatCT:         { urls: ['CHAT_BTP_URL'],        parse: ([t]) => parseChatSessionsText(t) },
+    autocontactSps: { urls: ['AUTOCONTACT_SPS_URL'], parse: ([t]) => parseAutocontactSpsPayload(t) },
+    expertSps:      { urls: ['EXPERT_BTP_SPS_URL'],  parse: ([t]) => parseChatSessionsText(t) },
+    chatSps:        { urls: ['CHAT_BTP_SPS_URL'],    parse: ([t]) => parseChatSessionsText(t) },
+    nfHabitat:      { urls: ['NF_HABITAT_URL'],      parse: ([t]) => parseNFHabitatPayload(t) },
+    expertCitae:    { urls: ['EXPERT_CITAE_URL'],    parse: ([t]) => parseChatSessionsText(t) },
+    chatCitae:      { urls: ['CHAT_CITAE_URL'],      parse: ([t]) => parseChatSessionsText(t) },
+    expertDiag:     { urls: ['EXPERT_BTPDIAG_URL'],  parse: ([t]) => parseChatSessionsText(t) },
+    chatDiag:       { urls: ['CHAT_BTPDIAG_URL'],    parse: ([t]) => parseChatSessionsText(t) },
+};
+
+/**
+ * Charge les sources du catalogue. urls : réponse du webhook
+ * (KPI.parseUrlsResponse). keys : sources voulues (KPIAdoption.sourcesFor),
+ * toutes par défaut. extra : autres variables à récupérer en texte (ex.
+ * POPULATION_CIBLE_URL). Chaque URL n'est lue qu'une fois ; une source absente
+ * ou en erreur donne un tableau vide.
+ * Returns { data: {source: items}, texts: {VARIABLE: texte}, missing: [VARIABLE] }.
+ */
+async function loadCatalogueSources(urls, keys, extra) {
+    const wanted = keys || Object.keys(CATALOGUE_SOURCES);
+    wanted.forEach(k => { if (!CATALOGUE_SOURCES[k]) throw new Error(`Source « ${k} » absente de CATALOGUE_SOURCES (shared/sources.js)`); });
+    const vars = [...new Set(wanted.flatMap(k => CATALOGUE_SOURCES[k].urls).concat(extra || []))];
+    const texts = {};
+    await Promise.all(vars.map(async v => {
+        texts[v] = '';
+        if (!urls[v]) return;
+        try {
+            const r = await fetch(urls[v]);
+            if (r.ok) texts[v] = await r.text();
+            else console.warn('Source indisponible :', v, r.status);
+        } catch (e) {
+            console.warn('Source indisponible :', v, e);
+        }
+    }));
+    const data = {};
+    wanted.forEach(k => { data[k] = CATALOGUE_SOURCES[k].parse(CATALOGUE_SOURCES[k].urls.map(v => texts[v])); });
+    // Comme loadData (app.js) : le type du descriptif ne filtre que s'il est renseigné.
+    if (data.descriptif) descriptifTypePresent = data.descriptif.some(item => item.type && item.type.trim() !== '');
+    return { data, texts, missing: vars.filter(v => !urls[v]) };
+}
+
+// Node (tests) : déclarations des sources. Navigateur : fonctions globales.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { CATALOGUE_SOURCES, loadCatalogueSources, parsePopulationRows, parsePopulationControllers };
+}

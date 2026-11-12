@@ -115,62 +115,22 @@ document.getElementById('retry-btn').addEventListener('click', () => load());
 
 // ==================== DONNÉES ====================
 
-async function fetchText(url, required) {
-    if (!url) {
-        if (required) throw new Error('Lien de données manquant');
-        return '';
-    }
-    const r = await fetch(url);
-    if (!r.ok) {
-        if (required) throw new Error(`Chargement impossible (${r.status})`);
-        console.warn('Source indisponible :', r.status, url);
-        return '';
-    }
-    return r.text();
-}
-
 async function load() {
     loadingEl.classList.remove('hidden');
     errorEl.classList.add('hidden');
     mainEl.classList.add('hidden');
     try {
-        const [pop, desc, auto, comp, geo, acou, cctp, expert, chat, rict, cctpAt] = await Promise.all([
-            fetchText(urls.POPULATION_CIBLE_URL, true),
-            fetchText(urls.DESCRIPTIF_URL, true),
-            fetchText(urls.AUTOCONTACT_URL, true),
-            fetchText(urls.COMPARATEUR_URL, true),
-            fetchText(urls.GEOTECH_URL, false),
-            fetchText(urls.ANALYSE_ACOUSTIQUE_URL, false),
-            fetchText(urls.ANALYSE_CCTP_URL, false),
-            fetchText(urls.EXPERT_BTP_URL, false),
-            fetchText(urls.CHAT_BTP_URL, false),
-            fetchText(urls.ANALYSE_CCTP_RICT_URL, false),
-            // Analyses CCTP lancées dans AnalyzTech : comptées avec S+, sans distinction.
-            fetchText(urls.ANALYSE_CCTP_AT_URL, false),
-        ]);
+        // Sources des modules CT du catalogue (shared/sources.js) : un module
+        // ajouté au catalogue est chargé ici sans toucher à la page.
+        const loaded = await loadCatalogueSources(urls, KPIAdoption.sourcesFor(KPIAdoption.FILIALES.CT), ['POPULATION_CIBLE_URL']);
+        const pop = loaded.texts.POPULATION_CIBLE_URL;
+        if (!pop) throw new Error('Population cible indisponible');
+        if (!loaded.data.descriptif.length) throw new Error('Descriptif indisponible');
+        const rict = loaded.texts.ANALYSE_CCTP_RICT_URL;
         rictItems = rict ? KPICctpRict.parsePayload(rict) : null;
         population = parsePopulationRows(pop);
         controllers = parsePopulationControllers(pop);
-        const json = text => { try { return JSON.parse(text); } catch (_) { return []; } };
-        data = {
-            descriptif: decodeTabularPayload(desc, parseDescriptifJSON, parseDescriptifCSV),
-            autocontact: decodeTabularPayload(auto, parseAutocontactJSON, parseAutocontactCSV),
-            comparateur: decodeTabularPayload(comp, parseComparateurJSON, parseComparateurCSV),
-            geotech: decodeTabularPayload(geo, parseGeotechJSON, parseGeotechCSV),
-            acoustique: decodeTabularPayload(acou, parseAcoustiqueJSON, parseAcoustiqueCSV),
-            // CCTP « Tous » : S+ (card 160) + AnalyzTech. L'agence des items AT
-            // vient de la même personne dans S+ ; à défaut, KPIAdoption rattache
-            // l'utilisateur à l'agence majoritaire de ses autres sessions.
-            cctp: (() => {
-                const splus = KPI.parseCctpPayload(cctp);
-                const at = KPI.cctpAttachAgencies(KPI.parseCctpPayload(cctpAt), splus.concat(rictItems || []));
-                return splus.concat(at);
-            })(),
-            expertCT: parseChatSessions(json(expert)),
-            chatCT: parseChatSessions(json(chat)),
-        };
-        // Comme loadData (app.js) : le type ne filtre que s'il est renseigné.
-        descriptifTypePresent = data.descriptif.some(item => item.type && item.type.trim() !== '');
+        data = loaded.data;
 
         const drs = [...new Set(population.map(p => p.dr).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
         document.getElementById('dr-filter').innerHTML = '<option value="">Toutes</option>'

@@ -9,9 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611112331">
+    <link rel="stylesheet" href="shared/analyztech-theme.css?v=202611121258">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="shared/analyztech-tailwind.js?v=202611112331"></script>
+    <script src="shared/analyztech-tailwind.js?v=202611121258"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         /* Règles propres à la page (police et fond : shared/analyztech-theme.css). */
@@ -20,24 +20,9 @@
         .line { fill: none; stroke-width: 2px; }
         .legend { font-size: 12px; }
 
-        /* Courbes d3 (agencesCT.js) : six outils pour six couleurs de charte dont
-           deux trop pâles sur fond clair. Chat BTP et Géotech reprennent le noir et
-           le graphite, en pointillés et à points creux, dans la courbe comme dans
-           la légende (5e et 6e lignes de la légende, ordre fixe des outils). */
-        .line-chatBTP, .uline-chatBTP, .line-geotech, .uline-geotech { stroke-dasharray: 6 4; }
-        .dot-chatBTP, .udot-chatBTP, .dot-geotech, .udot-geotech { fill: #FFFDF6; stroke-width: 1.5; }
-        .dot-chatBTP, .udot-chatBTP { stroke: #1A1A1A; }
-        .dot-geotech, .udot-geotech { stroke: #595959; }
-        #adoption-chart svg > g > g:last-child > g:nth-child(n+5) line,
-        #usage-chart svg > g > g:last-child > g:nth-child(n+5) line { stroke-dasharray: 5 3; }
-        #adoption-chart svg > g > g:last-child > g:nth-child(5) circle,
-        #usage-chart svg > g > g:last-child > g:nth-child(5) circle { fill: #FFFDF6; stroke: #1A1A1A; stroke-width: 1.5; }
-        #adoption-chart svg > g > g:last-child > g:nth-child(6) circle,
-        #usage-chart svg > g > g:last-child > g:nth-child(6) circle { fill: #FFFDF6; stroke: #595959; stroke-width: 1.5; }
-        /* Infobulle des courbes : le libellé prend la couleur de l'outil (style
-           inline) ; vert ou gris clair en texte sur fond clair sont exclus par la
-           charte, le libellé reste en noir. */
-        #adoption-chart tspan:last-child, #usage-chart tspan:last-child { fill: #1A1A1A !important; }
+        /* Courbes d3 (agencesCT.js) : une couleur fixe par module, la même que sur
+           la page COPIL ; couleurs, pointillés et points creux sont posés par le
+           script, pour qu'un module ajouté au catalogue n'ait rien à déclarer ici. */
 
         /* Colonnes du tableau de pertinence : couverture (par affaire) en Stone Grey,
            adoption (par personne) en Compliant Green, posés en transparence. */
@@ -45,7 +30,7 @@
         html #pertinence-table-body .bg-emerald-50\/40 { background: rgba(186, 242, 102, .28); }
     </style>
     <!-- Date de mise à jour des données (Last-Modified du bucket) : avant le script de page. -->
-    <script src="shared/last-update.js?v=202611112331"></script>
+    <script src="shared/last-update.js?v=202611121258"></script>
 </head>
 <body>
     <div class="min-h-screen bg-off">
@@ -148,7 +133,7 @@
                                 « Quelle <strong>part des collaborateurs</strong> de l'agence se sert de l'outil&nbsp;? »
                             </p>
                             <p class="text-xs text-ink font-mono bg-paper border border-stone rounded px-2 py-1.5 mb-2">
-                                utilisateurs uniques de l'agence ÷ effectif de l'agence
+                                contrôleurs utilisateurs de l'agence ÷ effectif de l'agence (contrôleurs)
                             </p>
                             <p class="text-xs text-graphite">
                                 <strong>Exemple&nbsp;:</strong> agence de 10 personnes, 4 ont généré au moins un descriptif IA →
@@ -219,12 +204,12 @@
                     <div class="at-card p-5">
                         <p class="text-xs font-medium text-graphite mb-2">Effectif pris en compte</p>
                         <p class="at-num text-4xl text-ink" id="kpi-effectif">—</p>
-                        <p class="text-xs text-graphite mt-2">collaborateurs CT (hors SPS)</p>
+                        <p class="text-xs text-graphite mt-2">contrôleurs CT de la population cible</p>
                     </div>
                     <div class="at-card border-l-4 border-l-compliant p-5">
                         <p class="text-xs font-medium text-ink mb-2">Adoption globale</p>
                         <p class="at-num text-4xl text-ink" id="kpi-adoption-globale">—</p>
-                        <p class="text-xs text-graphite mt-2">≥ 1 outil IA utilisé / effectif</p>
+                        <p class="text-xs text-graphite mt-2">≥ 1 module IA utilisé / effectif</p>
                     </div>
                     <div class="at-card border-l-4 border-l-compliant p-5">
                         <p class="text-xs font-medium text-ink mb-2">Adoption Descriptif</p>
@@ -246,8 +231,9 @@
                     <h2 class="at-title text-3xl text-ink">1 · Adoption — déploiement humain</h2>
                 </div>
                 <p class="text-sm text-graphite mb-5 mt-2 ml-5">
-                    Lecture : <strong>% des collaborateurs de l'agence</strong> ayant utilisé l'outil au moins une fois sur la période.
+                    Lecture : <strong>% des contrôleurs de l'agence</strong> ayant utilisé le module au moins une fois sur la période.
                     Dénominateur commun = effectif. Les colonnes sont donc comparables entre elles.
+                    <span id="kpi-modules" class="block mt-1"></span>
                 </p>
 
                 <!-- Adoption : évolution temporelle -->
@@ -259,74 +245,32 @@
                             <span data-mode="cumul" class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
                         </div>
                     </div>
-                    <p id="adoption-chart-subtitle" class="text-sm text-graphite mb-4">Taux mensuel (% d'utilisateurs uniques actifs sur le mois / effectif). Cliquer sur la légende pour isoler un outil.</p>
+                    <p id="adoption-chart-subtitle" class="text-sm text-graphite mb-4">Taux mensuel (% de contrôleurs actifs sur le mois / effectif). Cliquer sur la légende pour isoler un module.</p>
                     <div id="adoption-chart" style="width: 100%; min-height: 400px; height: 400px;"></div>
                 </div>
 
                 <!-- Adoption : volume d'utilisations par fonctionnalité -->
                 <div class="at-card p-6 mb-6">
                     <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
-                        <h3 class="text-lg font-medium text-ink">Évolution du nombre d'utilisations par fonctionnalité</h3>
+                        <h3 class="text-lg font-medium text-ink">Évolution du nombre d'utilisations par module</h3>
                         <div id="usage-mode-toggle" class="flex items-center bg-paper border border-stone rounded-lg p-1 cursor-pointer select-none gap-1">
                             <span data-mode="monthly" class="px-3 py-1 rounded-md text-sm font-medium bg-white text-emerald-700 shadow-sm transition-all">Mensuel</span>
                             <span data-mode="cumul" class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">Cumulé</span>
                         </div>
                     </div>
-                    <p id="usage-chart-subtitle" class="text-sm text-graphite mb-4">Nombre d'utilisations enregistrées sur le mois, par fonctionnalité. Cliquer sur la légende pour isoler un outil.</p>
+                    <p id="usage-chart-subtitle" class="text-sm text-graphite mb-4">Nombre d'utilisations enregistrées sur le mois, par module. Cliquer sur la légende pour isoler un module.</p>
                     <div id="usage-chart" style="width: 100%; min-height: 400px; height: 400px;"></div>
                 </div>
 
                 <!-- Adoption : tableau -->
                 <div class="at-card overflow-visible mb-12">
                     <div class="px-6 py-4 border-b border-stone bg-off rounded-t-lg">
-                        <h3 class="text-lg font-medium text-ink">Taux d'adoption par agence et par outil</h3>
+                        <h3 class="text-lg font-medium text-ink">Taux d'adoption par agence et par module</h3>
                     </div>
                     <div class="overflow-x-auto overflow-y-visible relative">
                         <table class="min-w-full divide-y divide-stone">
-                            <thead class="bg-off">
-                                <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('direction')">
-                                        <div class="flex items-center">Direction <span id="ad-sort-direction" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('agency')">
-                                        <div class="flex items-center">Agence <span id="ad-sort-agency" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('effectif')">
-                                        <div class="flex items-center justify-center">Effectif <span id="ad-sort-effectif" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionGlobale')">
-                                        <div class="flex items-center justify-center">Globale
-                                            <div class="relative group ml-1"><span class="text-graphite cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-ink text-off text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Collaborateurs ayant utilisé <strong>au moins un</strong> outil IA ÷ effectif de l'agence.</div>
-                                            </div>
-                                            <span id="ad-sort-adoptionGlobale" class="ml-1 text-blue-600">↓</span>
-                                        </div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionDescriptif')">
-                                        <div class="flex items-center justify-center">Descriptif
-                                            <div class="relative group ml-1"><span class="text-graphite cursor-help text-xs font-normal">(i)</span>
-                                                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2 bg-ink text-off text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal normal-case">Utilisateurs ayant généré au moins un descriptif IA (sur une description source ≥ 100 mots) ÷ effectif.</div>
-                                            </div>
-                                            <span id="ad-sort-adoptionDescriptif" class="ml-1 text-gray-400">↕</span>
-                                        </div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionAutocontact')">
-                                        <div class="flex items-center justify-center">Auto Contact <span id="ad-sort-adoptionAutocontact" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionComparateur')">
-                                        <div class="flex items-center justify-center">Comparateur <span id="ad-sort-adoptionComparateur" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionExpertBTP')">
-                                        <div class="flex items-center justify-center">Expert BTP <span id="ad-sort-adoptionExpertBTP" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionChatBTP')">
-                                        <div class="flex items-center justify-center">Chat BTP <span id="ad-sort-adoptionChatBTP" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-graphite uppercase tracking-wider cursor-pointer hover:bg-compliant hover:text-ink select-none" onclick="sortAdoption('adoptionGeotech')">
-                                        <div class="flex items-center justify-center">Géotech <span id="ad-sort-adoptionGeotech" class="ml-1 text-gray-400">↕</span></div>
-                                    </th>
-                                </tr>
-                            </thead>
+                            <!-- Une colonne par module CT du catalogue (KPIAdoption.catalogue) : construite par agencesCT.js. -->
+                            <thead id="adoption-head" class="bg-off"></thead>
                             <tbody id="adoption-table-body" class="bg-white divide-y divide-stone"></tbody>
                         </table>
                     </div>
@@ -428,6 +372,11 @@
         </div>
     </div>
 
-    <script src="agencesCT.js?v=202611112331"></script>
+    <!-- Modules partagés : mêmes sources, même catalogue et mêmes règles d'usage que index et Adoption agences. -->
+    <script src="shared/utils.js?v=202611121258"></script>
+    <script src="shared/sources.js?v=202611121258"></script>
+    <script src="shared/adoption.js?v=202611121258"></script>
+    <script src="shared/cctp-rict.js?v=202611121258"></script>
+    <script src="agencesCT.js?v=202611121258"></script>
 </body>
 </html>

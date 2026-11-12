@@ -35,6 +35,12 @@ const KPIAdoption = (function () {
      * premier usage observé (ou depuis `lancement`, à renseigner si les données
      * contiennent des essais antérieurs au vrai lancement).
      *
+     * Il apparaît aussi, sans autre modification, dans les pages qui
+     * parcourent le catalogue (agencesCT, adoption-agences). `source` est la
+     * clé de `data` que lit events() ; sa lecture est déclarée dans
+     * CATALOGUE_SOURCES (shared/sources.js). tests/pages.test.js échoue si une
+     * source n'y est pas déclarée ou si events() lit une autre clé.
+     *
      * data : tableaux d'items parsés (absents = vides). h : prédicats propres
      * aux sources { isDescriptifRow, isNFHabitatItem } (cf. shared/sources.js).
      * events() renvoie les lignes d'usage réel, toutes périodes confondues
@@ -64,40 +70,50 @@ const KPIAdoption = (function () {
         return [
             // BTP Consultants (contrôle technique)
             // Descriptif : au-delà de 100 mots l'IA apporte une valeur réelle (seuil COPIL).
-            { id: 'descriptif', label: 'Descriptif', filiale: CT,
+            { id: 'descriptif', source: 'descriptif', label: 'Descriptif', filiale: CT,
               events: () => get('descriptif').filter(i => notYield(i) && h.isDescriptifRow(i) && wordCount(i) >= 100) },
-            { id: 'autocontact', label: 'Auto-contact', filiale: CT,
+            { id: 'autocontact', source: 'autocontact', label: 'Auto-contact', filiale: CT,
               events: () => get('autocontact').filter(i => notYield(i) && i.fromAI) },
-            { id: 'comparateur', label: 'Comparateur', filiale: CT,
+            { id: 'comparateur', source: 'comparateur', label: 'Comparateur', filiale: CT,
               events: () => get('comparateur') },
             // Géotech / Acoustique : l'email est celui du chargé d'affaires.
-            { id: 'analyse-geo', label: 'Géotechnique', filiale: CT,
+            { id: 'analyse-geo', source: 'geotech', label: 'Géotechnique', filiale: CT,
               events: () => uniqueDeliverables(get('geotech')) },
-            { id: 'analyse-acou', label: 'Acoustique', filiale: CT,
+            { id: 'analyse-acou', source: 'acoustique', label: 'Acoustique', filiale: CT,
               events: () => uniqueDeliverables(get('acoustique')) },
             // CCTP : utilisateur réel = la personne qui a injecté les avis, sinon
             // le chargé d'affaires (arbitrage du 30/10/2026, K.cctpUsageEvents).
-            { id: 'analyse-cctp', label: 'CCTP', filiale: CT,
+            { id: 'analyse-cctp', source: 'cctp', label: 'CCTP', filiale: CT,
               events: () => K.cctpUsageEvents(get('cctp')) },
-            { id: 'expert-ct', label: 'Expert', filiale: CT, events: () => get('expertCT') },
-            { id: 'chat-ct', label: 'Chat', filiale: CT, events: () => get('chatCT') },
+            { id: 'expert-ct', source: 'expertCT', label: 'Expert', filiale: CT, events: () => get('expertCT') },
+            { id: 'chat-ct', source: 'chatCT', label: 'Chat', filiale: CT, events: () => get('chatCT') },
 
             // BTP Consultants SPS
-            { id: 'autocontact-sps', label: 'Auto-contact', filiale: SPS,
+            { id: 'autocontact-sps', source: 'autocontactSps', label: 'Auto-contact', filiale: SPS,
               events: () => get('autocontactSps').filter(i => i.fromAI) },
-            { id: 'expert-sps', label: 'Expert', filiale: SPS, events: () => get('expertSps') },
-            { id: 'chat-sps', label: 'Chat', filiale: SPS, events: () => get('chatSps') },
+            { id: 'expert-sps', source: 'expertSps', label: 'Expert', filiale: SPS, events: () => get('expertSps') },
+            { id: 'chat-sps', source: 'chatSps', label: 'Chat', filiale: SPS, events: () => get('chatSps') },
 
             // Citae
-            { id: 'nf-habitat', label: 'NF Habitat', filiale: CITAE,
+            { id: 'nf-habitat', source: 'nfHabitat', label: 'NF Habitat', filiale: CITAE,
               events: () => get('nfHabitat').filter(h.isNFHabitatItem) },
-            { id: 'expert-citae', label: 'Expert', filiale: CITAE, events: () => get('expertCitae') },
-            { id: 'chat-citae', label: 'Chat', filiale: CITAE, events: () => get('chatCitae') },
+            { id: 'expert-citae', source: 'expertCitae', label: 'Expert', filiale: CITAE, events: () => get('expertCitae') },
+            { id: 'chat-citae', source: 'chatCitae', label: 'Chat', filiale: CITAE, events: () => get('chatCitae') },
 
             // BTP Diagnostics
-            { id: 'expert-diag', label: 'Expert', filiale: DIAG, events: () => get('expertDiag') },
-            { id: 'chat-diag', label: 'Chat', filiale: DIAG, events: () => get('chatDiag') },
+            { id: 'expert-diag', source: 'expertDiag', label: 'Expert', filiale: DIAG, events: () => get('expertDiag') },
+            { id: 'chat-diag', source: 'chatDiag', label: 'Chat', filiale: DIAG, events: () => get('chatDiag') },
         ];
+    }
+
+    // Modules d'une filiale (FILIALES.X) et clés de données qu'ils lisent, dans
+    // l'ordre du catalogue : ce qu'une page doit charger pour cette filiale.
+    function modulesOf(filiale) {
+        return catalogue(null, { isDescriptifRow: () => true, isNFHabitatItem: () => true })
+            .filter(m => m.filiale === filiale);
+    }
+    function sourcesFor(filiale) {
+        return [...new Set(modulesOf(filiale).map(m => m.source))];
     }
 
     // Code agence d'un item : agence portée par l'item, sinon celle du numéro
@@ -279,6 +295,8 @@ const KPIAdoption = (function () {
         FILIALES,
         APPROPRIATION_MIN,
         catalogue,
+        modulesOf,
+        sourcesFor,
         itemAgency,
         periodFromFilter,
         lastMonths,
